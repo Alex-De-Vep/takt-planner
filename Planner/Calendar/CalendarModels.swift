@@ -120,6 +120,8 @@ struct CalendarFailure: LocalizedError {
 }
 
 struct EventDraft: Equatable {
+    // Помощник фиксирует пояс предложения; обычный редактор использует текущий пояс.
+    var timeZoneID: String?
     var title = ""
     var start: Date
     // В форме последний день включён; EventKit получает исключительную верхнюю границу.
@@ -150,6 +152,8 @@ struct EventDraft: Equatable {
     }
 
     func interval(calendar: Calendar = .current) throws -> DateInterval {
+        var calendar = calendar
+        if let timeZoneID, let zone = TimeZone(identifier: timeZoneID) { calendar.timeZone = zone }
         let first = allDay ? calendar.startOfDay(for: start) : start
         let last = allDay ? calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end))! : end
         guard last > first else { throw CalendarFailure(message: "Окончание должно быть позже начала.") }

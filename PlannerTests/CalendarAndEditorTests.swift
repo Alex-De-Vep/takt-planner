@@ -367,7 +367,8 @@ struct CalendarAndEditorTests {
         #expect(toolbarIDs[menuIndex - 1] == .space)
         #expect(toolbarIDs[menuIndex - 2] == NSToolbarItem.Identifier("Planner.Deadline"))
         #expect(toolbarIDs[menuIndex + 1] == .flexibleSpace)
-        #expect(toolbarIDs[menuIndex + 2] == NSToolbarItem.Identifier("Planner.CalendarBoundary"))
+        #expect(toolbarIDs[menuIndex + 2] == NSToolbarItem.Identifier("Planner.Assistant"))
+        #expect(toolbarIDs[menuIndex + 3] == NSToolbarItem.Identifier("Planner.CalendarBoundary"))
 
         container.view.frame.size.width = 900
         container.update(calendar: AnyView(EmptyView()), visible: true, width: 340, sidebarVisible: true,

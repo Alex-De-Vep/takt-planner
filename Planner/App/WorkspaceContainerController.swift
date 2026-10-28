@@ -31,6 +31,8 @@ final class WorkspaceContainerController: NSViewController {
     private let headerBackdrop = WorkspaceHeaderBackdrop()
     private var visible = false
     private var preferredWidth = CalendarPanelLayout.defaultWidth
+    private var minimumPanelWidth = CalendarPanelLayout.minimumWidth
+    private var maximumPanelWidth = CalendarPanelLayout.maximumWidth
     private var sidebarVisible = true
     private var widthChanged: ((Double) -> Void)?
     private var visibilityChanged: ((Bool) -> Void)?
@@ -67,8 +69,7 @@ final class WorkspaceContainerController: NSViewController {
         divider.resize = { [weak self] delta in
             guard let self else { return }
             // Начинаем с видимой ширины: после сужения окна сохранённое предпочтение может быть больше панели.
-            self.preferredWidth = CalendarPanelLayout.overlayWidth(self.calendarHost.view.frame.width - delta,
-                                                                   windowWidth: self.view.bounds.width)
+            self.preferredWidth = min(self.maximumPanelWidth, max(self.minimumPanelWidth, self.calendarHost.view.frame.width - delta))
             self.layoutColumns()
             self.widthChanged?(self.preferredWidth)
         }
@@ -82,11 +83,13 @@ final class WorkspaceContainerController: NSViewController {
     }
 
     func update(calendar: AnyView, visible: Bool, width: Double, sidebarVisible: Bool,
+                minimumWidth: CGFloat = CalendarPanelLayout.minimumWidth, maximumWidth: CGFloat = CalendarPanelLayout.maximumWidth,
                 widthChanged: @escaping (Double) -> Void, visibilityChanged: @escaping (Bool) -> Void) {
         _ = view
         calendarHost.updateContent(calendar)
         let animate = self.visible != visible && view.window != nil
-        self.visible = visible; preferredWidth = CalendarPanelLayout.panelWidth(width)
+        self.visible = visible; minimumPanelWidth = minimumWidth; maximumPanelWidth = maximumWidth
+        preferredWidth = min(maximumWidth, max(minimumWidth, width))
         self.sidebarVisible = sidebarVisible; self.widthChanged = widthChanged
         self.visibilityChanged = visibilityChanged
         layoutColumns(animate: animate)
@@ -114,9 +117,9 @@ final class WorkspaceContainerController: NSViewController {
         let minimumMain = max(header.minimumMainWidth,
             CalendarPanelLayout.minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: header.fullScreen,
                                                 preferredHeadingWidth: header.preferredHeadingWidth))
-        let column = visible && bounds.width >= minimumMain + CalendarPanelLayout.minimumWidth + CalendarPanelLayout.outerInset
+        let column = visible && bounds.width >= minimumMain + minimumPanelWidth + CalendarPanelLayout.outerInset
         let width = column ? min(preferredWidth, bounds.width - CalendarPanelLayout.outerInset - minimumMain)
-            : CalendarPanelLayout.overlayWidth(preferredWidth, windowWidth: bounds.width)
+            : min(preferredWidth, max(0, bounds.width - 2 * CalendarPanelLayout.outerInset))
 
         // Перед уменьшением основной split view отсоединяем боковую панель, если её минимальная ширина уже не помещается.
         if visible && !column && calendarHost.parent === workspace {
@@ -145,7 +148,7 @@ final class WorkspaceContainerController: NSViewController {
             }
             calendarHost.view.isHidden = false
             if needsAttachment || placement != .column || abs(appliedWidth - width) >= 1 {
-                workspace.attachCalendarSidebar(calendarHost, width: width, animate: animate)
+                workspace.attachCalendarSidebar(calendarHost, width: width, animate: animate, minimumWidth: minimumPanelWidth, maximumWidth: maximumPanelWidth)
                 appliedWidth = width
             }
             placement = .column

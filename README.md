@@ -1,3 +1,5 @@
+> **Ветка AI Preview / Apple silicon only.** Экспериментальная версия 0.2.0 (build 50) с локальным помощником. Отдельное приложение и библиотека; релиз не опубликован. [Установка, ограничения и сборка](docs/ai-preview.md). Сборка: `python3 scripts/build_ai_preview.py`.
+
 <p align="center">
   <img src="Design/AppIcon/tasks-icon-preview.png" width="112" alt="Иконка приложения Задачи">
 </p>

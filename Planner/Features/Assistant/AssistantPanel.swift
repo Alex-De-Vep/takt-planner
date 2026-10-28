@@ -1,0 +1,299 @@
+import SwiftUI
+import AppKit
+
+/// Чат занимает ту же оболочку правой панели, что и календарь; собственную шапку окна не рисуем.
+struct AssistantPanel: View {
+    @Environment(\.translations) private var strings
+    @Bindable var service: AssistantService
+    @Bindable var preferences: AppPreferences
+    let taskService: TaskService
+    let calendar: CalendarService
+    let folders: [TaskFolder]
+    let selectedTask: PlannerTask?
+    let filter: TaskFilter
+    let openTask: (PlannerTask) -> Void
+    let openEvent: (CalendarEvent) -> Void
+    @State private var useFolder = true
+    @State private var useTask = true
+    @State private var editing: AssistantAction?
+    @State private var showClear = false
+    private var folderOptions: [AssistantFolder] { AssistantService.folders(folders, preferences: preferences) }
+    private var calendarOptions: [AssistantCalendar] { calendar.calendars.filter(\.writable).map { AssistantCalendar(id: $0.id, name: $0.title) } }
+    private var context: AssistantContext {
+        let defaultFolder = preferences.assistantUseCurrentFolder && useFolder && filter.isPrimaryFolder
+            ? (filter == .inbox ? "inbox" : filter == .week ? "week" : filter == .month ? "month" : { if case .folder(let id) = filter { return id.uuidString }; return "inbox" }())
+            : (folderOptions.contains { $0.id == preferences.assistantDefaultFolder } ? preferences.assistantDefaultFolder : "inbox")
+        return AssistantContext(now: .now, timeZoneID: TimeZone.current.identifier,
+            language: preferences.language.resolvedCode, folders: folderOptions, calendars: calendarOptions,
+            defaultFolderID: defaultFolder, defaultCalendarID: calendar.creationCalendar(preferred: preferences.creationCalendarID),
+            taskID: useTask ? selectedTask?.id.uuidString : nil, taskTitle: useTask ? selectedTask?.displayTitle(using: strings) : nil,
+            durationMinutes: preferences.assistantDuration, reminderMinutes: preferences.assistantReminder < 0 ? nil : preferences.assistantReminder)
+    }
+    var body: some View {
+        Group {
+            if service.model.state == .ready { conversation }
+            else { AssistantModelSetup(manager: service.model) }
+        }
+        .background(Color.clear)
+        .onAppear { if preferences.rightPanel == .assistant { service.model.restoreIfInstalled() } }
+        .onChange(of: preferences.rightPanel) { if preferences.rightPanel == .assistant { service.model.restoreIfInstalled() } }
+        .onChange(of: service.archive.currentID) { editing = nil }
+    }
+    private var conversation: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Menu {
+                    ForEach(service.archive.threads) { thread in
+                        Button(thread.title == "Новый разговор" ? strings[thread.title] : thread.title) { service.selectConversation(thread.id) }
+                    }
+                    Divider()
+                    Button(strings["Очистить историю"], role: .destructive) { showClear = true }
+                } label: { Label(strings["История"], systemImage: "clock.arrow.circlepath") }
+                .disabled(service.generating || service.applying)
+                Spacer()
+                Button { service.newConversation() } label: { Image(systemName: "square.and.pencil") }
+                    .help(strings["Новый разговор"]).disabled(service.generating || service.applying)
+            }
+            .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 10)
+            if showClear {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(strings["Очистить историю помощника?"]).fontWeight(.medium)
+                    Text(strings["Созданные задачи и события сохранятся."]).font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Button(strings["Отмена"]) { showClear = false }
+                        Spacer()
+                        Button(strings["Очистить"], role: .destructive) { service.clearHistory(); showClear = false }
+                    }
+                }.padding(12).background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 16)
+            }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if service.current?.messages.isEmpty != false { examples }
+                        ForEach(service.current?.messages ?? []) { message in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(strings[message.role == .user ? "Вы" : "Помощник"]).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                Text(message.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                if message.id == service.current?.messages.last?.id {
+                                    ForEach(message.questions) { question in
+                                        Text(question.text).fontWeight(.medium)
+                                        ForEach(Array(question.options.prefix(4).enumerated()), id: \.offset) { _, option in
+                                            Button(option) { send(option) }.disabled(service.generating || service.applying)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(12).background(message.role == .user ? PlannerStyle.accent.opacity(0.10) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        ForEach(service.current?.actions ?? []) { action in actionCard(action) }
+                        if service.generating { HStack { ProgressView().controlSize(.small); Text(strings["Готовлю предложение…"]).foregroundStyle(.secondary) } }
+                        if let error = service.error { Text(strings[error]).font(.callout).foregroundStyle(.red).textSelection(.enabled) }
+                        Color.clear.frame(height: 1).id("assistant-bottom")
+                    }
+                    .padding(16)
+                }
+                // Новое сообщение отправляется явно; изменения карточек не отбирают прокрутку.
+                .onChange(of: service.current?.messages.count) { proxy.scrollTo("assistant-bottom", anchor: .bottom) }
+                .onChange(of: service.generating) { if !service.generating { proxy.scrollTo("assistant-bottom", anchor: .bottom) } }
+            }
+            if (service.current?.actions.contains { $0.included && [.pending, .failed].contains($0.status) } ?? false) {
+                let count = service.readyCount(folders: folderOptions, calendars: calendarOptions)
+                Button {
+                    Task { await service.apply(taskService: taskService, calendar: calendar, folders: folders) }
+                } label: {
+                    Text(service.applying ? strings["Создание…"] : strings.format("Создать: %d", count)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("assistant-apply").padding(.horizontal, 16).padding(.bottom, 10)
+                .disabled(count == 0 || service.generating || service.applying || service.storageFailed || editing != nil)
+            }
+            composer
+        }
+    }
+    private var examples: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.accent)
+            Text(strings["Опишите, что нужно сделать"]).font(.title3.weight(.semibold))
+            Text(strings["Помощник подготовит задачи и события. Перед созданием вы проверите каждое предложение."]).foregroundStyle(.secondary)
+            ForEach(["Создай задачи для подготовки проекта", "Запланируй встречу на завтра", "Создай задачу с подзадачами"], id: \.self) { example in
+                Button(strings[example]) { service.setDraft(strings[example]) }
+            }
+        }.padding(.vertical, 12)
+    }
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if editing != nil { Text(strings["Завершите изменение карточки кнопкой «Готово» или «Отмена»."]).font(.caption).foregroundStyle(.secondary) }
+            if useFolder && preferences.assistantUseCurrentFolder && filter.isPrimaryFolder {
+                contextChip(strings["Папка"] + ": " + filter.title(in: folders, using: strings)) { useFolder = false }
+            }
+            if useTask, let task = selectedTask {
+                contextChip(strings["Задача"] + ": " + task.displayTitle(using: strings)) { useTask = false }
+            }
+            HStack(alignment: .bottom, spacing: 8) {
+                ZStack(alignment: .topLeading) {
+                    if service.current?.draft.isEmpty != false { Text(strings["Сообщение помощнику"]).foregroundStyle(.tertiary).padding(.top, 8).padding(.leading, 5).allowsHitTesting(false) }
+                    AssistantComposer(text: Binding(get: { service.current?.draft ?? "" }, set: { value in service.setDraft(value) }), submit: { send(service.current?.draft ?? "") })
+                        .frame(height: 76)
+                }
+                Button {
+                    if service.generating { service.stop() } else { send(service.current?.draft ?? "") }
+                } label: { Image(systemName: service.generating ? "stop.fill" : "arrow.up").frame(width: 24, height: 24) }
+                .buttonStyle(.borderedProminent).clipShape(Circle())
+                .help(strings[service.generating ? "Остановить" : "Отправить"])
+                .disabled(service.applying || service.storageFailed || editing != nil || (!service.generating && (service.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)))
+            }
+            .padding(8).background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+            HStack {
+                Text(strings["Локально на этом Mac · Shift+Enter — новая строка"]).font(.caption2).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Menu {
+                    Toggle(strings["Использовать текущую папку"], isOn: $useFolder)
+                    Toggle(strings["Использовать выбранную задачу"], isOn: $useTask)
+                } label: { Image(systemName: "scope") }.menuStyle(.borderlessButton).fixedSize()
+                    .help(strings["Контекст сообщения"])
+            }
+        }.padding(16)
+    }
+    private func contextChip(_ title: String, remove: @escaping () -> Void) -> some View {
+        HStack(spacing: 4) { Text(title).lineLimit(1); Button(action: remove) { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) }
+            .font(.caption).foregroundStyle(.secondary)
+    }
+    private func send(_ text: String) { guard editing == nil else { return }; service.send(text, context: context) }
+    private func actionCard(_ action: AssistantAction) -> some View {
+        let problems = service.problems(action, folders: folderOptions, calendars: calendarOptions)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: action.proposal.kind == .task ? "checkmark.circle" : "calendar")
+                Text(action.proposal.title).fontWeight(.semibold)
+                Spacer(minLength: 0)
+                if [.pending, .failed].contains(action.status), action.createdEventID == nil {
+                    Toggle("", isOn: Binding(get: { action.included }, set: { value in var copy = action; copy.included = value; service.updateAction(copy) })).labelsHidden().toggleStyle(.checkbox)
+                }
+            }
+            if action.proposal.kind == .task {
+                Text(strings["Папка"] + ": " + (folderOptions.first { $0.id == action.proposal.folderID }?.name ?? strings["Не выбрана"]))
+                if action.proposal.today == true { Label(strings["На сегодня"], systemImage: "star.fill").foregroundStyle(.yellow) }
+            } else {
+                Text(calendarOptions.first { $0.id == action.proposal.calendarID }?.name ?? strings["Календарь не выбран"])
+                if action.status != .created && action.createdEventID == nil {
+                    if calendar.access != .full {
+                        Button(strings[calendar.access == .notDetermined || calendar.access == .writeOnly ? "Подключить календарь" : "Открыть системные настройки"]) {
+                            if calendar.access == .notDetermined || calendar.access == .writeOnly { Task { await calendar.connect() } }
+                            else { calendar.openPrivacySettings() }
+                        }.disabled(calendar.connecting)
+                    } else if action.proposal.calendarID == nil,
+                              let id = calendar.creationCalendar(preferred: preferences.creationCalendarID) {
+                        Button(strings["Использовать календарь по умолчанию"]) {
+                            var copy = action; copy.proposal.calendarID = id; service.updateAction(copy)
+                        }
+                    }
+                }
+            }
+            if let date = action.proposal.date {
+                Text(date + (action.proposal.allDay == true ? " · " + strings["Весь день"] : action.proposal.time.map { " · " + $0 } ?? ""))
+                if action.proposal.kind == .event {
+                    if action.proposal.allDay != true {
+                        let draft = try? ActionPlanValidator.eventDraft(action)
+                        let minutes = draft.map { Int($0.end.timeIntervalSince($0.start) / 60) } ?? action.proposal.durationMinutes ?? action.context.durationMinutes
+                        Text(strings.format("Длительность: %d мин", minutes))
+                        if let draft { Text(strings["Окончание"] + ": " + draft.end.formatted(date: .abbreviated, time: .shortened)) }
+                    } else if let end = action.proposal.endDate { Text(strings["Окончание"] + ": " + end) }
+                    if action.context.timeZoneID != TimeZone.current.identifier { Text(action.context.timeZoneID).foregroundStyle(.secondary) }
+                    Text(action.proposal.reminderMinutes.map { strings.format("Напоминание: за %d мин", $0) } ?? strings["Без напоминания"])
+                }
+            }
+            if let description = action.proposal.description, !description.isEmpty { Text(description).lineLimit(4) }
+            ForEach(Array((action.proposal.checklist ?? []).enumerated()), id: \.offset) { _, title in Label(title, systemImage: "circle").lineLimit(2) }
+            if let link = action.proposal.linkTo {
+                Label(action.context.taskID == link ? (action.context.taskTitle ?? strings["Задача"]) : (service.current?.actions.first { $0.proposal.key == link }?.proposal.title ?? strings["Связанная задача"]), systemImage: "link")
+            }
+            if action.status == .created {
+                HStack { Label(strings["Создано"], systemImage: "checkmark.circle.fill").foregroundStyle(.green); Spacer(); Button(strings["Открыть"]) { open(action) } }
+            } else if action.status == .needsReview {
+                Text(strings["Проверьте календарь: результат предыдущего сохранения неизвестен. Автоматическое повторение отключено."]).foregroundStyle(.orange)
+            } else {
+                ForEach(problems, id: \.self) { Text(strings[$0]).foregroundStyle(.orange) }
+                if let error = action.error { Text(strings[error]).foregroundStyle(.red) }
+                if action.createdEventID == nil {
+                    if editing?.id == action.id {
+                        AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,
+                            actions: service.current?.actions ?? [], save: { service.updateAction($0); editing = nil }, cancel: { editing = nil })
+                            .disabled(service.generating || service.applying)
+                    } else {
+                        Button(strings["Изменить предложение"]) { editing = action }.disabled(service.generating || service.applying)
+                    }
+                }
+            }
+        }
+        .font(.callout).padding(12)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+        .opacity(action.included ? 1 : 0.55)
+    }
+    private func open(_ action: AssistantAction) {
+        if let id = action.createdTaskID, let task = try? taskService.assistantTask(id: id) { openTask(task) }
+        else if let id = action.createdEventID, let event = calendar.resolve(identifier: id, externalIdentifier: action.createdEventExternalID) { openEvent(event) }
+        else { service.error = "Созданный объект больше недоступен. Возможно, он удалён." }
+    }
+}
+
+struct AssistantModelSetup: View {
+    @Environment(\.translations) private var strings
+    @Bindable var manager: ModelManager
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Image(systemName: "sparkles").font(.system(size: 32)).foregroundStyle(PlannerStyle.accent)
+                Text(strings["Локальный помощник"]).font(.title2.weight(.semibold))
+                Text(strings["Создавайте задачи и события обычными сообщениями. Перед сохранением помощник предложит проверить результат."])
+                Text(strings["Требуется Mac с чипом Apple M1 или новее."]).fontWeight(.medium)
+                Text(manager.displayName + " · " + ByteCountFormatter.string(fromByteCount: manager.total, countStyle: .file))
+                Text(strings["Файлы скачиваются с Hugging Face. После загрузки переписка обрабатывается на вашем Mac и не отправляется провайдеру модели."]).foregroundStyle(.secondary)
+                Link(strings["Модель и условия Apache 2.0"], destination: manager.modelURL)
+                if manager.busy {
+                    if manager.state == .downloading {
+                        ProgressView(value: manager.fraction)
+                        Text(ByteCountFormatter.string(fromByteCount: manager.received, countStyle: .file) + " / " + ByteCountFormatter.string(fromByteCount: manager.total, countStyle: .file)).monospacedDigit()
+                    } else { ProgressView().controlSize(.small) }
+                    Text(strings[manager.state == .verifying ? "Проверка файлов…" : manager.state == .preparing ? "Подготовка модели…" : "Загрузка модели…"])
+                    Button(strings["Отменить загрузку"]) { manager.cancel() }
+                } else {
+                    Button(strings[manager.accepted ? "Включить помощника" : "Скачать и включить"]) { manager.install() }
+                        .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("assistant-download")
+                }
+                if let error = manager.error { Text(strings[error]).foregroundStyle(.red).textSelection(.enabled) }
+                Text(strings["Нажимая кнопку, вы включаете локального помощника и подтверждаете ознакомление с условиями модели. Размер загрузки не равен расходу оперативной памяти."]).font(.caption).foregroundStyle(.secondary)
+            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// Обычный NSTextView сохраняет системный ввод и явно различает Enter и Shift+Enter.
+private struct AssistantComposer: NSViewRepresentable {
+    @Binding var text: String
+    let submit: () -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView(); scroll.drawsBackground = false
+        let view = NSTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 76)); view.minSize = NSSize(width: 0, height: 76); view.isRichText = false; view.drawsBackground = false
+        view.font = .systemFont(ofSize: 14); view.textColor = .labelColor
+        view.setAccessibilityIdentifier("assistant-composer")
+        view.textContainerInset = NSSize(width: 0, height: 6)
+        view.autoresizingMask = [.width]; view.isVerticallyResizable = true
+        view.textContainer?.widthTracksTextView = true; view.delegate = context.coordinator
+        scroll.documentView = view; scroll.hasVerticalScroller = true
+        return scroll
+    }
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let view = scroll.documentView as? NSTextView else { return }
+        if view.string != text { view.string = text }
+    }
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: AssistantComposer
+        init(_ parent: AssistantComposer) { self.parent = parent }
+        func textDidChange(_ notification: Notification) { if let view = notification.object as? NSTextView { parent.text = view.string } }
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            if commandSelector == #selector(NSResponder.insertNewline(_:)), !NSEvent.modifierFlags.contains(.shift) { parent.submit(); return true }
+            return false
+        }
+    }
+}

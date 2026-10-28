@@ -9,7 +9,16 @@ final class AppPreferences {
     var language: AppLanguage {
         didSet { defaults.set(language.rawValue, forKey: "appLanguage") }
     }
-    var calendarOpen: Bool { didSet { defaults.set(calendarOpen, forKey: "calendarOpen") } }
+    var rightPanel: RightPanel? { didSet { defaults.set(rightPanel?.rawValue, forKey: "rightPanel") } }
+    var calendarOpen: Bool {
+        get { rightPanel == .calendar }
+        set { if newValue { rightPanel = .calendar } else if rightPanel == .calendar { rightPanel = nil } }
+    }
+    var assistantWidth: Double { didSet { defaults.set(assistantWidth, forKey: "assistantWidth") } }
+    var assistantDefaultFolder: String { didSet { defaults.set(assistantDefaultFolder, forKey: "assistantDefaultFolder") } }
+    var assistantUseCurrentFolder: Bool { didSet { defaults.set(assistantUseCurrentFolder, forKey: "assistantUseCurrentFolder") } }
+    var assistantDuration: Int { didSet { defaults.set(assistantDuration, forKey: "assistantDuration") } }
+    var assistantReminder: Int { didSet { defaults.set(assistantReminder, forKey: "assistantReminder") } }
     var calendarWidth: Double { didSet { defaults.set(calendarWidth, forKey: "calendarWidth") } }
     var calendarAgendaMode: CalendarAgendaMode { didSet { defaults.set(calendarAgendaMode.rawValue, forKey: "calendarAgendaMode") } }
     var calendarAgendaLayout: CalendarAgendaLayout { didSet { defaults.set(calendarAgendaLayout.rawValue, forKey: "calendarAgendaLayout") } }
@@ -32,7 +41,7 @@ final class AppPreferences {
     init(defaults suppliedDefaults: UserDefaults? = nil) {
         // UI-тесты используют отдельные настройки и не меняют язык пользователя.
         #if SHOWCASE
-        defaults = ShowcaseData.makePreferences()
+        defaults = suppliedDefaults ?? ShowcaseData.makePreferences()
         #elseif DEBUG
         if let suppliedDefaults { defaults = suppliedDefaults }
         else if let testID = ProcessInfo.processInfo.environment["PLANNER_UI_TEST_LIBRARY"], UUID(uuidString: testID) != nil {
@@ -47,7 +56,12 @@ final class AppPreferences {
         reviewNotificationMinutes = min(1439, max(0, defaults.object(forKey: "reviewNotificationMinutes") as? Int ?? 540))
         reviewWeekdaysOnly = defaults.bool(forKey: "reviewWeekdaysOnly")
         language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .russian
-        calendarOpen = defaults.bool(forKey: "calendarOpen")
+        rightPanel = defaults.string(forKey: "rightPanel").flatMap(RightPanel.init(rawValue:))
+        assistantWidth = min(520, max(360, defaults.object(forKey: "assistantWidth") as? Double ?? 420))
+        assistantDefaultFolder = defaults.string(forKey: "assistantDefaultFolder") ?? "inbox"
+        assistantUseCurrentFolder = defaults.object(forKey: "assistantUseCurrentFolder") as? Bool ?? true
+        assistantDuration = min(1440, max(5, defaults.object(forKey: "assistantDuration") as? Int ?? 60))
+        assistantReminder = defaults.object(forKey: "assistantReminder") as? Int ?? -1
         let width = defaults.double(forKey: "calendarWidth")
         calendarWidth = Double(width == 0 ? CalendarPanelLayout.defaultWidth : CalendarPanelLayout.panelWidth(CGFloat(width)))
         calendarAgendaMode = CalendarAgendaMode(rawValue: defaults.string(forKey: "calendarAgendaMode") ?? "") ?? .day

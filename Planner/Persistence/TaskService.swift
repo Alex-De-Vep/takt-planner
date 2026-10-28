@@ -51,6 +51,9 @@ final class TaskService {
         }
     }
 
+    /// Точка атомарного сохранения для подготовленного плана помощника.
+    func persistAssistant(_ change: () -> Void) -> Bool { persist(change) }
+
     func createTask(in filter: TaskFilter, folders: [TaskFolder], now: Date = .now) -> PlannerTask? {
         // Общие представления создают задачу во «Входящих»; «Сегодня» дополнительно ставит звезду.
         let destination = filter.creationFolder

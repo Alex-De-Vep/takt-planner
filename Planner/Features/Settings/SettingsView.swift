@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Bindable var preferences: AppPreferences
     let calendar: CalendarService
     @Bindable var notifications: PlannerNotifications
+    let assistant: AssistantService
 
     var body: some View {
         Form {
@@ -22,6 +23,7 @@ struct SettingsView: View {
             } footer: {
                 Text(strings["Язык меняется сразу. Названия ваших папок и задач сохраняются без изменений."])
             }
+            AssistantSettingsSection(assistant: assistant, preferences: preferences)
             NotificationSettingsSection(preferences: preferences, notifications: notifications)
             Section {
                 if calendar.access == .full {

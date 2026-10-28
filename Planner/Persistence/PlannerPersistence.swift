@@ -18,7 +18,7 @@ enum PlannerPersistence {
 
     static func liveStoreURL() throws -> URL {
         var directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            .appending(path: "Planner", directoryHint: .isDirectory)
+            .appending(path: "PlannerAIPreview", directoryHint: .isDirectory)
         #if DEBUG
         // У UI-тестов своя постоянная библиотека: данные пользователя не затрагиваются.
         if let testID = ProcessInfo.processInfo.environment["PLANNER_UI_TEST_LIBRARY"], UUID(uuidString: testID) != nil {

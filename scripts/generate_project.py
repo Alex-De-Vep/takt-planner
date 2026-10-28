@@ -38,6 +38,10 @@ project_configs = configurations("project", {
 localization_package = add("localization-package", "XCLocalSwiftPackageReference", relativePath="Packages/PlannerLocalization")
 localization_product = add("localization-product", "XCSwiftPackageProductDependency", productName="PlannerLocalization", package=localization_package)
 localization_build = add("localization-link", "PBXBuildFile", productRef=localization_product)
+# AI Preview использует закреплённый MLX и собирается только для Apple silicon.
+mlx_package = add("mlx-package", "XCRemoteSwiftPackageReference", repositoryURL="https://github.com/ml-explore/mlx-swift-lm.git", requirement={"kind": "exactVersion", "version": "2.31.3"})
+mlx_products = [add("mlx-product-" + name, "XCSwiftPackageProductDependency", productName=name, package=mlx_package) for name in ("MLXLLM", "MLXLMCommon")]
+mlx_builds = [add("mlx-link-" + name, "PBXBuildFile", productRef=product) for name, product in zip(("MLXLLM", "MLXLMCommon"), mlx_products)]
 groups = []
 products = []
 targets = []
@@ -52,16 +56,16 @@ for name, product_type, extension in (
                   includeInIndex=0, path=f"{name}.{extension}", sourceTree="BUILT_PRODUCTS_DIR")
     products.append(product)
     settings = {
-        "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.1.48", "CURRENT_PROJECT_VERSION": "49",
+        "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": ("local.planner.AIPreview" if name == "Planner" else f"local.planner.AIPreview.{name}"),
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.2.0", "CURRENT_PROJECT_VERSION": "50", "ARCHS": "arm64",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
-        settings.update(CODE_SIGN_ENTITLEMENTS="Planner/Planner.entitlements", ENABLE_APP_SANDBOX="YES",
+        settings.update(SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)", CODE_SIGN_ENTITLEMENTS="Planner/Planner.entitlements", ENABLE_APP_SANDBOX="YES",
                         INFOPLIST_FILE="Configuration/Planner-Info.plist",
                         ENABLE_HARDENED_RUNTIME="YES", ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME="AccentColor",
                         ASSETCATALOG_COMPILER_APPICON_NAME="TasksIcon",
-                        INFOPLIST_KEY_CFBundleDisplayName="Задачи",
+                        INFOPLIST_KEY_CFBundleDisplayName="Задачи AI Preview",
                         INFOPLIST_KEY_LSApplicationCategoryType="public.app-category.productivity",
                         INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Задачам нужен доступ к календарям для просмотра событий и планирования времени.",
                         INFOPLIST_KEY_NSHumanReadableCopyright="", INFOPLIST_KEY_CFBundleDevelopmentRegion="ru")
@@ -72,7 +76,7 @@ for name, product_type, extension in (
     phases = [add(f"{name}-{kind}", f"PBX{kind}BuildPhase", buildActionMask=2147483647, files=[], runOnlyForDeploymentPostprocessing=0)
               for kind in ("Sources", "Frameworks", "Resources")]
     if name == "Planner":
-        objects[identifier(f"{name}-Frameworks")]["files"] = [localization_build]
+        objects[identifier(f"{name}-Frameworks")]["files"] = [localization_build] + mlx_builds
     dependencies = []
     if name != "Planner":
         proxy = add(f"{name}-proxy", "PBXContainerItemProxy", containerPortal=identifier("project"), proxyType=1,
@@ -80,7 +84,7 @@ for name, product_type, extension in (
         dependencies.append(add(f"{name}-dependency", "PBXTargetDependency", target=identifier("Planner-target"), targetProxy=proxy))
     targets.append(add(f"{name}-target", "PBXNativeTarget", buildConfigurationList=configurations(name, settings),
                        buildPhases=phases, buildRules=[], dependencies=dependencies, fileSystemSynchronizedGroups=[group],
-                       packageProductDependencies=[localization_product] if name == "Planner" else [],
+                       packageProductDependencies=[localization_product] + mlx_products if name == "Planner" else [],
                        name=name, productName=name, productReference=product, productType=product_type))
 
 products_group = add("products", "PBXGroup", children=products, name="Products", sourceTree="<group>")
@@ -91,7 +95,7 @@ project = add("project", "PBXProject", attributes={"BuildIndependentTargetsInPar
                                    identifier("PlannerUITests-target"): {"TestTargetID": identifier("Planner-target")}}},
               buildConfigurationList=project_configs, compatibilityVersion="Xcode 16.0", developmentRegion="ru",
               knownRegions=["ru", "en", "Base"], mainGroup=main, productRefGroup=products_group,
-              projectDirPath="", projectRoot="", targets=targets, preferredProjectObjectVersion=77, packageReferences=[localization_package])
+              projectDirPath="", projectRoot="", targets=targets, preferredProjectObjectVersion=77, packageReferences=[localization_package, mlx_package])
 
 def serialize(value, level=0):
     if isinstance(value, dict):
@@ -128,3 +132,10 @@ def reference(name):
 </Scheme>
 ''')
 print(directory)
+
+# Отдельная opt-in схема проверяет настоящую модель только на вымышленных данных.
+smoke_scheme = (scheme_dir / "Planner.xcscheme").read_text().replace('<Testables>', '<EnvironmentVariables><EnvironmentVariable key="PLANNER_AI_SMOKE" value="1" isEnabled="YES"/></EnvironmentVariables><Testables>')
+(scheme_dir / "PlannerAIModelSmoke.xcscheme").write_text(smoke_scheme.replace('shouldUseLaunchSchemeArgsEnv="YES"', 'shouldUseLaunchSchemeArgsEnv="NO"', 1))
+
+smoke4 = (scheme_dir / "PlannerAIModelSmoke.xcscheme").read_text().replace('</EnvironmentVariables>', '<EnvironmentVariable key="PLANNER_AI_VARIANT" value="4" isEnabled="YES"/></EnvironmentVariables>')
+(scheme_dir / "PlannerAIModelSmoke4.xcscheme").write_text(smoke4)

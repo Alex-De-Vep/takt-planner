@@ -1,5 +1,5 @@
 /* Английское название приложения для системных интерфейсов. */
-"CFBundleDisplayName" = "Tasks";
-"CFBundleName" = "Tasks";
+"CFBundleDisplayName" = "Tasks AI Preview";
+"CFBundleName" = "Tasks AI Preview";
 
 "NSCalendarsFullAccessUsageDescription" = "Tasks needs access to your calendars to display events and schedule time for tasks.";

@@ -36,6 +36,7 @@ struct PlannerApp: App {
     @State private var preferences = AppPreferences()
     @State private var calendar = CalendarService()
     @State private var notifications = PlannerNotifications()
+    @State private var assistant = AssistantService()
     @State private var taskDrag = TaskDragState()
 
     var body: some Scene {
@@ -56,17 +57,20 @@ struct PlannerApp: App {
         .commands { PlannerCommands(strings: preferences.translations) }
 
         Settings {
-            SettingsView(preferences: preferences, calendar: calendar, notifications: notifications)
+            if let container = runtime.container {
+            SettingsView(preferences: preferences, calendar: calendar, notifications: notifications, assistant: assistant)
+                .modelContainer(container)
                 .modifier(NotificationLifecycle(service: runtime.service, preferences: preferences, notifications: notifications))
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)
                 .tint(PlannerStyle.accent)
+            } else { Text(runtime.startupError ?? "") }
         }
     }
 
     @ViewBuilder private var workspace: some View {
             if let container = runtime.container, let service = runtime.service {
-                WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications, taskDrag: taskDrag)
+                WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications, taskDrag: taskDrag, assistant: assistant)
                     .modifier(NotificationLifecycle(service: service, preferences: preferences, notifications: notifications))
                     .modelContainer(container)
             } else {

@@ -202,7 +202,7 @@ final class EventKitAdapter: CalendarStore {
         if changedDayMode { event.isAllDay = draft.allDay }
         if changedDayMode || before?.start != draft.start { event.startDate = interval.start }
         if changedDayMode || before?.end != draft.end { event.endDate = interval.end }
-        if before == nil { event.timeZone = .current }
+        if before == nil { event.timeZone = draft.timeZoneID.flatMap(TimeZone.init(identifier:)) ?? .current }
         guard event.endDate > event.startDate else { throw CalendarFailure(message: "Окончание должно быть позже начала.") }
         if let updatedAlarms { event.alarms = updatedAlarms }
         try store.save(event, span: .thisEvent, commit: true)

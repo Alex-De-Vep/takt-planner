@@ -43,6 +43,10 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, TaskAc
     let clearSearchTitle: String
     let calendarTitle: String
     let calendarHeadingTitle: String
+    let assistantTitle: String
+    let assistantActive: Bool
+    let toggleAssistant: () -> Void
+    let toggleCalendarPanel: () -> Void
     let newFolderTitle: String
     let toggleSidebarTitle: String
     let folderTitle: String
@@ -76,8 +80,11 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, TaskAc
         controller.updateCalendarHeading(title: calendarHeadingTitle)
         container.update(calendar: AnyView(calendarContent().environment(\.self, context.environment)),
                          visible: isCalendarVisible, width: calendarWidth, sidebarVisible: isSidebarVisible,
+                         minimumWidth: assistantActive ? 360 : CalendarPanelLayout.minimumWidth,
+                         maximumWidth: assistantActive ? 520 : CalendarPanelLayout.maximumWidth,
                          widthChanged: { calendarWidth = $0 }, visibilityChanged: { isCalendarVisible = $0 })
-        controller.updateCalendarButton(title: calendarTitle, visible: isCalendarVisible, toggle: { isCalendarVisible.toggle() })
+        controller.updateCalendarButton(title: calendarTitle, visible: isCalendarVisible && !assistantActive, toggle: toggleCalendarPanel)
+        controller.updateAssistantButton(title: assistantTitle, active: assistantActive, toggle: toggleAssistant)
         controller.updateSearch(text: search, title: searchTitle, clearTitle: clearSearchTitle, changed: { search = $0 })
         controller.updateDeadline(AnyView(deadline().environment(\.self, context.environment)),
                                   title: deadlineTitle, visible: hasSelectedTask)
@@ -122,6 +129,10 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let sidebarButton = NSButton()
     private let newTaskButton = NSButton()
     private let checklistButton = NSButton()
+    private let assistantButton = NSButton()
+    private let assistantToolbarItem = NSToolbarItem(itemIdentifier: .plannerAssistant)
+    private var assistantSurface: WorkspaceToolbarButtonSurface!
+    private var toggleAssistantAction: (() -> Void)?
     private let calendarButton = NSButton()
     private let calendarToolbarItem = NSToolbarItem(itemIdentifier: .plannerCalendar)
     private let calendarHeadingItem = NSToolbarItem(itemIdentifier: .plannerCalendarHeading)
@@ -221,6 +232,9 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         configureButton(sidebarButton, symbol: "sidebar.left", identifier: "toggle-sidebar-button", action: #selector(toggleFolders))
         configureButton(newTaskButton, symbol: "square.and.pencil", identifier: "new-task-button", action: #selector(createTask))
         configureButton(checklistButton, symbol: "checklist", identifier: "add-checklist-item-button", action: #selector(createChecklistItem))
+        configureButton(assistantButton, symbol: "bubble.left.and.text.bubble.right", identifier: "toggle-assistant-button", action: #selector(toggleAssistantPanel))
+        assistantSurface = configureButtonSurface(for: assistantToolbarItem, content: assistantButton)
+        assistantToolbarItem.visibilityPriority = .high
         configureButton(calendarButton, symbol: "calendar", identifier: "toggle-calendar-button", action: #selector(toggleCalendar))
         calendarSurface = configureButtonSurface(for: calendarToolbarItem, content: calendarButton)
         calendarToolbarItem.visibilityPriority = .high
@@ -596,7 +610,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         + (sidebarItem.isCollapsed ? [] : [.sidebarTrackingSeparator])
         + [.plannerFolderHeading, .flexibleSpace, .plannerSearch, .plannerDetailTrackingSeparator,
          .plannerNewTask, .space, .plannerChecklist, .space, .plannerDeadline, .space, .plannerTaskActions]
-        + calendarToolbarIdentifiers
+        + [.flexibleSpace, .plannerAssistant] + calendarToolbarIdentifiers
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -613,6 +627,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         case .plannerChecklist: return checklistToolbarItem
         case .plannerDeadline: return deadlineToolbarItem
         case .plannerTaskActions: return taskActionsToolbarItem
+        case .plannerAssistant: return assistantToolbarItem
         case .plannerCalendar: return calendarToolbarItem
         case .plannerCalendarHeading: return calendarHeadingItem
         case .plannerSearch: return searchToolbarItem
@@ -710,12 +725,20 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         calendarButton.contentTintColor = .labelColor
     }
 
+    func updateAssistantButton(title: String, active: Bool, toggle: @escaping () -> Void) {
+        toggleAssistantAction = toggle
+        updateLabel(title, item: assistantToolbarItem, button: assistantButton)
+        assistantSurface.presentation = active ? .sidebar : .circle
+        assistantButton.contentTintColor = active ? NSColor(named: "AccentColor") : .labelColor
+    }
+    @objc private func toggleAssistantPanel() { toggleAssistantAction?() }
+
     private var calendarToolbarIdentifiers: [NSToolbarItem.Identifier] {
         // Свободное место находится после всех действий задачи во всех режимах календаря.
         switch calendarToolbarLayout {
-        case .closed: [.flexibleSpace, .space, .plannerCalendar]
-        case .column: [.flexibleSpace, .plannerCalendarBoundary, .plannerCalendarHeading, .flexibleSpace, .plannerCalendar, .plannerCalendarTrailingBoundary]
-        case .overlay: [.flexibleSpace, .plannerCalendarHeading, .plannerCalendarGap, .plannerCalendar]
+        case .closed: [.space, .plannerCalendar]
+        case .column: [.plannerCalendarBoundary, .plannerCalendarHeading, .flexibleSpace, .plannerCalendar, .plannerCalendarTrailingBoundary]
+        case .overlay: [.plannerCalendarHeading, .plannerCalendarGap, .plannerCalendar]
         }
     }
 
@@ -770,7 +793,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         // В накладном режиме сначала размещаем кнопки, затем занимаем только свободное место.
         // Широкий календарь не должен вытеснять кнопку закрытия в меню переполнения toolbar.
         calendarGapWidth.constant = 0
-        if let index = workspaceToolbar.items.firstIndex(where: { $0.itemIdentifier == .plannerTaskActions }) {
+        if let index = workspaceToolbar.items.firstIndex(where: { $0.itemIdentifier == .plannerAssistant }) {
             // Кнопка календаря остаётся в toolbar: меняются только границы её секции и отступы.
             // Её удаление и повторная вставка давали вспышку стекла при открытии панели.
             while workspaceToolbar.items.count > index + 1,
@@ -808,7 +831,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         }
     }
 
-    func attachCalendarSidebar(_ host: NSViewController, width: CGFloat, animate: Bool) {
+    func attachCalendarSidebar(_ host: NSViewController, width: CGFloat, animate: Bool, minimumWidth: CGFloat = CalendarPanelLayout.minimumWidth, maximumWidth: CGFloat = CalendarPanelLayout.maximumWidth) {
         updatingCalendarSidebar = true
         if calendarSidebarItem == nil {
             // Тот же тип, что и у папок: macOS рисует цельную стеклянную панель с внешними отступами.
@@ -854,6 +877,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             }
         }
         guard let calendarSidebarItem else { updatingCalendarSidebar = false; return }
+        calendarSidebarItem.minimumThickness = minimumWidth
+        calendarSidebarItem.maximumThickness = maximumWidth
         updatingCalendarSidebar = false
         if calendarSidebarItem.isCollapsed || calendarTargetCollapsed {
             setCalendarCollapsed(false, width: width, animate: animate)
@@ -1083,6 +1108,7 @@ private extension NSToolbarItem.Identifier {
     static let plannerCalendarTrailingBoundary = NSToolbarItem.Identifier("Planner.CalendarTrailingBoundary")
     static let plannerCalendarBoundary = NSToolbarItem.Identifier("Planner.CalendarBoundary")
     static let plannerCalendarGap = NSToolbarItem.Identifier("Planner.CalendarGap")
+    static let plannerAssistant = NSToolbarItem.Identifier("Planner.Assistant")
     static let plannerCalendar = NSToolbarItem.Identifier("Planner.Calendar")
     static let plannerSearch = NSToolbarItem.Identifier("Planner.Search")
     static let plannerNewFolder = NSToolbarItem.Identifier("Planner.NewFolder")

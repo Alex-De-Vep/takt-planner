@@ -213,3 +213,120 @@
 "Напоминания события изменились. Откройте событие заново и повторите изменения." = "The event alerts have changed. Reopen the event and try again.";
 "%d мин. от начала" = "%d min from start";
 "Напоминание на конкретную дату не меняется при переносе события." = "An alert set to a specific date does not change when you move the event.";
+
+// Локальный помощник и управление моделью.
+"Помощник" = "Assistant";
+"Открыть помощника" = "Open assistant";
+"Закрыть помощника" = "Close assistant";
+"Локальный помощник" = "Local assistant";
+"История" = "History";
+"Новый разговор" = "New conversation";
+"Очистить историю" = "Clear history";
+"Очистить историю…" = "Clear history…";
+"Очистить историю помощника?" = "Clear assistant history?";
+"Очистить" = "Clear";
+"Созданные задачи и события сохранятся." = "Created tasks and events will be kept.";
+"Опишите, что нужно сделать" = "Describe what you need to do";
+"Помощник подготовит задачи и события. Перед созданием вы проверите каждое предложение." = "The assistant will propose tasks and events for you to review before creating them.";
+"Создай задачи для подготовки проекта" = "Create tasks to prepare a project";
+"Запланируй встречу на завтра" = "Schedule a meeting for tomorrow";
+"Создай задачу с подзадачами" = "Create a task with subtasks";
+"Вы" = "You";
+"Готовлю предложение…" = "Preparing a proposal…";
+"Создание…" = "Creating…";
+"Создать: %d" = "Create: %d";
+"Сообщение помощнику" = "Message the assistant";
+"Остановить" = "Stop";
+"Отправить" = "Send";
+"Локально на этом Mac · Shift+Enter — новая строка" = "On this Mac · Shift+Enter for a new line";
+"Не выбрана" = "Not selected";
+"Не выбран" = "Not selected";
+"Календарь не выбран" = "No calendar selected";
+"Длительность: %d мин" = "Duration: %d min";
+"Напоминание: за %d мин" = "Reminder: %d min before";
+"Без напоминания" = "No reminder";
+"Связанная задача" = "Linked task";
+"Создано" = "Created";
+"Изменить предложение" = "Edit proposal";
+"Сохранить предложение" = "Save proposal";
+"Проверьте календарь: результат предыдущего сохранения неизвестен. Автоматическое повторение отключено." = "Check Calendar: the previous save result is unknown. Automatic retry is disabled.";
+"Создавайте задачи и события обычными сообщениями. Перед сохранением помощник предложит проверить результат." = "Create tasks and events with natural language. Review the proposal before anything is saved.";
+"Требуется Mac с чипом Apple M1 или новее." = "Requires a Mac with Apple M1 or newer.";
+"Файлы скачиваются с Hugging Face. После загрузки переписка обрабатывается на вашем Mac и не отправляется провайдеру модели." = "Model files are downloaded from Hugging Face. Once installed, your conversations are processed on your Mac and are not sent to the model provider.";
+"Модель и условия Apache 2.0" = "Model and Apache 2.0 license";
+"Проверка файлов…" = "Verifying files…";
+"Подготовка модели…" = "Preparing model…";
+"Загрузка модели…" = "Downloading model…";
+"Отменить загрузку" = "Cancel download";
+"Включить помощника" = "Enable assistant";
+"Скачать и включить" = "Download and enable";
+"Нажимая кнопку, вы включаете локального помощника и подтверждаете ознакомление с условиями модели. Размер загрузки не равен расходу оперативной памяти." = "By continuing, you enable the local assistant and acknowledge the model terms. Download size is not memory usage.";
+"Без связи" = "No linked task";
+"Подзадачи — каждая с новой строки" = "Subtasks — one per line";
+"Срок" = "Due date";
+"Уведомления о сроке зависят от общих настроек приложения." = "Deadline notifications follow the app notification settings.";
+"За %d мин" = "%d min before";
+"%d мин" = "%d min";
+"Выключить помощника" = "Disable assistant";
+"Удалить модель…" = "Delete model…";
+"Удалить модель?" = "Delete model?";
+"Задачи, события и история чата сохранятся." = "Tasks, events and chat history will be kept.";
+"Добавлять в текущую папку" = "Use the current folder";
+"Папка по умолчанию" = "Default folder";
+"Длительность события" = "Event duration";
+"Напоминание события" = "Event reminder";
+"Для событий используется календарь, выбранный в разделе «Календарь»." = "Events use the calendar selected in Calendar settings.";
+"Формат истории помощника не поддерживается." = "This assistant history format is not supported.";
+"Укажите дату." = "Choose a date.";
+"Проверьте дату и время." = "Check the date and time.";
+"Введите название." = "Enter a title.";
+"Предложение слишком большое. Разделите его на несколько запросов." = "The proposal is too large. Split it into several requests.";
+"Выберите существующую папку." = "Select an existing folder.";
+"Проверьте срок задачи." = "Check the task deadline.";
+"Выберите доступный календарь для записи." = "Select a writable calendar.";
+"Во сколько запланировать событие?" = "What time should the event start?";
+"Проверьте длительность события." = "Check the event duration.";
+"Проверьте напоминание." = "Check the reminder.";
+"Не удалось проверить ответ модели. Упростите запрос и повторите." = "Could not validate the model response. Simplify your request and try again.";
+"Сначала загрузите модель." = "Download the model first.";
+"Не найден список файлов модели." = "The model manifest is missing.";
+"Недостаточно места для модели." = "Not enough disk space for the model.";
+"Проверка модели не пройдена. Повторите загрузку." = "Model verification failed. Download it again.";
+"Не удалось скачать модель. Проверьте соединение и повторите." = "Could not download the model. Check your connection and try again.";
+"Модель повторила уже выполненное действие. Создайте новый разговор." = "The model repeated an action that was already applied. Start a new conversation.";
+"Связанная задача недоступна. Создайте её или исправьте предложение." = "The linked task is unavailable. Create it or edit the proposal.";
+"Созданное событие недоступно. Повторное событие не создаётся." = "The created event is unavailable. A duplicate will not be created.";
+"Событие создано, но связь не сохранена. Повторите сохранение связи." = "The event was created, but its task link was not saved. Retry saving the link.";
+"Не удалось сохранить задачу." = "Could not save the task.";
+
+"Разговор слишком большой. Начните новый разговор или сократите запрос." = "The conversation is too large. Start a new conversation or shorten your request.";
+
+"Для задач доступны уведомления о сроке из общих настроек." = "Tasks use the deadline notifications configured in general settings.";
+
+"Сначала включите и заполните связанную задачу." = "Include and complete the linked task first.";
+
+"Название" = "Title";
+
+"Описание" = "Description";
+
+"Открыть" = "Open";
+
+"Модель выгружена из-за нехватки памяти. Закройте лишние приложения и включите помощника снова." = "The model was unloaded due to memory pressure. Close other apps and enable the assistant again.";
+
+"Использовать текущую папку" = "Use the current folder";
+
+"Использовать выбранную задачу" = "Use the selected task";
+
+"Контекст сообщения" = "Message context";
+
+"Завершите изменение карточки кнопкой «Готово» или «Отмена»." = "Finish editing the card with Done or Cancel.";
+
+"Использовать календарь по умолчанию" = "Use the default calendar";
+
+"Сообщение слишком длинное. Сократите его до 8000 символов." = "The message is too long. Shorten it to 8,000 characters.";
+
+"Созданный объект больше недоступен. Возможно, он удалён." = "The created item is no longer available. It may have been deleted.";
+
+"Готово" = "Done";
+
+"Сначала завершите сохранение связи или проверьте результат предыдущей операции." = "Finish saving the link or verify the previous operation first.";

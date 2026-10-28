@@ -1,5 +1,5 @@
 /* Название приложения в Finder, Dock и системных меню macOS. */
-"CFBundleDisplayName" = "Задачи";
-"CFBundleName" = "Задачи";
+"CFBundleDisplayName" = "Задачи AI Preview";
+"CFBundleName" = "Задачи AI Preview";
 
 "NSCalendarsFullAccessUsageDescription" = "Задачам нужен доступ к календарям для просмотра событий и планирования времени.";

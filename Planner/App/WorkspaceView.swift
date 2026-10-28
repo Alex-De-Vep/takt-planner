@@ -15,6 +15,7 @@ struct WorkspaceView: View {
     @Bindable var preferences: AppPreferences
     @Bindable var notifications: PlannerNotifications
     let taskDrag: TaskDragState
+    let assistant: AssistantService
     @Query private var eventLinks: [TaskEventLink]
     @State private var calendarState = CalendarPanelState()
     @State private var editorStore = TaskEditorStore()
@@ -88,13 +89,19 @@ struct WorkspaceView: View {
         NativeWorkspaceSplitView(
             isSidebarVisible: $isSidebarVisible,
             isFullScreen: $isFullScreen,
-            isCalendarVisible: $preferences.calendarOpen,
-            calendarWidth: $preferences.calendarWidth,
+            isCalendarVisible: Binding(get: { preferences.rightPanel != nil }, set: { if !$0 { preferences.rightPanel = nil } }),
+            calendarWidth: Binding(get: { preferences.rightPanel == .assistant ? preferences.assistantWidth : preferences.calendarWidth }, set: {
+                if preferences.rightPanel == .assistant { preferences.assistantWidth = min(520, max(360, $0)) } else { preferences.calendarWidth = $0 }
+            }),
             search: searchText,
             searchTitle: strings["Поиск"],
             clearSearchTitle: strings["Очистить поиск"],
             calendarTitle: strings[preferences.calendarOpen ? "Закрыть календарь" : "Открыть календарь"],
-            calendarHeadingTitle: strings["Календарь"],
+            calendarHeadingTitle: strings[preferences.rightPanel == .assistant ? "Помощник" : "Календарь"],
+            assistantTitle: strings[preferences.rightPanel == .assistant ? "Закрыть помощника" : "Открыть помощника"],
+            assistantActive: preferences.rightPanel == .assistant,
+            toggleAssistant: { preferences.rightPanel = preferences.rightPanel == .assistant ? nil : .assistant },
+            toggleCalendarPanel: { preferences.rightPanel = preferences.rightPanel == .calendar ? nil : .calendar },
             newFolderTitle: strings["Новая папка"],
             toggleSidebarTitle: strings[isSidebarVisible ? "Скрыть папки" : "Показать папки"],
             folderTitle: filter.title(in: folders, using: strings),
@@ -140,10 +147,21 @@ struct WorkspaceView: View {
                 TaskDeadlineToolbarButton(task: task, service: service).id(task.id)
             }
         } calendarContent: {
-            CalendarPanel(state: calendarState, preferences: preferences, service: calendar, taskService: service,
+            ZStack {
+                CalendarPanel(state: calendarState, preferences: preferences, service: calendar, taskService: service,
                           selectedTask: selectedTask, tasks: tasks, links: eventLinks,
                           openTask: { state.openLinkedTask($0, visibleIDs: taskList.taskIDs) },
                           isVisible: preferences.calendarOpen)
+                    .opacity(preferences.rightPanel == .calendar ? 1 : 0)
+                    .allowsHitTesting(preferences.rightPanel == .calendar)
+                    .accessibilityHidden(preferences.rightPanel != .calendar)
+                AssistantPanel(service: assistant, preferences: preferences, taskService: service, calendar: calendar,
+                    folders: folders, selectedTask: selectedTask, filter: filter,
+                    openTask: { state.openLinkedTask($0, visibleIDs: taskList.taskIDs) }, openEvent: { event in preferences.rightPanel = .calendar; calendarState.show(event) })
+                    .opacity(preferences.rightPanel == .assistant ? 1 : 0)
+                    .allowsHitTesting(preferences.rightPanel == .assistant)
+                    .accessibilityHidden(preferences.rightPanel != .assistant)
+            }
         }
         // Корневая split view занимает всю высоту окна; safe area учитывается внутри нативных колонок.
         .ignoresSafeArea(.container, edges: .top)
