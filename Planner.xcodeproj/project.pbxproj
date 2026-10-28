@@ -67,6 +67,32 @@
 			"isa" = "PBXBuildFile";
 			"productRef" = "F00A3114FECE325544C8D53F";
 		};
+		"63C4D4D9E8E574BA8ACBA742" = {
+			"isa" = "XCRemoteSwiftPackageReference";
+			"repositoryURL" = "https://github.com/ml-explore/mlx-swift-lm.git";
+			"requirement" = {
+				"kind" = "exactVersion";
+				"version" = "2.31.3";
+			};
+		};
+		"95CB4AE20E729691802A43DA" = {
+			"isa" = "XCSwiftPackageProductDependency";
+			"productName" = "MLXLLM";
+			"package" = "63C4D4D9E8E574BA8ACBA742";
+		};
+		"37C7DCE0D0BB66CE2EF181D1" = {
+			"isa" = "XCSwiftPackageProductDependency";
+			"productName" = "MLXLMCommon";
+			"package" = "63C4D4D9E8E574BA8ACBA742";
+		};
+		"2C596C91D9FA1C343AC9DF07" = {
+			"isa" = "PBXBuildFile";
+			"productRef" = "95CB4AE20E729691802A43DA";
+		};
+		"111CCDE12266B69AAFCCD783" = {
+			"isa" = "PBXBuildFile";
+			"productRef" = "37C7DCE0D0BB66CE2EF181D1";
+		};
 		"66332D41A4DCEC022D9AEE99" = {
 			"isa" = "PBXFileSystemSynchronizedRootGroup";
 			"path" = "Planner";
@@ -88,7 +114,7 @@
 		"93B25A81274F5B8C2554DD82" = {
 			"isa" = "PBXFrameworksBuildPhase";
 			"buildActionMask" = 2147483647;
-			"files" = ("523878C5451958612E594FC3");
+			"files" = ("523878C5451958612E594FC3", "2C596C91D9FA1C343AC9DF07", "111CCDE12266B69AAFCCD783");
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
 		"2C40C91FAFFECD50053791E1" = {
@@ -102,18 +128,20 @@
 			"name" = "Debug";
 			"buildSettings" = {
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.AIPreview";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.1.48";
-				"CURRENT_PROJECT_VERSION" = "49";
+				"MARKETING_VERSION" = "0.2.0";
+				"CURRENT_PROJECT_VERSION" = "50";
+				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)";
 				"CODE_SIGN_ENTITLEMENTS" = "Planner/Planner.entitlements";
 				"ENABLE_APP_SANDBOX" = "YES";
 				"INFOPLIST_FILE" = "Configuration/Planner-Info.plist";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" = "AccentColor";
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "TasksIcon";
-				"INFOPLIST_KEY_CFBundleDisplayName" = "Задачи";
+				"INFOPLIST_KEY_CFBundleDisplayName" = "Задачи AI Preview";
 				"INFOPLIST_KEY_LSApplicationCategoryType" = "public.app-category.productivity";
 				"INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription" = "Задачам нужен доступ к календарям для просмотра событий и планирования времени.";
 				"INFOPLIST_KEY_NSHumanReadableCopyright" = "";
@@ -125,18 +153,20 @@
 			"name" = "Release";
 			"buildSettings" = {
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.AIPreview";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.1.48";
-				"CURRENT_PROJECT_VERSION" = "49";
+				"MARKETING_VERSION" = "0.2.0";
+				"CURRENT_PROJECT_VERSION" = "50";
+				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)";
 				"CODE_SIGN_ENTITLEMENTS" = "Planner/Planner.entitlements";
 				"ENABLE_APP_SANDBOX" = "YES";
 				"INFOPLIST_FILE" = "Configuration/Planner-Info.plist";
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" = "AccentColor";
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "TasksIcon";
-				"INFOPLIST_KEY_CFBundleDisplayName" = "Задачи";
+				"INFOPLIST_KEY_CFBundleDisplayName" = "Задачи AI Preview";
 				"INFOPLIST_KEY_LSApplicationCategoryType" = "public.app-category.productivity";
 				"INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription" = "Задачам нужен доступ к календарям для просмотра событий и планирования времени.";
 				"INFOPLIST_KEY_NSHumanReadableCopyright" = "";
@@ -156,7 +186,7 @@
 			"buildRules" = ();
 			"dependencies" = ();
 			"fileSystemSynchronizedGroups" = ("66332D41A4DCEC022D9AEE99");
-			"packageProductDependencies" = ("F00A3114FECE325544C8D53F");
+			"packageProductDependencies" = ("F00A3114FECE325544C8D53F", "95CB4AE20E729691802A43DA", "37C7DCE0D0BB66CE2EF181D1");
 			"name" = "Planner";
 			"productName" = "Planner";
 			"productReference" = "0422B35A368B797F6AC12F60";
@@ -209,10 +239,11 @@
 			"name" = "Debug";
 			"buildSettings" = {
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.AIPreview.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.1.48";
-				"CURRENT_PROJECT_VERSION" = "49";
+				"MARKETING_VERSION" = "0.2.0";
+				"CURRENT_PROJECT_VERSION" = "50";
+				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner";
 				"BUNDLE_LOADER" = "$(TEST_HOST)";
@@ -223,10 +254,11 @@
 			"name" = "Release";
 			"buildSettings" = {
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.AIPreview.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.1.48";
-				"CURRENT_PROJECT_VERSION" = "49";
+				"MARKETING_VERSION" = "0.2.0";
+				"CURRENT_PROJECT_VERSION" = "50";
+				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner";
 				"BUNDLE_LOADER" = "$(TEST_HOST)";
@@ -298,10 +330,11 @@
 			"name" = "Debug";
 			"buildSettings" = {
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.AIPreview.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.1.48";
-				"CURRENT_PROJECT_VERSION" = "49";
+				"MARKETING_VERSION" = "0.2.0";
+				"CURRENT_PROJECT_VERSION" = "50";
+				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
 			};
@@ -311,10 +344,11 @@
 			"name" = "Release";
 			"buildSettings" = {
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
-				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.AIPreview.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.1.48";
-				"CURRENT_PROJECT_VERSION" = "49";
+				"MARKETING_VERSION" = "0.2.0";
+				"CURRENT_PROJECT_VERSION" = "50";
+				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
 			};
@@ -376,7 +410,7 @@
 			"projectRoot" = "";
 			"targets" = ("16FA1AFAA6E8E1ACA30CAE5C", "465EDED657905185CD258528", "17340B50EFC12776113E06D2");
 			"preferredProjectObjectVersion" = 77;
-			"packageReferences" = ("543CB531DCD3C74E84110B0A");
+			"packageReferences" = ("543CB531DCD3C74E84110B0A", "63C4D4D9E8E574BA8ACBA742");
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";
