@@ -71,8 +71,8 @@ struct WorkspaceView: View {
             .onChange(of: state.selectedTaskID) { checklistFocusID = nil }
             // «Сегодня» пересчитывается при полуночи, смене часового пояса и возврате в приложение.
             .onChange(of: scenePhase) { if scenePhase == .active { now = .now } }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
-            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in now = .now }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in now = .now }
+            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: DispatchQueue.main)) { _ in now = .now }
             .onChange(of: notifications.openRevision) { openNotificationTask() }
             .onAppear { openNotificationTask() }
             .task(id: calendar.revision) {
@@ -98,8 +98,8 @@ struct WorkspaceView: View {
             clearSearchTitle: strings["Очистить поиск"],
             calendarTitle: strings[preferences.calendarOpen ? "Закрыть календарь" : "Открыть календарь"],
             calendarHeadingTitle: strings[preferences.rightPanel == .assistant ? "Помощник" : "Календарь"],
-            assistantTitle: strings[preferences.rightPanel == .assistant ? "Закрыть помощника" : "Открыть помощника"],
-            assistantActive: preferences.rightPanel == .assistant,
+            assistantTitle: strings[preferences.rightPanel == .assistant ? "Закрыть ИИ-чат" : "Открыть ИИ-чат"],
+            activeRightPanel: preferences.rightPanel,
             toggleAssistant: { preferences.rightPanel = preferences.rightPanel == .assistant ? nil : .assistant },
             toggleCalendarPanel: { preferences.rightPanel = preferences.rightPanel == .calendar ? nil : .calendar },
             newFolderTitle: strings["Новая папка"],

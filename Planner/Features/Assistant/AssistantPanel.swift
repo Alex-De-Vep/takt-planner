@@ -15,10 +15,18 @@ struct AssistantPanel: View {
     let openEvent: (CalendarEvent) -> Void
     @State private var useFolder = true
     @State private var useTask = true
+    @State private var cloudTaskID: UUID?
     @State private var editing: AssistantAction?
     @State private var showClear = false
+    @State private var showModelConnections = false
     private var folderOptions: [AssistantFolder] { AssistantService.folders(folders, preferences: preferences) }
     private var calendarOptions: [AssistantCalendar] { calendar.calendars.filter(\.writable).map { AssistantCalendar(id: $0.id, name: $0.title) } }
+    private var isCloud: Bool { service.current?.usesCloudModel == true }
+    private var canSend: Bool { isCloud ? service.canSendCloud : service.model.canChat }
+    private var hasChatGPTConnection: Bool {
+        service.cloud.isConnected && (service.current?.cloud?.accountID.map { $0 == service.cloud.account?.id } ?? true)
+    }
+    private var taskIsAttached: Bool { isCloud ? selectedTask.map { $0.id == cloudTaskID } == true : useTask }
     private var context: AssistantContext {
         let defaultFolder = preferences.assistantUseCurrentFolder && useFolder && filter.isPrimaryFolder
             ? (filter == .inbox ? "inbox" : filter == .week ? "week" : filter == .month ? "month" : { if case .folder(let id) = filter { return id.uuidString }; return "inbox" }())
@@ -26,33 +34,54 @@ struct AssistantPanel: View {
         return AssistantContext(now: .now, timeZoneID: TimeZone.current.identifier,
             language: preferences.language.resolvedCode, folders: folderOptions, calendars: calendarOptions,
             defaultFolderID: defaultFolder, defaultCalendarID: calendar.creationCalendar(preferred: preferences.creationCalendarID),
-            taskID: useTask ? selectedTask?.id.uuidString : nil, taskTitle: useTask ? selectedTask?.displayTitle(using: strings) : nil,
+            taskID: taskIsAttached ? selectedTask?.id.uuidString : nil, taskTitle: taskIsAttached ? selectedTask?.displayTitle(using: strings) : nil,
             durationMinutes: preferences.assistantDuration, reminderMinutes: preferences.assistantReminder < 0 ? nil : preferences.assistantReminder)
     }
     var body: some View {
-        Group {
-            if service.model.state == .ready { conversation }
+        VStack(spacing: 0) {
+            conversationHeader
+            if isCloud || service.model.canChat || service.current?.messages.isEmpty == false { conversation }
             else { AssistantModelSetup(manager: service.model) }
+            modelFooter
         }
         .background(Color.clear)
-        .onAppear { if preferences.rightPanel == .assistant { service.model.restoreIfInstalled() } }
-        .onChange(of: preferences.rightPanel) { if preferences.rightPanel == .assistant { service.model.restoreIfInstalled() } }
-        .onChange(of: service.archive.currentID) { editing = nil }
+        .sheet(isPresented: $showModelConnections) {
+            AssistantModelConnections(service: service, russian: preferences.language.resolvedCode == "ru",
+                boundAccountID: service.current?.cloud?.accountID, selectModel: service.selectCloudModel)
+        }
+        .onAppear(perform: prepareConversation)
+        .onChange(of: preferences.rightPanel) { prepareConversation() }
+        .onChange(of: service.archive.currentID) {
+            editing = nil; cloudTaskID = nil
+            prepareConversation()
+        }
+        .onChange(of: selectedTask?.id) { cloudTaskID = nil }
+        .onChange(of: isCloud) { cloudTaskID = nil }
     }
-    private var conversation: some View {
+    private func prepareConversation() {
+        guard preferences.rightPanel == .assistant else { return }
+        // Каталог доступен в едином меню даже при выборе модели на Mac.
+        service.cloud.activate()
+        if !isCloud { service.model.restoreIfInstalled() }
+    }
+    private var conversationHeader: some View {
         VStack(spacing: 0) {
             HStack {
                 Menu {
                     ForEach(service.archive.threads) { thread in
-                        Button(thread.title == "Новый разговор" ? strings[thread.title] : thread.title) { service.selectConversation(thread.id) }
+                        Button { service.selectConversation(thread.id) } label: {
+                            Label(thread.title == "Новый разговор" ? strings[thread.title] : thread.title,
+                                  systemImage: thread.usesCloudModel ? "cloud" : "desktopcomputer")
+                        }
                     }
                     Divider()
                     Button(strings["Очистить историю"], role: .destructive) { showClear = true }
                 } label: { Label(strings["История"], systemImage: "clock.arrow.circlepath") }
                 .disabled(service.generating || service.applying)
-                Spacer()
+                Spacer(minLength: 4)
                 Button { service.newConversation() } label: { Image(systemName: "square.and.pencil") }
-                    .help(strings["Новый разговор"]).disabled(service.generating || service.applying)
+                .accessibilityLabel(strings["Новый разговор"])
+                .help(strings["Новый разговор"]).disabled(service.generating || service.applying)
             }
             .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 10)
             if showClear {
@@ -66,6 +95,10 @@ struct AssistantPanel: View {
                     }
                 }.padding(12).background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12)).padding(.horizontal, 16)
             }
+        }
+    }
+    private var conversation: some View {
+        VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
@@ -78,7 +111,14 @@ struct AssistantPanel: View {
                                     ForEach(message.questions) { question in
                                         Text(question.text).fontWeight(.medium)
                                         ForEach(Array(question.options.prefix(4).enumerated()), id: \.offset) { _, option in
-                                            Button(option) { send(option) }.disabled(service.generating || service.applying)
+                                            Button(option) { send(option) }.disabled(!canSend || service.generating || service.applying)
+                                        }
+                                        if question.options.count > 4 {
+                                            Menu(strings["Другие варианты"]) {
+                                                ForEach(Array(question.options.dropFirst(4).enumerated()), id: \.offset) { _, option in
+                                                    Button(option) { send(option) }
+                                                }
+                                            }.disabled(!canSend || service.generating || service.applying)
                                         }
                                     }
                                 }
@@ -86,7 +126,31 @@ struct AssistantPanel: View {
                             .padding(12).background(message.role == .user ? PlannerStyle.accent.opacity(0.10) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                         }
                         ForEach(service.current?.actions ?? []) { action in actionCard(action) }
-                        if service.generating { HStack { ProgressView().controlSize(.small); Text(strings["Готовлю предложение…"]).foregroundStyle(.secondary) } }
+                        ForEach(service.current?.textEdits?.filter { $0.hasChanges && $0.status != .cancelled } ?? []) { edit in
+                            AssistantTextEditCard(edit: edit, busy: service.generating || service.applying || service.storageFailed,
+                                active: service.current?.activeTextEditID == edit.id, update: service.updateTextEdit,
+                                refine: { service.chooseTextEdit(edit.id) },
+                                apply: { service.applyTextEdit(edit.id, tasks: taskService) },
+                                cancel: { service.cancelTextEdit(edit.id) },
+                                refresh: {
+                                    service.refreshTextEdit(edit.id, tasks: taskService)
+                                    if let active = service.activeTextEdit, active.id != edit.id {
+                                        sendTextCommand(edit.lastRequest ?? strings["Улучшить описание"])
+                                    }
+                                },
+                                open: { if let task = try? taskService.assistantTask(id: edit.before.id) { openTask(task) }
+                                        else { service.error = "Задача больше не существует." } })
+                        }
+                        if service.generating {
+                            if !service.cloudPreview.isEmpty {
+                                Text(service.cloudPreview).frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(12).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                            }
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Text(strings[isCloud ? "Готовлю ответ…" : "Готовлю предложение…"]).foregroundStyle(.secondary)
+                            }
+                        }
                         if let error = service.error { Text(strings[error]).font(.callout).foregroundStyle(.red).textSelection(.enabled) }
                         Color.clear.frame(height: 1).id("assistant-bottom")
                     }
@@ -106,15 +170,18 @@ struct AssistantPanel: View {
                 .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("assistant-apply").padding(.horizontal, 16).padding(.bottom, 10)
                 .disabled(count == 0 || service.generating || service.applying || service.storageFailed || editing != nil)
             }
-            composer
+            if isCloud || service.model.canChat { composer }
+            else { AssistantModelSetup(manager: service.model).frame(maxHeight: 210) }
         }
     }
     private var examples: some View {
         VStack(alignment: .leading, spacing: 12) {
             Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.accent)
             Text(strings["Опишите, что нужно сделать"]).font(.title3.weight(.semibold))
-            Text(strings["Помощник подготовит задачи и события. Перед созданием вы проверите каждое предложение."]).foregroundStyle(.secondary)
-            ForEach(["Создай задачи для подготовки проекта", "Запланируй встречу на завтра", "Создай задачу с подзадачами"], id: \.self) { example in
+            Text(strings[isCloud ? "Задайте вопрос, подготовьте задачи с подзадачами или приложите задачу для правки."
+                : "Помощник подготовит задачи и события. Перед созданием вы проверите каждое предложение."]).foregroundStyle(.secondary)
+            ForEach(isCloud ? ["Создай задачу с подзадачами", "Распиши новую задачу: подготовить презентацию"]
+                : ["Создай задачи для подготовки проекта", "Запланируй встречу на завтра", "Создай задачу с подзадачами", "Распиши новую задачу: подготовить презентацию"], id: \.self) { example in
                 Button(strings[example]) { service.setDraft(strings[example]) }
             }
         }.padding(.vertical, 12)
@@ -125,8 +192,17 @@ struct AssistantPanel: View {
             if useFolder && preferences.assistantUseCurrentFolder && filter.isPrimaryFolder {
                 contextChip(strings["Папка"] + ": " + filter.title(in: folders, using: strings)) { useFolder = false }
             }
-            if useTask, let task = selectedTask {
-                contextChip(strings["Задача"] + ": " + task.displayTitle(using: strings)) { useTask = false }
+            if let target = service.activeTextEdit {
+                contextChip(strings[target.target == .savedTask ? "Доработка задачи" : "Черновик задачи"] + ": " + target.before.title) { service.chooseTextEdit(nil); cloudTaskID = nil }
+                textTools
+            } else if taskIsAttached, let task = selectedTask {
+                contextChip(strings["Задача"] + ": " + task.displayTitle(using: strings)) {
+                    if isCloud { cloudTaskID = nil } else { useTask = false }
+                }
+                textTools
+            } else if isCloud, let task = selectedTask {
+                Button { cloudTaskID = task.id } label: { Label(strings["Приложить открытую задачу"], systemImage: "paperclip") }
+                    .buttonStyle(.borderless).font(.caption).disabled(service.generating || service.applying)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ZStack(alignment: .topLeading) {
@@ -139,25 +215,63 @@ struct AssistantPanel: View {
                 } label: { Image(systemName: service.generating ? "stop.fill" : "arrow.up").frame(width: 24, height: 24) }
                 .buttonStyle(.borderedProminent).clipShape(Circle())
                 .help(strings[service.generating ? "Остановить" : "Отправить"])
-                .disabled(service.applying || service.storageFailed || editing != nil || (!service.generating && (service.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)))
+                .disabled(service.applying || service.storageFailed || editing != nil || (!service.generating && (!canSend || (service.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))))
             }
             .padding(8).background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
-            HStack {
-                Text(strings["Локально на этом Mac · Shift+Enter — новая строка"]).font(.caption2).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
-                Menu {
-                    Toggle(strings["Использовать текущую папку"], isOn: $useFolder)
-                    Toggle(strings["Использовать выбранную задачу"], isOn: $useTask)
-                } label: { Image(systemName: "scope") }.menuStyle(.borderlessButton).fixedSize()
-                    .help(strings["Контекст сообщения"])
+        }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 6)
+    }
+    private var modelFooter: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if isCloud {
+                HStack {
+                    if hasChatGPTConnection {
+                        Text(strings["Данные запроса отправляются в OpenAI"]).foregroundStyle(.secondary)
+                        Spacer(minLength: 4)
+                    } else if !service.generating {
+                        Button(strings["Подключения моделей…"]) { showModelConnections = true }.buttonStyle(.borderless)
+                    }
+                }.font(.caption2)
             }
-        }.padding(16)
+            HStack {
+                AssistantModelPicker(service: service) { showModelConnections = true }.disabled(editing != nil)
+                if isCloud { AssistantUsageButton(service: service) }
+                Spacer(minLength: 0)
+                if isCloud || service.model.canChat {
+                    Menu {
+                        Toggle(strings["Использовать текущую папку"], isOn: $useFolder)
+                        if !isCloud { Toggle(strings["Использовать выбранную задачу"], isOn: $useTask) }
+                    } label: { Image(systemName: "scope") }.menuStyle(.borderlessButton).fixedSize()
+                        .help(strings["Контекст сообщения"])
+                }
+            }
+        }
+        .padding(.horizontal, 16).padding(.bottom, 14)
     }
     private func contextChip(_ title: String, remove: @escaping () -> Void) -> some View {
         HStack(spacing: 4) { Text(title).lineLimit(1); Button(action: remove) { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) }
             .font(.caption).foregroundStyle(.secondary)
     }
-    private func send(_ text: String) { guard editing == nil else { return }; service.send(text, context: context) }
+    private func send(_ text: String) {
+        guard editing == nil, canSend else { return }
+        service.send(text, context: context, taskService: taskService)
+    }
+    private func sendTextCommand(_ command: String) {
+        if isCloud { send(command) }
+        else { service.sendText(command, language: preferences.language.resolvedCode) }
+    }
+    private var textTools: some View {
+        AssistantTextToolsButton(title: strings["Доработать текст"],
+            commands: ["Переформулировать название", "Улучшить описание", "Расписать задачу", "Разбить на подзадачи", "Сократить описание"].map { strings[$0] },
+            enabled: canSend && !service.generating && !service.applying && editing == nil) { command in
+                guard editing == nil else { return }
+                if service.activeTextEdit != nil { sendTextCommand(command) }
+                else if taskIsAttached, let task = selectedTask, service.beginTextEdit(task: task, tasks: taskService) {
+                    sendTextCommand(command)
+                }
+            }
+            .fixedSize()
+    }
+
     private func actionCard(_ action: AssistantAction) -> some View {
         let problems = service.problems(action, folders: folderOptions, calendars: calendarOptions)
         return VStack(alignment: .leading, spacing: 8) {
@@ -220,6 +334,14 @@ struct AssistantPanel: View {
                             .disabled(service.generating || service.applying)
                     } else {
                         Button(strings["Изменить предложение"]) { editing = action }.disabled(service.generating || service.applying)
+                        if action.proposal.kind == .task {
+                            Button(strings["Доработать текст"]) { service.beginTextEdit(proposal: action) }
+                                .disabled(service.generating || service.applying)
+                                .accessibilityIdentifier("assistant-refine-proposal-\(action.id)")
+                            if service.hasUnreviewedText(for: action.id) {
+                                Text(strings["Сначала примите или отмените предложенные правки."]).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
@@ -242,12 +364,12 @@ struct AssistantModelSetup: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Image(systemName: "sparkles").font(.system(size: 32)).foregroundStyle(PlannerStyle.accent)
-                Text(strings["Локальный помощник"]).font(.title2.weight(.semibold))
+                Text(strings["Ваш личный ии-помощник"]).font(.title2.weight(.semibold))
                 Text(strings["Создавайте задачи и события обычными сообщениями. Перед сохранением помощник предложит проверить результат."])
                 Text(strings["Требуется Mac с чипом Apple M1 или новее."]).fontWeight(.medium)
                 Text(manager.displayName + " · " + ByteCountFormatter.string(fromByteCount: manager.total, countStyle: .file))
-                Text(strings["Файлы скачиваются с Hugging Face. После загрузки переписка обрабатывается на вашем Mac и не отправляется провайдеру модели."]).foregroundStyle(.secondary)
-                Link(strings["Модель и условия Apache 2.0"], destination: manager.modelURL)
+                Text(strings["Ваши сообщения обрабатываются на этом Mac. Содержимое чата не отправляется разработчикам модели."]).foregroundStyle(.secondary)
+                Link(strings["Лицензионное соглашение"], destination: manager.modelURL)
                 if manager.busy {
                     if manager.state == .downloading {
                         ProgressView(value: manager.fraction)
@@ -260,7 +382,7 @@ struct AssistantModelSetup: View {
                         .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("assistant-download")
                 }
                 if let error = manager.error { Text(strings[error]).foregroundStyle(.red).textSelection(.enabled) }
-                Text(strings["Нажимая кнопку, вы включаете локального помощника и подтверждаете ознакомление с условиями модели. Размер загрузки не равен расходу оперативной памяти."]).font(.caption).foregroundStyle(.secondary)
+                Text(strings["Нажимая кнопку, вы включаете помощника и подтверждаете ознакомление с лицензионным соглашением."]).font(.caption).foregroundStyle(.secondary)
             }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
         }
     }

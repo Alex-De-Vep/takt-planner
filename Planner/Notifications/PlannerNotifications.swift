@@ -23,7 +23,7 @@ final class PlannerNotifications {
     var taskToOpen: UUID?
     var openRevision = 0
 
-    init(client: (any NotificationClient)? = nil) {
+    init(client: (any NotificationClient)? = nil, notificationCenter: NotificationCenter = .default) {
         #if SHOWCASE
         self.client = client ?? PreviewNotificationClient()
         #elseif DEBUG
@@ -41,7 +41,8 @@ final class PlannerNotifications {
             }
         }
         for name in [NSApplication.didBecomeActiveNotification, .NSCalendarDayChanged, .NSSystemTimeZoneDidChange] {
-            NotificationCenter.default.publisher(for: name).sink { [weak self] _ in
+            // Day/time-zone changes may arrive off-main, before the inner Task switches actors.
+            notificationCenter.publisher(for: name).sink { @Sendable [weak self] _ in
                 Task { @MainActor [weak self] in self?.synchronize() }
             }.store(in: &observations)
         }

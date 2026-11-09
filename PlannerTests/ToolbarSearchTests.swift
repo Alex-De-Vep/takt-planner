@@ -49,7 +49,7 @@ struct ToolbarSearchTests {
             let identifiers = controller.toolbarDefaultItemIdentifiers(toolbar)
             // Невидимая граница внешнего отступа календаря не является кнопкой шапки.
             #expect(identifiers.last { $0 != NSToolbarItem.Identifier("Planner.CalendarTrailingBoundary") }
-                    == NSToolbarItem.Identifier("Planner.Calendar"))
+                    == NSToolbarItem.Identifier("Planner.RightPanelToggle"))
             #expect(identifiers.filter { $0 == identifier }.count == 1)
             let index = try #require(identifiers.firstIndex(of: identifier))
             #expect(identifiers[index - 2] == NSToolbarItem.Identifier("Planner.FolderHeading"))
@@ -74,7 +74,8 @@ struct ToolbarSearchTests {
                 view.layoutSubtreeIfNeeded()
                 #expect(!field.isHidden && field.frame.height == field.intrinsicContentSize.height)
                 #expect(abs(field.frame.midY - view.bounds.midY) < 0.5)
-                #expect(abs(field.frame.midY - view.searchIcon.frame.midY) < 0.5)
+                // AppKit округляет рамку значка с чётной высотой и текста с нечётной высотой до 0,5 pt.
+                #expect(abs(field.frame.midY - view.searchIcon.frame.midY) <= 0.5)
                 #expect(abs(field.frame.midY - view.clearButton.frame.midY) < 0.5)
                 #expect(field.frame.width > 30)
                 #expect(field.frame.minX > view.searchIcon.frame.maxX)

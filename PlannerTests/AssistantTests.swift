@@ -92,7 +92,8 @@ import Testing
     }
     @Test func conversationGenerationAndClarificationKeepActionIdentity() async throws {
         let backend = FakeAIBackend()
-        let model = ModelManager(backend: backend); model.state = .ready
+        let fixture = try InstalledModelFixture(backend: backend); defer { fixture.clean() }
+        let model = fixture.manager
         let store = tempStore(); defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
         let service = AssistantService(model: model, store: store)
         service.send("Создай задачу", context: context())
@@ -140,12 +141,12 @@ import Testing
         let manager = ModelManager(backend: FakeAIBackend(), directory: directory, defaults: defaults, manifest: manifest, downloaderFactory: { download })
         manager.install(); manager.install()
         while manager.busy { await Task.yield() }
-        #expect(manager.state == .ready && manager.enabled)
+        #expect(manager.state == .installed && manager.enabled)
         #expect(try Data(contentsOf: directory.appending(path: "test.bin")) == Data("abc".utf8))
         await manager.disable(); #expect(!manager.enabled)
         manager.install()
         while manager.busy { await Task.yield() }
-        #expect(manager.state == .ready)
+        #expect(manager.state == .installed)
         await manager.remove()
         #expect(!FileManager.default.fileExists(atPath: directory.path) && !manager.enabled)
     }
@@ -158,7 +159,8 @@ import Testing
     @Test func nextRequestCanReuseAModelKeyWithoutReapplyingThePreviousTask() async throws {
         let container = try PlannerPersistence.makeContainer(inMemory: true), store = tempStore()
         defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
-        let model = ModelManager(backend: FakeAIBackend()); model.state = .ready
+        let fixture = try InstalledModelFixture(); defer { fixture.clean() }
+        let model = fixture.manager
         let service = AssistantService(model: model, store: store)
         let tasks = TaskService(context: container.mainContext), calendar = CalendarService(store: FakeCalendarStore())
         service.send("Создай задачу", context: context())
@@ -218,4 +220,28 @@ final class FakeModelDownload: ModelFileDownloading, @unchecked Sendable {
         progress(3)
     }
     func cancel() {}
+}
+
+/// Отдельные файлы и настройки: ни один тест жизненного цикла не использует пользовательскую модель.
+@MainActor struct InstalledModelFixture {
+    let directory: URL
+    let defaults: UserDefaults
+    let suite: String
+    let manager: ModelManager
+    init(backend: any LocalAIBackend = FakeAIBackend()) throws {
+        suite = "assistant-memory-tests-\(UUID())"
+        directory = FileManager.default.temporaryDirectory.appending(path: suite)
+        defaults = UserDefaults(suiteName: suite)!
+        defaults.set(true, forKey: "assistantEnabled")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for name in ["accepted.json", "ready.json"] { try Data("fixed".utf8).write(to: directory.appending(path: name)) }
+        try Data("abc".utf8).write(to: directory.appending(path: "test.bin"))
+        let file = ModelManifest.File(name: "test.bin", bytes: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        manager = ModelManager(backend: backend, directory: directory, defaults: defaults,
+            manifest: ModelManifest(id: "test/model", revision: "fixed", files: [file]))
+    }
+    func clean() {
+        defaults.removePersistentDomain(forName: suite)
+        try? FileManager.default.removeItem(at: directory)
+    }
 }

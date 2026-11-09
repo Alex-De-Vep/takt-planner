@@ -30,6 +30,7 @@ final class WorkspaceContainerController: NSViewController {
     private let divider = CalendarResizeHandle()
     private let headerBackdrop = WorkspaceHeaderBackdrop()
     private var visible = false
+    private var panel: RightPanel?
     private var preferredWidth = CalendarPanelLayout.defaultWidth
     private var minimumPanelWidth = CalendarPanelLayout.minimumWidth
     private var maximumPanelWidth = CalendarPanelLayout.maximumWidth
@@ -40,6 +41,8 @@ final class WorkspaceContainerController: NSViewController {
     private var placement: Placement = .closed
     private var arranging = false
     private var appliedWidth = CalendarPanelLayout.defaultWidth
+    private var appliedMinimumWidth = CalendarPanelLayout.minimumWidth
+    private var appliedMaximumWidth = CalendarPanelLayout.maximumWidth
     private var animationGeneration = 0
     private var animatingOverlay = false
     private var columnLayoutScheduled = false
@@ -82,17 +85,26 @@ final class WorkspaceContainerController: NSViewController {
         workspace.calendarVisibilityChanged = { [weak self] visible in self?.visibilityChanged?(visible) }
     }
 
-    func update(calendar: AnyView, visible: Bool, width: Double, sidebarVisible: Bool,
+    func update(calendar: AnyView, visible: Bool, width: Double, sidebarVisible: Bool, panel: RightPanel? = .calendar,
                 minimumWidth: CGFloat = CalendarPanelLayout.minimumWidth, maximumWidth: CGFloat = CalendarPanelLayout.maximumWidth,
                 widthChanged: @escaping (Double) -> Void, visibilityChanged: @escaping (Bool) -> Void) {
         _ = view
         calendarHost.updateContent(calendar)
-        let animate = self.visible != visible && view.window != nil
+        let switching = self.visible && visible && self.panel != panel
+        let animate = (self.visible != visible || switching) && view.window != nil
+        self.panel = panel
         self.visible = visible; minimumPanelWidth = minimumWidth; maximumPanelWidth = maximumWidth
         preferredWidth = min(maximumWidth, max(minimumWidth, width))
         self.sidebarVisible = sidebarVisible; self.widthChanged = widthChanged
         self.visibilityChanged = visibilityChanged
-        layoutColumns(animate: animate)
+        if switching && animate && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            // При смене календаря и чата меняется и ширина той же панели — без мгновенного setPosition.
+            NSAnimationContext.runAnimationGroup { context in
+                PlannerMotion.configure(context)
+                context.allowsImplicitAnimation = true
+                layoutColumns(animate: true)
+            }
+        } else { layoutColumns(animate: animate) }
     }
 
     private func scheduleColumnLayout() {
@@ -147,9 +159,11 @@ final class WorkspaceContainerController: NSViewController {
                 calendarHost.removeFromParent()
             }
             calendarHost.view.isHidden = false
-            if needsAttachment || placement != .column || abs(appliedWidth - width) >= 1 {
+            if needsAttachment || placement != .column || abs(appliedWidth - width) >= 1
+                || appliedMinimumWidth != minimumPanelWidth || appliedMaximumWidth != maximumPanelWidth {
                 workspace.attachCalendarSidebar(calendarHost, width: width, animate: animate, minimumWidth: minimumPanelWidth, maximumWidth: maximumPanelWidth)
                 appliedWidth = width
+                appliedMinimumWidth = minimumPanelWidth; appliedMaximumWidth = maximumPanelWidth
             }
             placement = .column
             workspace.setCalendarToolbar(column: true, visible: true)

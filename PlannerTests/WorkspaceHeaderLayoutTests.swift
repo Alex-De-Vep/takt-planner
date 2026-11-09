@@ -152,7 +152,7 @@ struct WorkspaceHeaderLayoutTests {
     @Test func calendarTitleBelongsToItsToolbarSectionOnlyWhileOpen() throws {
         let controller = WorkspaceSplitController(), toolbar = NSToolbar()
         let headingID = NSToolbarItem.Identifier("Planner.CalendarHeading")
-        let calendarID = NSToolbarItem.Identifier("Planner.Calendar")
+        let calendarID = NSToolbarItem.Identifier("Planner.RightPanelToggle")
         let heading = try #require(controller.toolbar(toolbar, itemForItemIdentifier: headingID, willBeInsertedIntoToolbar: true))
         let button = try #require(controller.toolbar(toolbar, itemForItemIdentifier: calendarID, willBeInsertedIntoToolbar: true))
         #expect(!heading.isBordered)
@@ -198,7 +198,7 @@ struct WorkspaceHeaderLayoutTests {
             try #require(controller.toolbar(toolbar, itemForItemIdentifier: .init("Planner.\(suffix)"),
                                             willBeInsertedIntoToolbar: true))
         }
-        let headingItem = try item("CalendarHeading"), button = try item("Calendar")
+        let headingItem = try item("CalendarHeading"), button = try item("RightPanelToggle")
         let heading = try #require(headingItem.view)
         controller.updateCalendarHeading(title: "Календарь")
         for column in [true, false] {
@@ -208,7 +208,7 @@ struct WorkspaceHeaderLayoutTests {
             controller.setCalendarToolbar(column: column, visible: true)
             #expect(heading.alphaValue == 0 && !headingItem.isHidden)
             let boundary = try #require(item("CalendarBoundary") as? NSTrackingSeparatorToolbarItem)
-            #expect(boundary.isHidden && boundary.dividerIndex == 2 && boundary.splitView === controller.splitView)
+            #expect(!boundary.isHidden && boundary.dividerIndex == 2 && boundary.splitView === controller.splitView)
 
             controller.finishCalendarHeaderTransition(afterLayout: true)
             // Закрытие началось раньше отложенного показа заголовка от предыдущего раскрытия.
@@ -228,10 +228,10 @@ struct WorkspaceHeaderLayoutTests {
                 DispatchQueue.main.async { continuation.resume() }
             }
             #expect(heading.alphaValue == 1)
-            // После перехода нативная граница снова удерживает заголовок внутри календарной колонки.
+            // Нативная граница удерживает место секции на протяжении всего перехода.
             #expect(try !item("CalendarBoundary").isHidden)
             #expect(try item("CalendarHeading") === headingItem)
-            #expect(try item("Calendar") === button)
+            #expect(try item("RightPanelToggle") === button)
         }
     }
 
@@ -265,16 +265,19 @@ struct WorkspaceHeaderLayoutTests {
         let searchField = search.searchField
         let sidebarSeparator = try #require(controller.toolbar(toolbar, itemForItemIdentifier: .sidebarTrackingSeparator,
                                                                willBeInsertedIntoToolbar: true))
-        let calendarItem = try item("Calendar")
-        let calendarSurface = try #require(calendarItem.view as? WorkspaceToolbarButtonSurface)
+        let calendarItem = try item("RightPanelToggle")
+        let calendarSurface = try #require((calendarItem.view as? WorkspaceRightPanelSlot)?.surface)
         let calendarButton = try #require(calendarSurface.contentView as? NSButton)
         controller.updateSearch(text: "Запрос", title: "Поиск", clearTitle: "Очистить", changed: { _ in })
         let columns = controller.splitViewItems.map { ObjectIdentifier($0.viewController) }
         var createdFolders = 0
         for visible in [true, false, true] {
-            controller.updateCalendarButton(title: "Календарь", visible: visible, toggle: {})
+            controller.updateRightPanelToolbar(active: visible ? .calendar : nil,
+                calendarTitle: "Календарь", assistantTitle: "Помощник", headingTitle: "Календарь",
+                toggleCalendar: {}, toggleAssistant: {})
+            controller.setCalendarToolbar(column: true, visible: visible)
             #expect(calendarSurface.presentation == (visible ? .sidebar : .circle))
-            #expect(calendarSurface.contentView === calendarButton && calendarItem.view === calendarSurface)
+            #expect(calendarSurface.contentView === calendarButton && (calendarItem.view as? WorkspaceRightPanelSlot)?.surface === calendarSurface)
             #expect(calendarButton.borderShape == (visible ? .capsule : .circle))
             controller.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
                 taskActions: AnyView(EmptyView()), isSidebarVisible: visible, newFolderTitle: "Новая папка",

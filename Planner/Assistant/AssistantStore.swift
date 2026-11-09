@@ -6,8 +6,9 @@ struct AssistantStore {
     init(url: URL = AssistantPaths.root.appending(path: "conversations.json")) { self.url = url }
     func load() throws -> AssistantArchive {
         guard FileManager.default.fileExists(atPath: url.path) else { return AssistantArchive() }
-        let archive = try JSONDecoder().decode(AssistantArchive.self, from: Data(contentsOf: url))
-        guard archive.version == 1 else { throw AssistantFailure(message: "Формат истории помощника не поддерживается.") }
+        var archive = try JSONDecoder().decode(AssistantArchive.self, from: Data(contentsOf: url))
+        guard (1...2).contains(archive.version) else { throw AssistantFailure(message: "Формат истории помощника не поддерживается.") }
+        archive.version = 2
         return archive
     }
     func save(_ archive: AssistantArchive) throws {

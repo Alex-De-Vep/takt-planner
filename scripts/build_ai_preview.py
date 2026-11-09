@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Собирает изолированный AI Preview для Mac M1+ и проверяет установочный образ."""
+"""Собирает обновление «Задач» с локальным ИИ для Mac M1+ и проверяет установочный образ."""
 from pathlib import Path
 import hashlib
 import json
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / '.build'
 DIST = ROOT / 'dist'
 DERIVED = BUILD / 'AIReleaseDerivedData'
-APP_NAME = 'Задачи AI Preview.app'
+APP_NAME = 'Задачи.app'
 
 
 def run(*args, **kwargs):
@@ -21,8 +21,16 @@ def run(*args, **kwargs):
 
 def verify(app):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
-    assert metadata['CFBundleIdentifier'] == 'local.planner.AIPreview'
-    assert metadata['CFBundleDisplayName'] == 'Задачи AI Preview'
+    assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
+    assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == 'Задачи'
+    assert metadata['CFBundleShortVersionString'] == '0.2.11'
+    assert metadata['CFBundleVersion'] == '61'
+    assert metadata['LSMinimumSystemVersion'] == '26.0'
+    for language, expected in [('ru', 'Задачи'), ('en', 'Tasks')]:
+        localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
+                        app / 'Contents/Resources' / f'{language}.lproj/InfoPlist.strings', capture_output=True)
+        names = json.loads(localized.stdout)
+        assert names['CFBundleDisplayName'] == names['CFBundleName'] == expected
     executable = app / 'Contents/MacOS' / metadata['CFBundleExecutable']
     architectures = run('/usr/bin/lipo', '-archs', executable, capture_output=True, text=True).stdout.strip()
     assert architectures == 'arm64', architectures
@@ -35,12 +43,25 @@ def verify(app):
     signed = run('/usr/bin/codesign', '-d', '--entitlements', '-', '--xml', app, capture_output=True)
     entitlements = plistlib.loads(signed.stdout)
     assert entitlements['com.apple.security.network.client']
+    assert entitlements['com.apple.security.network.server']
     assert entitlements['com.apple.security.app-sandbox']
+    assert entitlements['com.apple.security.personal-information.calendars']
+    assert not any(k.startswith('com.apple.security.temporary-exception') for k in entitlements)
+    assert not entitlements.get('com.apple.security.files.user-selected.read-only', False)
+    assert not (app / 'Contents/PlugIns').exists()
+    for name in ('LICENSE', 'NOTICE'):
+        assert (resources / name).read_bytes() == (ROOT / name).read_bytes()
     assert not entitlements.get('com.apple.security.get-task-allow', False)
     return metadata
 
 
 def main():
+    # Не допускаем случайную упаковку отдельной Preview или демонстрационной библиотеки как обновления.
+    generator = (ROOT / 'scripts/generate_project.py').read_text()
+    assert 'f"local.planner.{name}"' in generator
+    persistence = (ROOT / 'Planner/Persistence/PlannerPersistence.swift').read_text()
+    assert '.appending(path: "Planner", directoryHint: .isDirectory)' in persistence
+    assert 'PlannerAIPreview' not in persistence
     BUILD.mkdir(exist_ok=True); DIST.mkdir(exist_ok=True)
     with (BUILD / 'ai-release-build.log').open('w') as log:
         try:
@@ -56,7 +77,7 @@ def main():
         run('/usr/bin/ditto', DERIVED / 'Build/Products/Release/Planner.app', app)
         info_path = app / 'Contents/Info.plist'
         metadata = plistlib.loads(info_path.read_bytes())
-        metadata['CFBundleDisplayName'] = metadata['CFBundleName'] = 'Задачи AI Preview'
+        metadata['CFBundleDisplayName'] = metadata['CFBundleName'] = 'Задачи'
         info_path.write_bytes(plistlib.dumps(metadata))
         for name in ('LICENSE', 'NOTICE'):
             shutil.copy2(ROOT / name, app / 'Contents/Resources' / name)
@@ -72,16 +93,20 @@ def main():
         metadata = verify(app)
         (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)
         (stage / 'Прочитайте перед установкой.txt').write_text(
-            'Задачи AI Preview — экспериментальная сборка\n\n'
+            'Задачи — обновление с локальным помощником\n\n'
             'Требуется Mac с Apple M1 или новее и macOS 26+. Только arm64.\n'
-            'Перетащите приложение в Программы. Основную версию заменять не нужно.\n'
-            'Это отдельная пустая библиотека; рабочие задачи не импортируются автоматически.\n'
+            'Закройте «Задачи» через ⌘Q, затем замените приложение в Программах.\n'
+            'Идентификатор и библиотека прежние: ваши папки, задачи и настройки открываются автоматически.\n'
+            'Помощник создаёт задачи и дорабатывает их текст только после подтверждения предложений.\n'
+            'Доработка новой задачи меняет черновик: создание остаётся отдельным действием.\n'
+            'Отдельная AI Preview и её данные не переносятся в основную библиотеку.\n'
             'Откройте кнопку чата в шапке и нажмите «Скачать и включить». Загрузка модели — около 3,06 GB.\n'
-            'Модель работает локально. Перед созданием задач и событий проверьте предложения.\n'
+            'Локальная модель работает на Mac. Для ChatGPT откройте список моделей внизу чата.\n'
+            'Перед созданием задач и событий проверьте предложения.\n'
             'При разрешении EventKit события сохраняются в настоящие системные календари.\n'
             'Сборка подписана ad-hoc, без Developer ID и нотариализации.\n', encoding='utf-8')
-        image = Path(tmp) / ('Tasks-AI-Preview-' + metadata['CFBundleShortVersionString'] + '-macOS-arm64.dmg')
-        run('/usr/bin/hdiutil', 'create', '-volname', 'Задачи AI Preview', '-srcfolder', stage, '-format', 'UDZO', image)
+        image = Path(tmp) / ('Tasks-' + metadata['CFBundleShortVersionString'] + '-macOS-arm64.dmg')
+        run('/usr/bin/hdiutil', 'create', '-volname', 'Задачи', '-srcfolder', stage, '-format', 'UDZO', image)
         run('/usr/bin/hdiutil', 'verify', image)
         mount = Path(tmp) / 'mounted'; mount.mkdir()
         run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-noautoopen', '-mountpoint', mount, image)

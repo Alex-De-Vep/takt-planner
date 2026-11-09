@@ -31,7 +31,8 @@ final class WorkspaceCalendarHeadingView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    func update(title: String) {
+    func update(title: String, accessibilityIdentifier: String = "calendar-panel-heading") {
+        label.setAccessibilityIdentifier(accessibilityIdentifier)
         guard label.stringValue != title else { return }
         label.stringValue = title
         width.constant = preferredWidth

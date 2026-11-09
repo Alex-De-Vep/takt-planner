@@ -56,8 +56,8 @@ for name, product_type, extension in (
                   includeInIndex=0, path=f"{name}.{extension}", sourceTree="BUILT_PRODUCTS_DIR")
     products.append(product)
     settings = {
-        "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": ("local.planner.AIPreview" if name == "Planner" else f"local.planner.AIPreview.{name}"),
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.2.0", "CURRENT_PROJECT_VERSION": "50", "ARCHS": "arm64",
+        "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.2.11", "CURRENT_PROJECT_VERSION": "61", "ARCHS": "arm64",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
@@ -65,7 +65,7 @@ for name, product_type, extension in (
                         INFOPLIST_FILE="Configuration/Planner-Info.plist",
                         ENABLE_HARDENED_RUNTIME="YES", ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME="AccentColor",
                         ASSETCATALOG_COMPILER_APPICON_NAME="TasksIcon",
-                        INFOPLIST_KEY_CFBundleDisplayName="Задачи AI Preview",
+                        INFOPLIST_KEY_CFBundleDisplayName="Задачи",
                         INFOPLIST_KEY_LSApplicationCategoryType="public.app-category.productivity",
                         INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Задачам нужен доступ к календарям для просмотра событий и планирования времени.",
                         INFOPLIST_KEY_NSHumanReadableCopyright="", INFOPLIST_KEY_CFBundleDevelopmentRegion="ru")

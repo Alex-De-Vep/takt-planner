@@ -9,7 +9,7 @@ enum AssistantPaths {
         return FileManager.default.temporaryDirectory.appending(path: "PlannerAIPreview-Showcase/Assistant", directoryHint: .isDirectory)
         #else
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "PlannerAIPreview/Assistant", directoryHint: .isDirectory)
+            .appending(path: "Planner/Assistant", directoryHint: .isDirectory)
         #endif
     }
     static var model: URL { root.appending(path: "Models/" + ((try? ModelManifest.bundled().id.components(separatedBy: "/").last) ?? "Qwen3.5-2B-4bit"), directoryHint: .isDirectory) }
@@ -62,6 +62,7 @@ struct AssistantResponse: Codable, Sendable {
     var message: String
     var questions: [AssistantQuestion]?
     var actions: [AssistantProposal]?
+    var textEdit: AssistantTextChange? = nil
 }
 enum AssistantActionStatus: String, Codable { case pending, applying, created, failed, needsReview }
 struct AssistantAction: Codable, Identifiable {
@@ -83,6 +84,7 @@ struct AssistantMessage: Codable, Identifiable {
     var text: String
     var questions: [AssistantQuestion] = []
     var createdAt = Date()
+    var cloudUsage: AssistantCloudUsage? = nil
 }
 struct AssistantThread: Codable, Identifiable {
     var id = UUID()
@@ -92,9 +94,40 @@ struct AssistantThread: Codable, Identifiable {
     var messages: [AssistantMessage] = []
     var actions: [AssistantAction] = []
     var createdAt = Date()
+    var textEdits: [AssistantTextEdit]? = nil
+    var activeTextEditID: UUID? = nil
+    var cloud: AssistantCloudThread? = nil
+    var localModelSelected: Bool? = nil
+    // При возврате на Mac новые предложения не заменяют карточки, уже показанные в диалоге.
+    var protectedLocalActionIDs: Set<UUID>? = nil
+
+    var usesCloudModel: Bool { cloud != nil && localModelSelected != true }
+
+    mutating func chooseModel(_ model: ChatGPTModel?) {
+        let switchingProvider = usesCloudModel != (model != nil)
+        if switchingProvider {
+            activeTextEditID = nil
+            clarificationContext = nil
+        }
+        if let model {
+            var settings = cloud ?? AssistantCloudThread()
+            if switchingProvider {
+                // Видимая история остаётся в чате. В сеть попадает контекст только после выбора ChatGPT.
+                settings.historyStart = messages.count
+                settings.draftIDs = []
+            }
+            settings.modelID = model.id
+            if let effort = settings.effort, !model.efforts.contains(effort) { settings.effort = nil }
+            cloud = settings
+            localModelSelected = nil
+        } else if switchingProvider {
+            localModelSelected = true
+            protectedLocalActionIDs = Set(actions.map(\.id))
+        }
+    }
 }
 struct AssistantArchive: Codable {
-    var version = 1
+    var version = 2
     var currentID: UUID?
     var threads: [AssistantThread] = []
 }

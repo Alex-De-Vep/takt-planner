@@ -106,11 +106,8 @@ struct PlainTextTaskEditor: NSViewRepresentable {
         view.placeholder = placeholder
         view.setAccessibilityLabel(placeholder)
         // Не присваиваем строку при каждом рендере: это сохраняет выделение, IME и историю отмены.
-        if view.string != text, !view.hasMarkedText() {
-            let selection = view.selectedRange()
-            view.string = text
-            view.setSelectedRange(NSRange(location: min(selection.location, (text as NSString).length), length: 0))
-            view.invalidateIntrinsicContentSize()
+        if !view.hasMarkedText() {
+            view.synchronizeDocumentText(text)
             host.invalidateIntrinsicContentSize()
         }
         view.needsDisplay = true
@@ -225,6 +222,31 @@ final class TaskTextView: NSTextView {
         guard range.location != NSNotFound, range.length > 0 else { return }
         let location = min(NSMaxRange(range), (string as NSString).length)
         setSelectedRange(NSRange(location: location, length: 0), affinity: selectionAffinity, stillSelecting: false)
+    }
+
+    private var receivedDocumentText = false
+    /// Внешняя правка — одна штатная операция Undo, а не присваивание string поверх старых диапазонов.
+    /// Делегат временно отключён: модель уже сохранена и обновление SwiftUI не должно сохранять её повторно.
+    func synchronizeDocumentText(_ text: String) {
+        defer { receivedDocumentText = true }
+        guard string != text else { return }
+        let selection = selectedRange()
+        if !receivedDocumentText { string = text }
+        else {
+            let previousDelegate = delegate
+            delegate = nil
+            breakUndoCoalescing()
+            documentUndo.beginUndoGrouping()
+            insertText(text, replacementRange: NSRange(location: 0, length: (string as NSString).length))
+            documentUndo.endUndoGrouping()
+            breakUndoCoalescing()
+            delegate = previousDelegate
+        }
+        let length = (text as NSString).length
+        let location = min(selection.location, length)
+        setSelectedRange(NSRange(location: location, length: min(selection.length, length - location)))
+        invalidateIntrinsicContentSize()
+        needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {

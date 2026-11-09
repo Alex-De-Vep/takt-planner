@@ -72,7 +72,35 @@ enum ActionPlanValidator {
         if text.hasPrefix("```json"), text.hasSuffix("```") { text = String(text.dropFirst(7).dropLast(3)) }
         // Разрешаем только внешнюю markdown-обёртку. Сам JSON не достраиваем и не исправляем.
         text = text.trimmingCharacters(in: CharacterSet(charactersIn: "`").union(.whitespacesAndNewlines))
-        let response = try JSONDecoder().decode(AssistantResponse.self, from: Data(text.utf8))
+        var payload: Any
+        do { payload = try JSONSerialization.jsonObject(with: Data(text.utf8)) }
+        catch { throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "Ответ не является полным JSON.", underlyingError: error)) }
+        // Некоторые модели возвращают пункты как {text: ...}. Принимаем только однозначную
+        // обёртку одного текста; флаги выполнения и прочие поля не отбрасываем молча.
+        if var root = payload as? [String: Any], var actions = root["actions"] as? [[String: Any]] {
+            for index in actions.indices {
+                guard let items = actions[index]["checklist"] as? [[String: Any]], !items.isEmpty else { continue }
+                let strings = items.compactMap { item -> String? in
+                    guard item.count == 1 else { return nil }
+                    return (item["text"] as? String) ?? (item["title"] as? String)
+                }
+                if strings.count == items.count { actions[index]["checklist"] = strings }
+            }
+            root["actions"] = actions; payload = root
+        }
+        // Текстовый редактор передаёт пункты одной строкой: маленькой модели не нужен вложенный массив.
+        // Это только нормализация полного валидного JSON; оборванный ответ не достраивается.
+        if var root = payload as? [String: Any], var edit = root["textEdit"] as? [String: Any],
+           let lines = edit["checklistText"] as? String, edit["checklist"] == nil {
+            edit["checklist"] = lines.components(separatedBy: .newlines).map {
+                $0.replacingOccurrences(of: #"^\s*(?:[-*•]\s+|[0-9]+[.)]\s+)"#, with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }.filter { !$0.isEmpty }
+            edit["checklistText"] = nil
+            root["textEdit"] = edit; payload = root
+        }
+        let canonical = try JSONSerialization.data(withJSONObject: payload)
+        let response = try JSONDecoder().decode(AssistantResponse.self, from: canonical)
         guard (response.actions?.count ?? 0) <= 20, (response.questions?.count ?? 0) <= 5,
               Set((response.actions ?? []).map(\.key)).count == (response.actions?.count ?? 0) else {
             throw AssistantFailure(message: "Не удалось проверить ответ модели. Упростите запрос и повторите.")
