@@ -1,0 +1,571 @@
+{
+  "beforeLoad" : 177636384,
+  "bits" : "4",
+  "loadSeconds" : 1.9389630556106567,
+  "loadedActive" : 2367532448,
+  "loadedFootprint" : 2573552448,
+  "os" : "Версия 26.5 (Выпуск 25F71)",
+  "physicalRAM" : 17179869184,
+  "records" : [
+    {
+      "activePeak" : 3261304456,
+      "eventsCreated" : 0,
+      "id" : "simple-task",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "description" : "Без срока",
+            "folderID" : "inbox",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Полить цветы"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3579792696,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Полить цветы\",\"folderID\":\"inbox\",\"description\":\"Без срока\"}]}",
+      "residentAfterTrim" : 2800700728,
+      "seconds" : 5.9343249797821045,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304544,
+      "eventsCreated" : 0,
+      "id" : "folder-checklist",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "checklist" : [
+              "Собрать данные",
+              "Построить графики",
+              "Проверить выводы"
+            ],
+            "folderID" : "11111111-1111-4111-8111-111111111111",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Подготовить отчёт"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3576646968,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Подготовить отчёт\",\"folderID\":\"11111111-1111-4111-8111-111111111111\",\"checklist\":[\"Собрать данные\",\"Построить графики\",\"Проверить выводы\"]}]}`",
+      "residentAfterTrim" : 2670988624,
+      "seconds" : 7.359741926193237,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304508,
+      "eventsCreated" : 0,
+      "id" : "today-folder",
+      "issues" : [
+        "Звезда перепутана со сроком"
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "checklist" : [
+              "Отметить её на сегодня"
+            ],
+            "date" : "2026-10-29",
+            "folderID" : "22222222-2222-4222-8222-222222222222",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Купить продукты"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596586272,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Купить продукты\",\"folderID\":\"22222222-2222-4222-8222-222222222222\",\"date\":\"2026-10-29\",\"checklist\":[\"Отметить её на сегодня\"]}]}",
+      "residentAfterTrim" : 2696924496,
+      "seconds" : 7.398756980895996,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304536,
+      "eventsCreated" : 0,
+      "id" : "task-deadline",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "date" : "2026-10-30",
+            "folderID" : "week",
+            "key" : "task1",
+            "kind" : "task",
+            "time" : "18:15",
+            "title" : "Отправить договор"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596930384,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Отправить договор\",\"folderID\":\"week\",\"date\":\"2026-10-30\",\"time\":\"18:15\"}]}",
+      "residentAfterTrim" : 2672397648,
+      "seconds" : 6.436925053596497,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304564,
+      "eventsCreated" : 0,
+      "id" : "multiple-folders",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "checklist" : [
+
+            ],
+            "description" : "Ответить клиенту",
+            "folderID" : "11111111-1111-4111-8111-111111111111",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Ответить клиенту"
+          },
+          {
+            "checklist" : [
+
+            ],
+            "description" : "Купить хлеб",
+            "folderID" : "22222222-2222-4222-8222-222222222222",
+            "key" : "task2",
+            "kind" : "task",
+            "title" : "Купить хлеб"
+          },
+          {
+            "checklist" : [
+
+            ],
+            "description" : "Прочитать письмо",
+            "folderID" : "inbox",
+            "key" : "task3",
+            "kind" : "task",
+            "title" : "Прочитать письмо"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596619064,
+      "raw" : "{\"message\":\"Созданы три задачи.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Ответить клиенту\",\"folderID\":\"11111111-1111-4111-8111-111111111111\",\"description\":\"Ответить клиенту\",\"checklist\":[]},{\"key\":\"task2\",\"kind\":\"task\",\"title\":\"Купить хлеб\",\"folderID\":\"22222222-2222-4222-8222-222222222222\",\"description\":\"Купить хлеб\",\"checklist\":[]},{\"key\":\"task3\",\"kind\":\"task\",\"title\":\"Прочитать письмо\",\"folderID\":\"inbox\",\"description\":\"Прочитать письмо\",\"checklist\":[]}]}",
+      "residentAfterTrim" : 2704526672,
+      "seconds" : 9.858407020568848,
+      "tasksCreated" : 3
+    },
+    {
+      "activePeak" : 3261304604,
+      "eventsCreated" : 1,
+      "id" : "event-explicit",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "calendarID" : "work",
+            "date" : "2026-11-02",
+            "durationMinutes" : 45,
+            "key" : "event1",
+            "kind" : "event",
+            "reminderMinutes" : 15,
+            "time" : "11:00",
+            "title" : "Звонок с Анной"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596619040,
+      "raw" : "{\"message\":\"Проверьте событие.\",\"questions\":[],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Звонок с Анной\",\"date\":\"2026-11-02\",\"time\":\"11:00\",\"durationMinutes\":45,\"calendarID\":\"work\",\"reminderMinutes\":15}]}",
+      "residentAfterTrim" : 2696727888,
+      "seconds" : 6.971300005912781,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3261304576,
+      "eventsCreated" : 1,
+      "id" : "event-midnight",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "calendarID" : "work",
+            "date" : "2026-11-02",
+            "durationMinutes" : 90,
+            "key" : "event1",
+            "kind" : "event",
+            "time" : "23:30",
+            "title" : "Проверка сервера"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596651856,
+      "raw" : "{\"message\":\"Проверьте событие.\",\"questions\":[],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Проверка сервера\",\"date\":\"2026-11-02\",\"time\":\"23:30\",\"durationMinutes\":90,\"calendarID\":\"work\",\"reminderMinutes\":null}]}",
+      "residentAfterTrim" : 2707754320,
+      "seconds" : 6.885822057723999,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3261304548,
+      "eventsCreated" : 1,
+      "id" : "event-all-day",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "allDay" : true,
+            "calendarID" : "home",
+            "date" : "2026-11-04",
+            "key" : "event1",
+            "kind" : "event",
+            "title" : "Выходной"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596750160,
+      "raw" : "{\"message\":\"Проверьте событие.\",\"questions\":[],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Выходной\",\"date\":\"2026-11-04\",\"allDay\":true,\"calendarID\":\"home\",\"reminderMinutes\":null}]}",
+      "residentAfterTrim" : 2690125136,
+      "seconds" : 6.514513969421387,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3261304528,
+      "eventsCreated" : 0,
+      "id" : "event-needs-time",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "calendarID" : "work",
+            "date" : "2026-10-30",
+            "durationMinutes" : 60,
+            "key" : "event1",
+            "kind" : "event",
+            "title" : "Обсудить запуск"
+          }
+        ],
+        "message" : "Уточните детали предложения.",
+        "questions" : [
+          {
+            "options" : [
+              "09:00",
+              "12:00",
+              "15:00",
+              "Весь день"
+            ],
+            "text" : "Во сколько 30 октября?"
+          },
+          {
+            "options" : [
+              "Работа",
+              "Личное"
+            ],
+            "text" : "Какой календарь использовать?"
+          }
+        ]
+      },
+      "physicalPeak" : 3596881232,
+      "raw" : "{\"message\":\"Уточните время встречи.\",\"questions\":[{\"text\":\"Во сколько 30 октября?\",\"options\":[\"09:00\",\"12:00\",\"15:00\",\"Весь день\"]},{\"text\":\"Какой календарь использовать?\",\"options\":[\"Работа\",\"Личное\"]}],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Обсудить запуск\",\"date\":\"2026-10-30\",\"calendarID\":\"work\",\"durationMinutes\":60}]}",
+      "residentAfterTrim" : 2671529296,
+      "seconds" : 8.04319703578949,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3272111114,
+      "eventsCreated" : 1,
+      "id" : "event-followup",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "calendarID" : "work",
+            "date" : "2026-10-30",
+            "durationMinutes" : 20,
+            "key" : "event1",
+            "kind" : "event",
+            "time" : "16:30",
+            "title" : "Обсудить запуск"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3668888912,
+      "raw" : "{\"message\":\"Проверьте событие.\",\"questions\":[],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Обсудить запуск\",\"date\":\"2026-10-30\",\"time\":\"16:30\",\"durationMinutes\":20,\"calendarID\":\"work\",\"reminderMinutes\":null}]}",
+      "residentAfterTrim" : 2704149840,
+      "seconds" : 7.03276789188385,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3261304488,
+      "eventsCreated" : 0,
+      "id" : "unknown-folder",
+      "issues" : [
+        "Не уточнена неизвестная папка",
+        "Папка придумана или подменена"
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "folderID" : "11111111-1111-4111-8111-111111111111",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Прочитать главу"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596897616,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Прочитать главу\",\"folderID\":\"11111111-1111-4111-8111-111111111111\",\"date\":null}]}",
+      "residentAfterTrim" : 2701954384,
+      "seconds" : 7.011818051338196,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304784,
+      "eventsCreated" : 1,
+      "id" : "selected-task-event",
+      "issues" : [
+        "Потеряна связь с открытой задачей"
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "calendarID" : "work",
+            "date" : "2026-10-30",
+            "durationMinutes" : 25,
+            "key" : "event1",
+            "kind" : "event",
+            "reminderMinutes" : 5,
+            "time" : "15:00",
+            "title" : "Выделить время для задачи"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3665628496,
+      "raw" : "{\"message\":\"Проверьте событие.\",\"questions\":[],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Выделить время для задачи\",\"date\":\"2026-10-30\",\"time\":\"15:00\",\"durationMinutes\":25,\"calendarID\":\"work\",\"reminderMinutes\":5}]}",
+      "residentAfterTrim" : 2705378640,
+      "seconds" : 7.0117470026016235,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3279221854,
+      "eventsCreated" : 0,
+      "id" : "new-task-event",
+      "issues" : [
+        "Невалидный JSON: Данные не удалось прочитать, так как они имеют неверный формат."
+      ],
+      "physicalPeak" : 3679866192,
+      "raw" : "{\"message\":\"Проверьте задачу и событие.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Написать статью\",\"folderID\":\"11111111-1111-4111-8111-111111111111\",\"description\":\"Написать статью\",\"checklist\":[]},{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Выделить время\",\"date\":\"2026-10-31\",\"time\":\"10:00\",\"durationMinutes\":30,\"calendarID\":\"11111111-1111-4111-8111-111111111111\",\"reminderMinutes\":null}]",
+      "residentAfterTrim" : 2706574672,
+      "seconds" : 19.330220937728882,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3261304604,
+      "eventsCreated" : 0,
+      "id" : "default-folder",
+      "issues" : [
+        "Неверная папка"
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "description" : "Без срока",
+            "folderID" : "inbox",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Забрать посылку"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3597880656,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Забрать посылку\",\"folderID\":\"inbox\",\"description\":\"Без срока\"}]}",
+      "residentAfterTrim" : 2707705168,
+      "seconds" : 6.252434015274048,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304520,
+      "eventsCreated" : 0,
+      "id" : "english-task",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "checklist" : [
+              "Draft the summary",
+              "Check the links"
+            ],
+            "folderID" : "inbox",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Write release notes"
+          }
+        ],
+        "message" : "Review the proposals before creating them.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3597880656,
+      "raw" : "{\"message\":\"Task created.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Write release notes\",\"folderID\":\"inbox\",\"checklist\":[\"Draft the summary\",\"Check the links\"],\"date\":null}]}",
+      "residentAfterTrim" : 2761067856,
+      "seconds" : 6.234579920768738,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304580,
+      "eventsCreated" : 1,
+      "id" : "default-reminder",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "calendarID" : "work",
+            "date" : "2026-10-30",
+            "durationMinutes" : 30,
+            "key" : "event1",
+            "kind" : "event",
+            "reminderMinutes" : 15,
+            "time" : "09:00",
+            "title" : "Планёрка"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3596848464,
+      "raw" : "{\"message\":\"Проверьте событие.\",\"questions\":[],\"actions\":[{\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Планёрка\",\"date\":\"2026-10-30\",\"time\":\"09:00\",\"durationMinutes\":30,\"calendarID\":\"work\"}]}",
+      "residentAfterTrim" : 2664107344,
+      "seconds" : 6.691923975944519,
+      "tasksCreated" : 0
+    },
+    {
+      "activePeak" : 3400779692,
+      "eventsCreated" : 0,
+      "id" : "long-context",
+      "issues" : [
+
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "checklist" : [
+              "Проверить ссылки"
+            ],
+            "description" : "Проверить ссылки",
+            "folderID" : "inbox",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Проверить ссылки"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3814051152,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Проверить ссылки\",\"folderID\":\"inbox\",\"description\":\"Проверить ссылки\",\"checklist\":[\"Проверить ссылки\"]}]}",
+      "residentAfterTrim" : 2725121360,
+      "seconds" : 9.729345917701721,
+      "tasksCreated" : 1
+    },
+    {
+      "activePeak" : 3261304728,
+      "eventsCreated" : 0,
+      "id" : "correct-proposal",
+      "issues" : [
+        "Потерян ключ или придуман срок"
+      ],
+      "normalized" : {
+        "actions" : [
+          {
+            "folderID" : "22222222-2222-4222-8222-222222222222",
+            "key" : "task2",
+            "kind" : "task",
+            "title" : "Купить билеты"
+          }
+        ],
+        "message" : "Проверьте предложения перед созданием.",
+        "questions" : [
+
+        ]
+      },
+      "physicalPeak" : 3598060880,
+      "raw" : "{\"message\":\"Проверьте задачу.\",\"questions\":[],\"actions\":[{\"key\":\"task2\",\"kind\":\"task\",\"title\":\"Купить билеты\",\"folderID\":\"22222222-2222-4222-8222-222222222222\"}]}",
+      "residentAfterTrim" : 2695056720,
+      "seconds" : 6.96016800403595,
+      "tasksCreated" : 1
+    }
+  ],
+  "reloadSeconds" : 1.7373249530792236,
+  "revision" : "0e7ffd5c629ef7719d4cbc04069232580bfa9d9c",
+  "startedAt" : "2026-10-29T11:21:23Z",
+  "unloadedActive" : 4000,
+  "unloadedFootprint" : 279381744
+}

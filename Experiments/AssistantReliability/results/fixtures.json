@@ -1,0 +1,1873 @@
+[
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "simple-task",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Добавь задачу Полить цветы. Без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "F68E44E8-1FCD-46A0-AB9C-0B06F1EC2BDA",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "DED8A933-24AB-47FB-8ED7-4DDCCCA7C88C",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Добавь задачу Полить цветы. Без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "folder-checklist",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай в папке Работа задачу Подготовить отчёт. Три подзадачи: собрать данные; построить графики; проверить выводы. Без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "540B15A3-6C46-4DF2-BEF6-015429132EBA",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "AB98BB8C-8B6A-4364-8921-857B21083A7A",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай в папке Работа задачу Подготовить отчёт. Три подзадачи: собрать данные; построить графики; проверить выводы. Без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "today-folder",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай в папке Личное задачу Купить продукты и отметь её На сегодня. Срок не нужен.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "AAB7F896-38DC-4A9B-A870-CA1EB5CB410B",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "3F6EF718-5D94-4A34-8338-46DA35A57E64",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай в папке Личное задачу Купить продукты и отметь её На сегодня. Срок не нужен."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "task-deadline",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Добавь в папку На неделе задачу Отправить договор, срок 30 октября 2026 в 18:15.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "8FDB1397-4CEC-45D4-BF7B-175178A3072F",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "974A3D52-568B-4C37-A9B0-EFE1050F9709",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Добавь в папку На неделе задачу Отправить договор, срок 30 октября 2026 в 18:15."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "multiple-folders",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай три отдельные задачи без сроков: Ответить клиенту в папке Работа; Купить хлеб в папке Личное; Прочитать письмо во Входящих.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "F9D0C2D8-7B37-40C3-B275-F4FD7FFA15F6",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "AA37D01B-9600-40F0-BE51-72BBB6C34A1C",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай три отдельные задачи без сроков: Ответить клиенту в папке Работа; Купить хлеб в папке Личное; Прочитать письмо во Входящих."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "event-explicit",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай событие Звонок с Анной 2 ноября 2026 с 11:00 до 11:45 в календаре Работа. Напомни за 15 минут.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "13C5C539-0341-45D5-AC0C-67F9B90EA475",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "48F74E8F-0432-41DD-BA3E-3B01451854FF",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай событие Звонок с Анной 2 ноября 2026 с 11:00 до 11:45 в календаре Работа. Напомни за 15 минут."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "event-midnight",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай событие Проверка сервера 2 ноября 2026 в 23:30 на 90 минут в календаре Работа, без напоминания.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "417C6ABF-6871-443D-AA46-AC292626B9E2",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "CAD7A42D-31B4-4427-8420-26399D10D5F0",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай событие Проверка сервера 2 ноября 2026 в 23:30 на 90 минут в календаре Работа, без напоминания."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "event-all-day",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Добавь в календарь Личное событие Выходной 4 ноября 2026 на весь день. Без напоминания.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "3D8421BD-11BB-497D-A84A-B0EB12E37F92",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "64F4D400-1ADE-4CD8-ACF6-0B4EE39E76E0",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Добавь в календарь Личное событие Выходной 4 ноября 2026 на весь день. Без напоминания."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "event-needs-time",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Запланируй встречу Обсудить запуск на завтра в календаре Работа. Время я пока не указал.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "54181CC9-BF85-40D1-B1DA-568436A68117",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "37D4A0AB-133B-4042-8787-264BDA4CCACC",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Запланируй встречу Обсудить запуск на завтра в календаре Работа. Время я пока не указал."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "event-followup",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: [{\"included\":true,\"proposal\":{\"calendarID\":\"c0\",\"date\":\"2026-10-30\",\"durationMinutes\":60,\"key\":\"event1\",\"kind\":\"event\",\"title\":\"Обсудить запуск\"},\"status\":\"pending\"}]\nPREVIOUS_MESSAGES: [{\"questions\":[],\"role\":\"user\",\"text\":\"Запланируй встречу Обсудить запуск на завтра.\"},{\"questions\":[{\"options\":[\"09:00\",\"12:00\",\"15:00\",\"Весь день\"],\"text\":\"Во сколько 30 октября?\"}],\"role\":\"assistant\",\"text\":\"Уточните время.\"}]\nUSER_MESSAGE: \"В 16:30 на двадцать минут, без напоминания.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+        {
+          "context" : {
+            "calendars" : [
+              {
+                "id" : "work",
+                "name" : "Работа"
+              },
+              {
+                "id" : "home",
+                "name" : "Личное"
+              }
+            ],
+            "defaultCalendarID" : "work",
+            "defaultFolderID" : "inbox",
+            "durationMinutes" : 60,
+            "folders" : [
+              {
+                "id" : "inbox",
+                "name" : "Входящие"
+              },
+              {
+                "id" : "week",
+                "name" : "На неделе"
+              },
+              {
+                "id" : "month",
+                "name" : "Месяц"
+              },
+              {
+                "id" : "11111111-1111-4111-8111-111111111111",
+                "name" : "Работа"
+              },
+              {
+                "id" : "22222222-2222-4222-8222-222222222222",
+                "name" : "Личное"
+              }
+            ],
+            "language" : "ru",
+            "now" : "2026-10-29T09:00:00Z",
+            "timeZoneID" : "Europe\/Moscow"
+          },
+          "id" : "6AF21E6A-B5F9-4CBC-B8AE-6999666E5605",
+          "included" : true,
+          "linked" : false,
+          "proposal" : {
+            "calendarID" : "work",
+            "date" : "2026-10-30",
+            "durationMinutes" : 60,
+            "key" : "event1",
+            "kind" : "event",
+            "title" : "Обсудить запуск"
+          },
+          "status" : "pending"
+        }
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "7DA5E41F-192E-4856-8313-F49DF289FCED",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "42913BFA-F677-4EC5-96D7-20490A0397A0",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Запланируй встречу Обсудить запуск на завтра."
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "5E4575D1-9E21-4EC4-BAF8-64824311B5DD",
+          "questions" : [
+            {
+              "options" : [
+                "09:00",
+                "12:00",
+                "15:00",
+                "Весь день"
+              ],
+              "text" : "Во сколько 30 октября?"
+            }
+          ],
+          "role" : "assistant",
+          "text" : "Уточните время."
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "50C42C5A-F58B-4C5D-AE51-1FF6EDFB6C8A",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "В 16:30 на двадцать минут, без напоминания."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "unknown-folder",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Добавь задачу Прочитать главу в папку Учёба, без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "34E25B1F-A79B-45D4-AE20-8CF829A7A4CD",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "BCDA678E-A099-4F32-B865-13C465CF882D",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Добавь задачу Прочитать главу в папку Учёба, без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "taskID" : "33333333-3333-4333-8333-333333333333",
+      "taskTitle" : "Проверить релиз",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "selected-task-event",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: {\"id\":\"selected_task\",\"title\":\"Проверить релиз\"}\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Выдели для открытой задачи время 30 октября 2026 в 15:00 на 25 минут в календаре Работа. Напомни за 5 минут.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "A5C98816-5B14-4F62-8245-1BE5DEF807D0",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "DCA36868-1A58-4431-86E3-7F4BAC7C26BF",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Выдели для открытой задачи время 30 октября 2026 в 15:00 на 25 минут в календаре Работа. Напомни за 5 минут."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "new-task-event",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай задачу Написать статью в папке Работа, без срока. И выдели время именно для этой новой задачи: 31 октября 2026 в 10:00 на 30 минут в календаре Работа, без напоминания.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "B519AD5F-7416-4BE0-B162-45C5DAB0AD78",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "92A39D4D-C532-45BB-ABDA-4A3255983861",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай задачу Написать статью в папке Работа, без срока. И выдели время именно для этой новой задачи: 31 октября 2026 в 10:00 на 30 минут в календаре Работа, без напоминания."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "22222222-2222-4222-8222-222222222222",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "default-folder",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f4\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай задачу Забрать посылку, без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "7BB10AB5-72A7-4502-902C-6CCA8DC6E2ED",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "75967481-7BD1-4FC6-9FF9-8AD9365577A6",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай задачу Забрать посылку, без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "en",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "english-task",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Create a task called Write release notes in Inbox with two subtasks: draft the summary and check the links. No due date.\"\nOUTPUT_LANGUAGE: en\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "0EC7386B-15E6-4456-8D95-AA4FA76A6806",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "D9A0C08A-4FAD-4F5A-8D5B-5ABCB17F7AC8",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Create a task called Write release notes in Inbox with two subtasks: draft the summary and check the links. No due date."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "reminderMinutes" : 15,
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "default-reminder",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\",\"reminderMinutes\":15}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай событие Планёрка 30 октября 2026 в 09:00 на 30 минут в календаре Работа.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "E3EC1BE5-C3F8-4B79-8633-093866FC6AF7",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "E221DFFD-17CF-44CC-85FF-3401584EDC6E",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай событие Планёрка 30 октября 2026 в 09:00 на 30 минут в календаре Работа."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "long-context",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: [{\"questions\":[],\"role\":\"user\",\"text\":\"Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, \"},{\"questions\":[],\"role\":\"assistant\",\"text\":\"Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, \"},{\"questions\":[],\"role\":\"user\",\"text\":\"Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, \"},{\"questions\":[],\"role\":\"assistant\",\"text\":\"Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, \"},{\"questions\":[],\"role\":\"user\",\"text\":\"Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, \"},{\"questions\":[],\"role\":\"assistant\",\"text\":\"Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, \"}]\nUSER_MESSAGE: \"Создай только одну новую задачу Проверить ссылки во Входящих, без срока. Ничего из прежнего обсуждения создавать не нужно.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "31E7A08E-A687-4376-811A-91CA325E0EE5",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "1786D49A-15E9-4802-B865-A3167C3B1963",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. "
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "9ED4EEDD-BB18-4359-BF02-92944E5C926A",
+          "questions" : [
+
+          ],
+          "role" : "assistant",
+          "text" : "Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. "
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "D58568F4-5CF7-4B74-83F9-52C50B18627A",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. "
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "AC62AC16-0E11-4F15-B735-4F90B96B3792",
+          "questions" : [
+
+          ],
+          "role" : "assistant",
+          "text" : "Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. "
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "672D2FAA-4407-444B-9DF5-B5721CC27DE6",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. "
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "E35D765B-BA9A-4033-98A8-78A7361AA71A",
+          "questions" : [
+
+          ],
+          "role" : "assistant",
+          "text" : "Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. Обсуждаем проект сайта: дизайн, тексты, согласование макетов и проверку ссылок. "
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "9C3F9981-3E1F-471B-9FFD-81C1B59C0EFA",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай только одну новую задачу Проверить ссылки во Входящих, без срока. Ничего из прежнего обсуждения создавать не нужно."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "correct-proposal",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: [{\"included\":true,\"proposal\":{\"folderID\":\"f0\",\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Купить книгу\"},\"status\":\"pending\"}]\nPREVIOUS_MESSAGES: [{\"questions\":[],\"role\":\"user\",\"text\":\"Создай задачу Купить книгу без срока.\"},{\"questions\":[],\"role\":\"assistant\",\"text\":\"Проверьте предложение.\"}]\nUSER_MESSAGE: \"Исправь предложение: назови задачу Купить билеты и перенеси в папку Личное. Срок по-прежнему не нужен.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+        {
+          "context" : {
+            "calendars" : [
+              {
+                "id" : "work",
+                "name" : "Работа"
+              },
+              {
+                "id" : "home",
+                "name" : "Личное"
+              }
+            ],
+            "defaultCalendarID" : "work",
+            "defaultFolderID" : "inbox",
+            "durationMinutes" : 60,
+            "folders" : [
+              {
+                "id" : "inbox",
+                "name" : "Входящие"
+              },
+              {
+                "id" : "week",
+                "name" : "На неделе"
+              },
+              {
+                "id" : "month",
+                "name" : "Месяц"
+              },
+              {
+                "id" : "11111111-1111-4111-8111-111111111111",
+                "name" : "Работа"
+              },
+              {
+                "id" : "22222222-2222-4222-8222-222222222222",
+                "name" : "Личное"
+              }
+            ],
+            "language" : "ru",
+            "now" : "2026-10-29T09:00:00Z",
+            "timeZoneID" : "Europe\/Moscow"
+          },
+          "id" : "A89005E7-7F29-4BCE-B656-0F1ABF0B115D",
+          "included" : true,
+          "linked" : false,
+          "proposal" : {
+            "folderID" : "inbox",
+            "key" : "task1",
+            "kind" : "task",
+            "title" : "Купить книгу"
+          },
+          "status" : "pending"
+        }
+      ],
+      "createdAt" : "2026-10-29T11:12:11Z",
+      "draft" : "",
+      "id" : "4713A463-E55A-4DFD-B363-C309122A597E",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "B3C5A773-191E-4752-955B-E7C5AC966C38",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай задачу Купить книгу без срока."
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "A31A7DD1-D088-4048-AFE9-58ADE86E403D",
+          "questions" : [
+
+          ],
+          "role" : "assistant",
+          "text" : "Проверьте предложение."
+        },
+        {
+          "createdAt" : "2026-10-29T11:12:11Z",
+          "id" : "A87E4B59-7849-4FD7-960D-68EB5D7F1561",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Исправь предложение: назови задачу Купить билеты и перенеси в папку Личное. Срок по-прежнему не нужен."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "22222222-2222-4222-8222-222222222222",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-default",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f4\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Нужна задача Сверить остатки. Без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "7DFE66F8-2BAC-4454-8105-AA474824A3BE",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "C075D50E-1846-4F96-BF80-1384AFDAB2AD",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Нужна задача Сверить остатки. Без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-quoted-folder",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"В папку «Работа» добавь задачу Проверить доступы без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "EE716AD8-AD8E-416E-B449-0736214F9D05",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "343B1EB5-1961-4C18-A136-B31205ED8DA4",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "В папку «Работа» добавь задачу Проверить доступы без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-literal-title",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай задачу «Отметить на сегодня», без срока. Это именно название задачи.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "3CD9C83B-3370-4D10-A26A-1F66E950247F",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "96F181A5-6B27-47AA-AEB9-1367E278D880",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай задачу «Отметить на сегодня», без срока. Это именно название задачи."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-star-deadline",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Добавь задачу Проверить подписи, срок 5 ноября 2026 в 17:20. Отметь На сегодня.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "1D110141-36C6-4553-941C-C1BA5A98A570",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "36A6AA3B-EF33-4E68-82AB-9C01AF94E1FE",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Добавь задачу Проверить подписи, срок 5 ноября 2026 в 17:20. Отметь На сегодня."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-unknown-folder",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай задачу Проверить камеру в папке «Поездка», без срока.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "940A39E4-F352-4250-A43C-E35AB9499053",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "982E26D5-A681-455B-B959-CAFAC5883053",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай задачу Проверить камеру в папке «Поездка», без срока."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "taskID" : "33333333-3333-4333-8333-333333333333",
+      "taskTitle" : "Проверить релиз",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-standalone",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: {\"id\":\"selected_task\",\"title\":\"Проверить релиз\"}\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай самостоятельное событие Обед 6 ноября 2026 в 13:00 на 40 минут в календаре Личное, без напоминания.\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "492E0B1E-2A83-48D2-B941-082825AC5516",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "065B07E9-E84E-4FCC-93CB-23627D325F28",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай самостоятельное событие Обед 6 ноября 2026 в 13:00 на 40 минут в календаре Личное, без напоминания."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Работа"
+        },
+        {
+          "id" : "home",
+          "name" : "Личное"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "ru",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-unknown-calendar",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Работа\"},{\"id\":\"c1\",\"name\":\"Личное\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Создай событие Поездка 6 ноября 2026 в 10:00 на час в календаре «Праздники».\"\nOUTPUT_LANGUAGE: ru\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "D215DD18-DCD9-4BBC-94D6-1EC7A564E120",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "02A10817-E0B8-461D-A698-E4B2C282C854",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Создай событие Поездка 6 ноября 2026 в 10:00 на час в календаре «Праздники»."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  },
+  {
+    "context" : {
+      "calendars" : [
+        {
+          "id" : "work",
+          "name" : "Work"
+        },
+        {
+          "id" : "home",
+          "name" : "Personal"
+        }
+      ],
+      "defaultCalendarID" : "work",
+      "defaultFolderID" : "inbox",
+      "durationMinutes" : 60,
+      "folders" : [
+        {
+          "id" : "inbox",
+          "name" : "Входящие"
+        },
+        {
+          "id" : "week",
+          "name" : "На неделе"
+        },
+        {
+          "id" : "month",
+          "name" : "Месяц"
+        },
+        {
+          "id" : "11111111-1111-4111-8111-111111111111",
+          "name" : "Работа"
+        },
+        {
+          "id" : "22222222-2222-4222-8222-222222222222",
+          "name" : "Личное"
+        }
+      ],
+      "language" : "en",
+      "now" : "2026-10-29T09:00:00Z",
+      "timeZoneID" : "Europe\/Moscow"
+    },
+    "id" : "heldout-english-event",
+    "prompt" : "DATE_REFERENCE:\nсегодня\/today = 2026-10-29 Thursday\nзавтра\/tomorrow = 2026-10-30 Friday\nпослезавтра\/day after tomorrow = 2026-10-31 Saturday\n+3 days = 2026-11-01 Sunday\n+4 days = 2026-11-02 Monday\n+5 days = 2026-11-03 Tuesday\n+6 days = 2026-11-04 Wednesday\n+7 days = 2026-11-05 Thursday\n+8 days = 2026-11-06 Friday\n+9 days = 2026-11-07 Saturday\n+10 days = 2026-11-08 Sunday\n+11 days = 2026-11-09 Monday\n+12 days = 2026-11-10 Tuesday\n+13 days = 2026-11-11 Wednesday\n+14 days = 2026-11-12 Thursday\nTIME_ZONE: Europe\/Moscow\nAVAILABLE_FOLDERS: [{\"id\":\"f0\",\"name\":\"Входящие\"},{\"id\":\"f1\",\"name\":\"На неделе\"},{\"id\":\"f2\",\"name\":\"Месяц\"},{\"id\":\"f3\",\"name\":\"Работа\"},{\"id\":\"f4\",\"name\":\"Личное\"}]\nAVAILABLE_CALENDARS: [{\"id\":\"c0\",\"name\":\"Work\"},{\"id\":\"c1\",\"name\":\"Personal\"}]\nDEFAULTS: {\"calendarID\":\"c0\",\"durationMinutes\":60,\"folderID\":\"f0\"}\nSELECTED_TASK: null\nCURRENT_ACTIONS: []\nPREVIOUS_MESSAGES: []\nUSER_MESSAGE: \"Schedule a 35-minute call with Alex on November 7, 2026 at 14:10 in Personal calendar. No reminder.\"\nOUTPUT_LANGUAGE: en\nReturn the full JSON object.",
+    "thread" : {
+      "actions" : [
+
+      ],
+      "createdAt" : "2026-10-29T12:07:43Z",
+      "draft" : "",
+      "id" : "FAFC933E-9649-4AF6-AD60-62FA9F86614A",
+      "messages" : [
+        {
+          "createdAt" : "2026-10-29T12:07:43Z",
+          "id" : "366BB0FC-3F76-4323-A06E-E779A11342BE",
+          "questions" : [
+
+          ],
+          "role" : "user",
+          "text" : "Schedule a 35-minute call with Alex on November 7, 2026 at 14:10 in Personal calendar. No reminder."
+        }
+      ],
+      "title" : "Новый разговор"
+    }
+  }
+]
