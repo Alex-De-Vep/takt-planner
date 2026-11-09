@@ -96,4 +96,9 @@
     <string name="cloud_rate_limited">The server is busy. Try again shortly.</string>
     <string name="cloud_offline">Could not reach the server. Edits stay on this device.</string>
     <string name="cloud_error">Could not sync with the server.</string>
+    <string name="deadline_notifications">Deadline reminders</string>
+    <string name="notification_hint">Tasks with a date only use 9:00 in the deadline’s time zone. Android may delay delivery.</string>
+    <string name="notification_denied">Allow notifications in Android settings to receive reminders.</string>
+    <string name="add_calendar_event">Schedule in calendar</string>
+    <string name="calendar_unavailable">No calendar app is available.</string>
 </resources>

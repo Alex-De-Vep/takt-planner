@@ -1,5 +1,8 @@
 package local.planner.android
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +18,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,7 +30,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -73,6 +80,7 @@ internal fun Settings(library: Library, cloud: CloudState, model: PlannerModel) 
                 }
             }
         }
+        ReminderSettings(library)
     }
     if (signIn) SignIn(saved, cloud, model) { signIn = false }
     if (signOut && saved != null) {
@@ -152,6 +160,41 @@ internal fun Folders(library: Library, model: PlannerModel, close: () -> Unit) {
                     model.remove(folder, dismiss)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReminderSettings(library: Library) {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(DeadlineReminders.enabled(context)) }
+    var denied by remember { mutableStateOf(false) }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        denied = !granted
+        enabled = granted
+        DeadlineReminders.setEnabled(context, library, enabled)
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.deadline_notifications), Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium)
+                val label = stringResource(R.string.deadline_notifications)
+                Switch(checked = enabled, onCheckedChange = { requested ->
+                    if (requested && !DeadlineReminders.permissionGranted(context)) {
+                        permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        enabled = requested
+                        denied = false
+                        DeadlineReminders.setEnabled(context, library, enabled)
+                    }
+                }, modifier = Modifier.semantics { contentDescription = label })
+            }
+            Text(stringResource(if (denied) R.string.notification_denied else R.string.notification_hint),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

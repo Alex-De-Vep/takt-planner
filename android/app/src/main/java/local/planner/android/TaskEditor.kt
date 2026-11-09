@@ -1,5 +1,8 @@
 package local.planner.android
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.provider.CalendarContract
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,10 +39,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -50,12 +55,15 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TaskEditor(
     library: Library, task: Entity?, section: String, model: PlannerModel, snackbar: SnackbarHostState, close: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val baseline by rememberSaveable { mutableStateOf(task?.let { json.toJson(it) }) }
     val original = remember(baseline) { baseline?.let { json.fromJson(it, Entity::class.java) } }
     val originalLocation by rememberSaveable {
@@ -143,6 +151,22 @@ internal fun TaskEditor(
                             }) { Text(stringResource(R.string.remove_time)) }
                         }
                     }
+                }
+                if (task != null) {
+                    TextButton(onClick = {
+                        val calendar = Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
+                            .putExtra(CalendarContract.Events.TITLE, title)
+                            .putExtra(CalendarContract.Events.DESCRIPTION, description)
+                        deadline?.instant?.let {
+                            calendar.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it.toEpochMilli())
+                            calendar.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it.plusSeconds(1800).toEpochMilli())
+                        }
+                        try {
+                            context.startActivity(calendar)
+                        } catch (_: ActivityNotFoundException) {
+                            scope.launch { snackbar.showSnackbar(context.getString(R.string.calendar_unavailable)) }
+                        }
+                    }) { Text(stringResource(R.string.add_calendar_event)) }
                 }
                 HorizontalDivider()
                 Text(stringResource(R.string.checklist), style = MaterialTheme.typography.titleMedium)

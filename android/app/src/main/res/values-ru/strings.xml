@@ -96,4 +96,9 @@
     <string name="cloud_rate_limited">Сервер занят. Повторите попытку чуть позже.</string>
     <string name="cloud_offline">Сервер недоступен. Изменения сохранены на устройстве.</string>
     <string name="cloud_error">Не удалось синхронизироваться с сервером.</string>
+    <string name="deadline_notifications">Напоминания о сроках</string>
+    <string name="notification_hint">Для сроков без времени используется 09:00 в часовом поясе срока. Android может задержать доставку.</string>
+    <string name="notification_denied">Разрешите уведомления в настройках Android, чтобы получать напоминания.</string>
+    <string name="add_calendar_event">Выделить время в календаре</string>
+    <string name="calendar_unavailable">Приложение календаря недоступно.</string>
 </resources>

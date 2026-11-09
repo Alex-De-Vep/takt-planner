@@ -39,6 +39,13 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     init {
         viewModelScope.launch {
+            library.collect {
+                withContext(Dispatchers.IO) {
+                    DeadlineReminders.update(getApplication(), it)
+                }
+            }
+        }
+        viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { store.load() }
                 loadConnection()
