@@ -18,14 +18,32 @@ struct PlannerTests {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour))!
     }
 
-    @Test func starExpiresAtLocalMidnight() throws {
+    @Test func starRemainsAfterLocalMidnightUntilManuallyRemoved() throws {
         let container = try PlannerPersistence.makeContainer(inMemory: true)
         let service = TaskService(context: container.mainContext)
         let task = try #require(service.createTask(in: .inbox, folders: [], now: date(25, 23)))
         service.toggleToday(task, now: date(25, 23), calendar: calendar)
         #expect(TaskFilter.today.matches(task, now: date(25, 23), calendar: calendar))
-        #expect(!TaskFilter.today.matches(task, now: date(26, 0), calendar: calendar))
+        #expect(TaskFilter.today.matches(task, now: date(26, 0), calendar: calendar))
         #expect(TaskFilter.inbox.matches(task, now: date(26)))
+        service.toggleToday(task, now: date(26), calendar: calendar)
+        #expect(!TaskFilter.today.matches(task, now: date(26), calendar: calendar))
+    }
+
+    @Test func onlyActiveLegacyStarsArePreserved() throws {
+        let container = try PlannerPersistence.makeContainer(inMemory: true)
+        let service = TaskService(context: container.mainContext)
+        let active = try #require(service.createTask(in: .inbox, folders: []))
+        let expired = try #require(service.createTask(in: .inbox, folders: []))
+        active.focusDay = LocalDay.key(for: date(25), calendar: calendar)
+        expired.focusDay = LocalDay.key(for: date(24), calendar: calendar)
+        try container.mainContext.save()
+
+        service.preserveLegacyTodayMarks(in: [active, expired], now: date(25), calendar: calendar)
+        let reopened = try ModelContext(container).fetch(FetchDescriptor<PlannerTask>())
+        let tomorrow = TaskListSnapshot(tasks: reopened, filter: .today, now: date(26), calendar: calendar)
+        #expect(tomorrow.taskIDs == [active.id])
+        #expect(expired.focusDay == LocalDay.key(for: date(24), calendar: calendar))
     }
 
     @Test func localDayUsesTimeZone() {

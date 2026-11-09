@@ -78,6 +78,9 @@ enum LocalDay {
 }
 
 extension PlannerTask {
+    // Зарезервированный ключ для постоянной звезды в существующем формате хранения и синхронизации.
+    static let persistentTodayMark = "9999-12-31"
+
     var primaryFolder: TaskFilter {
         if let folder { return .folder(folder.id) }
         switch systemFolderKind {
@@ -88,6 +91,6 @@ extension PlannerTask {
     }
 
     func isFocused(on date: Date, calendar: Calendar = .current) -> Bool {
-        focusDay == LocalDay.key(for: date, calendar: calendar)
+        focusDay == Self.persistentTodayMark || focusDay == LocalDay.key(for: date, calendar: calendar)
     }
 }

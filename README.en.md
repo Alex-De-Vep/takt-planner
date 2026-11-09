@@ -15,7 +15,7 @@ Tasks brings folders, a focused daily list and your system calendar into one nat
 
 - **Folders:** each task belongs to Inbox, This Week, Month or a custom folder. Today shows starred tasks; All Tasks shows the full library ordered by creation date.
 - **Move tasks:** drag a task onto a sidebar folder, or use “Move to Folder” in its context menu or the toolbar “…” menu. Dropping onto Today adds a star and keeps the original folder.
-- **Daily focus:** star tasks for today without changing their order.
+- **Focus:** starred tasks stay in Today until you unstar them, without changing their order.
 - **Descriptions and subtasks:** plain text with list continuation, plus a checklist with completion progress.
 - **Deadlines:** choose a date and optionally a time, independently of calendar events. System notifications follow deadline edits and are canceled when a task is completed or deleted.
 - **Review reminder:** enable “Time to review your tasks” in Settings, choose a local time and optionally weekdays only. Off by default.
@@ -28,13 +28,15 @@ Tasks brings folders, a focused daily list and your system calendar into one nat
 
 **macOS 26 or later.** The release is a universal binary for Apple Silicon and Intel.
 
-Source version: **0.1.48 (build 49)**, a preview. [Changes in 0.1.48](docs/releases/v0.1.48.md) · [Changes from 0.1.32 to 0.1.42](docs/releases/v0.1.42.md) · [Release history](docs/releases).
+Source version: **0.1.49 (build 50)**, a preview. [Changes in 0.1.49](docs/releases/v0.1.49.md) · [Changes from 0.1.32 to 0.1.42](docs/releases/v0.1.42.md) · [Release history](docs/releases).
 
 Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/tasks-macos/releases), open it, drag **Tasks** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
 
 **Signing:** this build uses an ad-hoc signature. It is not Developer ID signed or notarized by Apple. Gatekeeper may restrict opening a download on another Mac. You can build the app in Xcode if macOS does not allow the downloaded package to open. The project does not require disabling system security.
 
 ## Getting started
+
+Open **Help → Planner Help** in the app or read the [complete guide](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Press **⌘N** to create a task. Enter its title, then press **Return** to move to the description. Star it for today, add subtasks with the checklist button, or open the calendar using the rightmost toolbar button.
 
@@ -62,9 +64,9 @@ Calendar events support multiple relative or absolute alerts. Editing or removin
 
 ## Privacy and current limitations
 
-Tasks and preferences stay on your device. The app has no backend, ads or analytics SDKs. Calendar events live in the system event store and may sync through your configured calendar provider. See the [privacy description](docs/privacy.md).
+Tasks are available on your device. When you enable cloud sync, the app server syncs the library. The app has no ads or analytics SDKs. Calendar events live in the system event store and may sync through your configured calendar provider. See the [privacy description](docs/privacy.md).
 
-- Task sync between devices is not implemented.
+- Cloud task sync requires an account. On-device storage is available without registration.
 - Descriptions are plain text, without bold or italic formatting.
 - Recurring events, recurrence exceptions and read-only calendars can be viewed but not edited.
 - Deleting a task keeps its calendar events. Event scheduling and task completion are independent.

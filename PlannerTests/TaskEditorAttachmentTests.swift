@@ -5,6 +5,57 @@ import Testing
 /// Повторное подключение документа не меняет ввод, Undo и обработчики действующей карточки.
 @MainActor
 struct TaskEditorAttachmentTests {
+    @Test func draggingAtTheEdgeSelectsAnInitiallyOffscreenSubtask() throws {
+        let store = TaskEditorStore(), taskID = UUID()
+        let viewport = NSRect(x: 0, y: 0, width: 320, height: 120)
+        let window = NSWindow(contentRect: viewport, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let scrollView = NSScrollView(frame: viewport)
+        window.contentView = scrollView
+        let document = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 260))
+        scrollView.documentView = document
+        let title = store.view(taskID: taskID, title: true)
+        let description = store.view(taskID: taskID, title: false)
+        let subtask = store.checklistView(taskID: taskID, itemID: UUID())
+        for (editor, text, y) in [(title, "Заголовок", 220.0), (description, "Описание", 165.0), (subtask, "Подзадача", 15.0)] {
+            editor.string = text
+            let host = TaskEditorHost(editor: editor)
+            host.frame = NSRect(x: 0, y: y, width: 320, height: 30)
+            document.addSubview(host)
+            host.layoutSubtreeIfNeeded()
+        }
+        let clip = scrollView.contentView
+        clip.scroll(to: NSPoint(x: 0, y: 140))
+        try #require(clip.documentVisibleRect.minY > 45)
+
+        let start = title.convert(NSPoint(x: 0, y: 8), to: nil)
+        let viewportInWindow = clip.convert(clip.bounds, to: nil)
+        let end = NSPoint(x: viewportInWindow.midX, y: viewportInWindow.minY + 3)
+        func event(_ type: NSEvent.EventType, at point: NSPoint) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                                           windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                           clickCount: 1, pressure: 1))
+        }
+        let down = try event(.leftMouseDown, at: start)
+        window.postEvent(try event(.leftMouseDragged, at: end), atStart: true)
+        let release = Timer(timeInterval: 0.7, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                if let up = NSEvent.mouseEvent(with: .leftMouseUp, location: end, modifierFlags: [], timestamp: 0,
+                                               windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                                               clickCount: 1, pressure: 0) {
+                    window.postEvent(up, atStart: true)
+                }
+            }
+        }
+        RunLoop.main.add(release, forMode: .eventTracking)
+        title.mouseDown(with: down)
+        release.invalidate()
+
+        #expect(clip.documentVisibleRect.minY < 15)
+        #expect(store.textSelection.text(for: title) == "Заголовок\nОписание\nПодзадача")
+    }
+
     @Test(arguments: [true, false])
     func leavingMainEditorCollapsesSelectionAndPreservesCaretAndUndo(isTitle: Bool) {
         let store = TaskEditorStore(), taskID = UUID()

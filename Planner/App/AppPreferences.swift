@@ -46,7 +46,7 @@ final class AppPreferences {
         reviewNotificationsEnabled = defaults.bool(forKey: "reviewNotificationsEnabled")
         reviewNotificationMinutes = min(1439, max(0, defaults.object(forKey: "reviewNotificationMinutes") as? Int ?? 540))
         reviewWeekdaysOnly = defaults.bool(forKey: "reviewWeekdaysOnly")
-        language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .russian
+        language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .system
         calendarOpen = defaults.bool(forKey: "calendarOpen")
         let width = defaults.double(forKey: "calendarWidth")
         calendarWidth = Double(width == 0 ? CalendarPanelLayout.defaultWidth : CalendarPanelLayout.panelWidth(CGFloat(width)))

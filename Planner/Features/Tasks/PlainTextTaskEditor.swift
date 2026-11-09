@@ -29,23 +29,27 @@ enum PlainTextLists {
 @MainActor
 final class TaskEditorStore {
     private var views: [String: TaskTextView] = [:]
+    let textSelection = TaskTextSelection()
+
     func view(taskID: UUID, title: Bool) -> TaskTextView {
         let key = taskID.uuidString + (title ? ".title" : ".description")
         if let view = views[key] { return view }
-        let view = makeView(title: title, identifier: title ? "task-title-field" : "task-description-field")
+        let view = makeView(taskID: taskID, title: title, identifier: title ? "task-title-field" : "task-description-field")
         views[key] = view
         return view
     }
     func checklistView(taskID: UUID, itemID: UUID) -> TaskTextView {
         let key = taskID.uuidString + ".checklist." + itemID.uuidString
         if let view = views[key] { return view }
-        let view = makeView(title: false, identifier: "checklist-title-\(itemID)")
+        let view = makeView(taskID: taskID, title: false, identifier: "checklist-title-\(itemID)")
         view.isChecklist = true
         views[key] = view
         return view
     }
-    private func makeView(title: Bool, identifier: String) -> TaskTextView {
+    private func makeView(taskID: UUID, title: Bool, identifier: String) -> TaskTextView {
         let view = TaskTextView(frame: .zero)
+        view.editorStore = self
+        view.taskID = taskID
         view.isEditable = true
         view.isSelectable = true
         view.isTitle = title
@@ -68,6 +72,10 @@ final class TaskEditorStore {
         view.setAccessibilityIdentifier(identifier)
         return view
     }
+    func attachedEditors(for source: TaskTextView, in window: NSWindow) -> [TaskTextView] {
+        views.values.filter { $0.taskID == source.taskID && $0.window === window && $0.editorHost?.ownsEditor == true }
+    }
+
     func removeChecklistItem(taskID: UUID, itemID: UUID) {
         views[taskID.uuidString + ".checklist." + itemID.uuidString] = nil
     }
@@ -107,6 +115,7 @@ struct PlainTextTaskEditor: NSViewRepresentable {
         view.setAccessibilityLabel(placeholder)
         // Не присваиваем строку при каждом рендере: это сохраняет выделение, IME и историю отмены.
         if view.string != text, !view.hasMarkedText() {
+            view.clearTaskSelection()
             let selection = view.selectedRange()
             view.string = text
             view.setSelectedRange(NSRange(location: min(selection.location, (text as NSString).length), length: 0))
@@ -172,6 +181,7 @@ final class TaskEditorHost: NSView {
     func detachEditor(preservingSelection: Bool = false) {
         // Демонтаж старого контейнера не отключает редактор, уже переданный новому.
         guard ownsEditor else { return }
+        editor.clearTaskSelection()
         editor.preservesSelectionDuringTransfer = preservingSelection
         defer { editor.preservesSelectionDuringTransfer = false }
         editor.cancelRequestedFocus()
@@ -188,6 +198,8 @@ final class TaskEditorHost: NSView {
 
 final class TaskTextView: NSTextView {
     weak var editorHost: TaskEditorHost?
+    fileprivate weak var editorStore: TaskEditorStore?
+    fileprivate var taskID: UUID?
     var isTitle = false
     var isChecklist = false
     var placeholder = ""
@@ -203,6 +215,7 @@ final class TaskTextView: NSTextView {
 
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
+        if resigned { clearTaskSelection() }
         if resigned, !isChecklist, !preservesSelectionDuringTransfer {
             collapseSelectionOnFocusLoss()
             needsDisplay = true
@@ -228,12 +241,40 @@ final class TaskTextView: NSTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        clearTaskSelection()
         // Пользовательский клик важнее ранее запланированного автоматического фокуса.
         let consumed = focusRequested ? focusConsumed : {}
         cancelRequestedFocus()
         consumed()
         window?.makeFirstResponder(self)
+        if let editorStore, editorStore.textSelection.trackDrag(from: self, event: event, store: editorStore) { return }
         super.mouseDown(with: event)
+    }
+
+    func clearTaskSelection() {
+        editorStore?.textSelection.clear(including: self)
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        clearTaskSelection()
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        clearTaskSelection()
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+
+    override func copy(_ sender: Any?) {
+        guard let text = editorStore?.textSelection.text(for: self) else { super.copy(sender); return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+        if item.action == #selector(copy(_:)), editorStore?.textSelection.canCopy(from: self) == true { return true }
+        return super.validateUserInterfaceItem(item)
     }
 
     /// Пробные ширины SwiftUI измеряем отдельно, не меняя контейнер живого редактора.

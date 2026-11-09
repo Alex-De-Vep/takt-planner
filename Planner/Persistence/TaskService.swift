@@ -23,6 +23,8 @@ final class TaskService {
     let context: ModelContext
     private let saveContext: (ModelContext) throws -> Void
     var error: PlannerError?
+    var syncRepository: SyncRepository?
+    var syncQueued: (() -> Void)?
     var notificationChanged: ((UUID, Bool) -> Void)?
     // Маркер библиотеки защищает от переноса идентификаторов из другого хранилища процесса.
     let dragScopeID = UUID()
@@ -39,9 +41,8 @@ final class TaskService {
 
     @discardableResult
     private func persist(reportError: Bool = true, _ change: () -> Void) -> Bool {
-        change()
         do {
-            try saveContext(context)
+            try save(change)
             return true
         } catch {
             // При ошибке возвращаем согласованное состояние и показываем её в интерфейсе.
@@ -49,6 +50,13 @@ final class TaskService {
             if reportError { self.error = PlannerError(message: error.localizedDescription) }
             return false
         }
+    }
+
+    private func save(_ change: () -> Void) throws {
+        change()
+        let queued = try syncRepository?.captureLocalChanges() ?? false
+        try saveContext(context)
+        if queued { syncQueued?() }
     }
 
     func createTask(in filter: TaskFilter, folders: [TaskFolder], now: Date = .now) -> PlannerTask? {
@@ -62,7 +70,7 @@ final class TaskService {
         else { folder = nil }
         let task = PlannerTask(folder: folder, now: now)
         task.systemFolderKind = destination == .week ? "week" : destination == .month ? "month" : "inbox"
-        if filter == .today { task.focusDay = LocalDay.key(for: now) }
+        if filter == .today { task.focusDay = PlannerTask.persistentTodayMark }
         return persist { context.insert(task) } ? task : nil
     }
 
@@ -70,16 +78,19 @@ final class TaskService {
         // Разрешаем временно пустой заголовок во время ввода; список покажет «Новая задача».
         titleDrafts[task.id] = title
         guard task.title != title else { titleDrafts[task.id] = nil; return }
+        let previous = (task.title, task.updatedAt)
         if persist({ task.title = title; task.updatedAt = now }) {
             titleDrafts[task.id] = nil
             notificationChanged?(task.id, false)
+        } else {
+            (task.title, task.updatedAt) = previous
         }
     }
 
     func toggleToday(_ task: PlannerTask, now: Date = .now, calendar: Calendar = .current) {
-        // Меняется только фокус на день. Папка и статус выполнения остаются независимыми.
+        // Звезда независима от основной папки и статуса выполнения.
         persist {
-            task.focusDay = task.isFocused(on: now, calendar: calendar) ? nil : LocalDay.key(for: now, calendar: calendar)
+            task.focusDay = task.isFocused(on: now, calendar: calendar) ? nil : PlannerTask.persistentTodayMark
             task.updatedAt = now
         }
     }
@@ -87,8 +98,19 @@ final class TaskService {
     @discardableResult
     func markToday(_ task: PlannerTask, now: Date = .now) -> Bool {
         guard !task.isDeleted else { return false }
-        guard !task.isFocused(on: now) else { return true }
-        return persist { task.focusDay = LocalDay.key(for: now); task.updatedAt = now }
+        guard task.focusDay != PlannerTask.persistentTodayMark else { return true }
+        return persist { task.focusDay = PlannerTask.persistentTodayMark; task.updatedAt = now }
+    }
+
+    func preserveLegacyTodayMarks(in tasks: [PlannerTask], now: Date = .now, calendar: Calendar = .current) {
+        let day = LocalDay.key(for: now, calendar: calendar)
+        let marked = tasks.filter { !$0.isDeleted && $0.focusDay == day && $0.focusDay != PlannerTask.persistentTodayMark }
+        guard !marked.isEmpty else { return }
+        if !persist({
+            for task in marked { task.focusDay = PlannerTask.persistentTodayMark }
+        }) {
+            for task in marked { task.focusDay = day }
+        }
     }
 
     func description(for task: PlannerTask) -> String { descriptionDrafts[task.id] ?? task.descriptionText }
@@ -97,8 +119,10 @@ final class TaskService {
     func updateDescription(_ task: PlannerTask, text: String, now: Date = .now) -> Bool {
         descriptionDrafts[task.id] = text
         guard text != task.descriptionText else { descriptionDrafts[task.id] = nil; return true }
+        let previous = (task.descriptionText, task.updatedAt)
         let saved = persist { task.descriptionText = text; task.updatedAt = now }
         if saved { descriptionDrafts[task.id] = nil }
+        else { (task.descriptionText, task.updatedAt) = previous }
         return saved
     }
 
@@ -107,15 +131,23 @@ final class TaskService {
     /// Enter вставляет пункт после текущего, а кнопка в шапке — в конец списка.
     func addChecklistItem(to task: PlannerTask, after previous: TaskChecklistItem? = nil, now: Date = .now) -> TaskChecklistItem? {
         guard !task.isDeleted else { return nil }
+        let originalItems = task.checklistItems
+        let originalOrder = (originalItems ?? []).map { ($0, $0.sortOrder) }
+        let originalUpdate = task.updatedAt
         var items = task.orderedChecklistItems
         let index = previous.flatMap { previous in items.firstIndex { $0.id == previous.id }.map { $0 + 1 } } ?? items.count
         let item = TaskChecklistItem(task: task, sortOrder: index)
         items.insert(item, at: index)
-        return persist {
+        let saved = persist {
             context.insert(item)
             for (order, row) in items.enumerated() { row.sortOrder = order }
             task.updatedAt = now
-        } ? item : nil
+        }
+        if saved { return item }
+        task.checklistItems = originalItems
+        for (row, order) in originalOrder { row.sortOrder = order }
+        task.updatedAt = originalUpdate
+        return nil
     }
 
     @discardableResult
@@ -123,8 +155,14 @@ final class TaskService {
         guard !item.isDeleted else { return false }
         checklistDrafts[item.id] = title
         guard item.title != title else { checklistDrafts[item.id] = nil; return true }
+        let previousTitle = item.title
+        let previousUpdate = item.task?.updatedAt
         let saved = persist { item.title = title; item.task?.updatedAt = now }
         if saved { checklistDrafts[item.id] = nil }
+        else {
+            item.title = previousTitle
+            if let previousUpdate { item.task?.updatedAt = previousUpdate }
+        }
         return saved
     }
 
@@ -132,7 +170,14 @@ final class TaskService {
     func toggleChecklistItem(_ item: TaskChecklistItem, now: Date = .now) -> Bool {
         // Выполнение пункта не меняет выполнение, звёздочку или положение основной задачи.
         guard !item.isDeleted else { return false }
-        return persist { item.isCompleted.toggle(); item.task?.updatedAt = now }
+        let previousCompletion = item.isCompleted
+        let previousUpdate = item.task?.updatedAt
+        let saved = persist { item.isCompleted.toggle(); item.task?.updatedAt = now }
+        if !saved {
+            item.isCompleted = previousCompletion
+            if let previousUpdate { item.task?.updatedAt = previousUpdate }
+        }
+        return saved
     }
 
     @discardableResult
@@ -252,9 +297,13 @@ final class TaskService {
             throw FolderValidationError.duplicate
         }
         let result = folder ?? TaskFolder(name: name, sortOrder: (existing.map(\.sortOrder).max() ?? -1) + 1)
-        if folder == nil { context.insert(result) }
-        result.name = name
-        do { try context.save(); return result }
+        do {
+            try save {
+                if folder == nil { context.insert(result) }
+                result.name = name
+            }
+            return result
+        }
         catch { context.rollback(); throw error }
     }
 

@@ -23,7 +23,9 @@ extension FocusedValues {
 
 struct PlannerCommands: Commands {
     let strings: Translations
+    var canShowWelcome = false
     @FocusedValue(\.plannerActions) private var actions
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .appSettings) {
@@ -45,6 +47,14 @@ struct PlannerCommands: Commands {
             Button(strings["Отметить / снять «Выполнено»"]) { actions?.toggleCompleted() }
                 .keyboardShortcut(.return, modifiers: [.command])
                 .disabled(actions?.hasSelection != true)
+        }
+        CommandGroup(replacing: .help) {
+            Button(strings["Справка по приложению"]) { openWindow(id: PlannerHelpView.windowID) }
+            #if !SHOWCASE
+            Button(strings["Показать приветствие"]) { openWindow(id: "welcome") }
+                .disabled(!canShowWelcome)
+                .accessibilityIdentifier("show-welcome")
+            #endif
         }
     }
 }

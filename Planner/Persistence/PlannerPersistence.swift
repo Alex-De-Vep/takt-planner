@@ -3,7 +3,7 @@ import SwiftData
 
 /// Единственная точка настройки SwiftData: локальный файл, версия схемы и первый запуск.
 enum PlannerPersistence {
-    static let schema = Schema(versionedSchema: PlannerSchemaV5.self)
+    static let schema = Schema(versionedSchema: PlannerSchemaV6.self)
 
     static func makeContainer(at url: URL? = nil, inMemory: Bool = false) throws -> ModelContainer {
         let configuration: ModelConfiguration
@@ -16,16 +16,27 @@ enum PlannerPersistence {
         return try ModelContainer(for: schema, migrationPlan: PlannerMigrationPlan.self, configurations: [configuration])
     }
 
+    static let testID: String? = {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if let id = environment["PLANNER_UI_TEST_LIBRARY"], UUID(uuidString: id) != nil { return id }
+        if environment["XCTestConfigurationFilePath"] != nil { return UUID().uuidString }
+        #endif
+        return nil
+    }()
+
     static func liveStoreURL() throws -> URL {
         var directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appending(path: "Planner", directoryHint: .isDirectory)
-        #if DEBUG
-        // У UI-тестов своя постоянная библиотека: данные пользователя не затрагиваются.
-        if let testID = ProcessInfo.processInfo.environment["PLANNER_UI_TEST_LIBRARY"], UUID(uuidString: testID) != nil {
+        if let testID {
             directory = directory.appending(path: "UITests/\(testID)", directoryHint: .isDirectory)
         }
-        #endif
         return directory.appending(path: "Planner.store")
+    }
+
+    static func defaults() -> UserDefaults {
+        if let testID, let value = UserDefaults(suiteName: "local.planner.tests.\(testID)") { return value }
+        return .standard
     }
 
     @MainActor

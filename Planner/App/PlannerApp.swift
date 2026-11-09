@@ -9,7 +9,16 @@ final class AppRuntime {
     var service: TaskService?
     var startupError: String?
 
-    init() { load() }
+    let cloud = CloudWorkspace(defaults: PlannerPersistence.defaults())
+
+    init() {
+        cloud.didOpen = { [weak self] library in
+            self?.container = library.container
+            self?.service = library.service
+            self?.startupError = nil
+        }
+        load()
+    }
 
     func load() {
         do {
@@ -18,6 +27,12 @@ final class AppRuntime {
             let container = try PlannerPersistence.makeContainer(inMemory: true)
             try ShowcaseData.populate(container.mainContext)
             #else
+            if let library = try cloud.resume() {
+                container = library.container
+                service = library.service
+                startupError = nil
+                return
+            }
             let container = try PlannerPersistence.makeContainer(at: PlannerPersistence.liveStoreURL())
             try PlannerPersistence.bootstrap(container.mainContext)
             #endif
@@ -37,10 +52,14 @@ struct PlannerApp: App {
     @State private var calendar = CalendarService()
     @State private var notifications = PlannerNotifications()
     @State private var taskDrag = TaskDragState()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup(preferences.translations["Задачи"], id: "workspace") {
-            workspace
+            launchContent
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { runtime.cloud.engine?.wake() }
+                }
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)
                 .tint(PlannerStyle.accent)
@@ -53,10 +72,34 @@ struct PlannerApp: App {
         .defaultSize(width: 1100, height: 700)
         #endif
         .windowResizability(.contentMinSize)
-        .commands { PlannerCommands(strings: preferences.translations) }
+        .commands { PlannerCommands(strings: preferences.translations, canShowWelcome: runtime.service != nil) }
+
+        Window(preferences.translations["Справка по приложению"], id: PlannerHelpView.windowID) {
+            PlannerHelpView(guide: preferences.translations.helpGuide)
+                .environment(\.translations, preferences.translations)
+                .tint(PlannerStyle.accent)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .defaultSize(width: 830, height: 570)
+        .windowResizability(.contentMinSize)
+
+        #if !SHOWCASE
+        Window(preferences.translations["Добро пожаловать в «Задачи»"], id: "welcome") {
+            WelcomeView(cloud: runtime.cloud, service: runtime.service, openedFromHelp: true)
+                .environment(\.translations, preferences.translations)
+                .environment(\.locale, preferences.language.locale)
+                .tint(PlannerStyle.accent)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .defaultSize(width: 950, height: 600)
+        .windowResizability(.contentMinSize)
+        #endif
 
         Settings {
-            SettingsView(preferences: preferences, calendar: calendar, notifications: notifications)
+            SettingsView(preferences: preferences, calendar: calendar, notifications: notifications,
+                         cloud: runtime.cloud, service: runtime.service)
                 .modifier(NotificationLifecycle(service: runtime.service, preferences: preferences, notifications: notifications))
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)
@@ -64,11 +107,26 @@ struct PlannerApp: App {
         }
     }
 
+    @ViewBuilder private var launchContent: some View {
+        #if SHOWCASE
+        workspace
+        #else
+        let forceWelcome = ProcessInfo.processInfo.environment["PLANNER_SHOW_WELCOME"] == "1"
+        if runtime.service != nil && !runtime.cloud.welcomeCompleted &&
+           (PlannerPersistence.testID == nil || forceWelcome) {
+            WelcomeView(cloud: runtime.cloud, service: runtime.service)
+        } else {
+            workspace
+        }
+        #endif
+    }
+
     @ViewBuilder private var workspace: some View {
             if let container = runtime.container, let service = runtime.service {
                 WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications, taskDrag: taskDrag)
                     .modifier(NotificationLifecycle(service: service, preferences: preferences, notifications: notifications))
                     .modelContainer(container)
+                    .id(ObjectIdentifier(container))
             } else {
                 ContentUnavailableView {
                     Label(preferences.translations["Не удалось открыть библиотеку"], systemImage: "externaldrive.badge.exclamationmark")

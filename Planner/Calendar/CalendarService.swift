@@ -26,7 +26,7 @@ final class CalendarService {
     var connecting = false
     var connectionError: String?
 
-    init(store: (any CalendarStore)? = nil) {
+    init(store: (any CalendarStore)? = nil, notificationCenter: NotificationCenter = .default) {
         #if SHOWCASE
         // Для публичных снимков EventKit вообще не создаётся: все события вымышленные.
         self.store = store ?? ShowcaseCalendarStore()
@@ -39,7 +39,9 @@ final class CalendarService {
         // Подписка живёт с сервисом, поэтому настройки обновляются даже без открытого рабочего окна.
         for name in [Notification.Name.EKEventStoreChanged, NSApplication.didBecomeActiveNotification,
                      .NSSystemTimeZoneDidChange, .NSCalendarDayChanged] {
-            NotificationCenter.default.publisher(for: name).sink { [weak self] _ in
+            // NotificationCenter calls synchronously on the posting thread. The outer closure
+            // must not inherit MainActor: its isolation check runs before the Task can hop there.
+            notificationCenter.publisher(for: name).sink { @Sendable [weak self] _ in
                 Task { @MainActor [weak self] in self?.refresh() }
             }.store(in: &observations)
         }

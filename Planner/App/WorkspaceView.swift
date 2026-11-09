@@ -68,10 +68,12 @@ struct WorkspaceView: View {
                 if case .folder(let id) = filter, !folders.contains(where: { $0.id == id }) { selectFilter(.inbox) }
             }
             .onChange(of: state.selectedTaskID) { checklistFocusID = nil }
-            // «Сегодня» пересчитывается при полуночи, смене часового пояса и возврате в приложение.
+            // Прежние активные звёзды сохраняются и при открытии окна, и при загрузке задач из облака.
+            .onChange(of: tasks.map(\.focusDay), initial: true) { service.preserveLegacyTodayMarks(in: tasks) }
+            // Сроки отображаются относительно текущей даты и часового пояса.
             .onChange(of: scenePhase) { if scenePhase == .active { now = .now } }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in now = .now }
-            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in now = .now }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in now = .now }
+            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: DispatchQueue.main)) { _ in now = .now }
             .onChange(of: notifications.openRevision) { openNotificationTask() }
             .onAppear { openNotificationTask() }
             .task(id: calendar.revision) {

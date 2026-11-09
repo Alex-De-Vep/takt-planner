@@ -1,8 +1,42 @@
+import AppKit
 import XCTest
 
 /// Проверяем смену фокуса и ввод в середине текста в отдельной библиотеке с подменой календаря.
 @MainActor
 final class TaskEditorFocusUITests: XCTestCase {
+    func testMouseSelectionCopiesTaskInDisplayOrderAndFieldsRemainEditable() {
+        let app = launchPreparedApp()
+        let title = field("task-title-field", in: app)
+        let description = field("task-description-field", in: app)
+        let items = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "checklist-title-"))
+        app.buttons["add-checklist-item-button"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(items.firstMatch.waitForExistence(timeout: 3))
+        app.typeText("Первый пункт")
+        app.typeKey(.return, modifierFlags: [])
+        let last = items.element(boundBy: 1)
+        XCTAssertTrue(last.waitForExistence(timeout: 3))
+        app.typeText("Второй пункт")
+        expect("Второй пункт", in: last)
+
+        let start = title.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.35)).withOffset(CGVector(dx: 1, dy: 0))
+        let end = last.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.4))
+        let expected = "Начало конец\nНачало конец\nПервый пункт\nВторой пункт"
+        start.press(forDuration: 0.1, thenDragTo: end)
+        expectCopied(expected, in: app)
+        attachWindow(app, name: "Выделение всех полей задачи")
+        end.press(forDuration: 0.1, thenDragTo: start)
+        expectCopied(expected, in: app)
+
+        description.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.2)).click()
+        app.typeKey("a", modifierFlags: .command)
+        expectCopied("Начало конец", in: app)
+        app.typeText("Изменённое описание")
+        expect("Изменённое описание", in: description)
+        expect("Начало конец", in: title)
+        expect("Первый пункт", in: items.firstMatch)
+        expect("Второй пункт", in: last)
+    }
+
     func testLargeTaskActionsWorkWhileEditing() {
         let app = launchPreparedApp()
         let today = app.buttons["today-task-button"]
@@ -118,6 +152,17 @@ final class TaskEditorFocusUITests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", text), object: field)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 3), .completed,
                        "Текущий текст: \(String(describing: field.value))", file: file, line: line)
+    }
+
+    private func expectCopied(_ text: String, in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let pasteboard = NSPasteboard.general
+        let changeCount = pasteboard.changeCount
+        app.typeKey("c", modifierFlags: .command)
+        guard pasteboard.changeCount != changeCount else {
+            XCTFail("Команда копирования не обновила буфер обмена", file: file, line: line)
+            return
+        }
+        XCTAssertEqual(pasteboard.string(forType: .string), text, file: file, line: line)
     }
 
     private func attachWindow(_ app: XCUIApplication, name: String) {

@@ -46,6 +46,7 @@ def verify_app(app):
     signed_entitlements = run("/usr/bin/codesign", "-d", "--entitlements", "-", "--xml", app, capture_output=True)
     entitlements = plistlib.loads(signed_entitlements.stdout)
     assert entitlements["com.apple.security.app-sandbox"] is True
+    assert entitlements["com.apple.security.network.client"] is True
     assert entitlements["com.apple.security.personal-information.calendars"] is True
     assert not entitlements.get("com.apple.security.get-task-allow", False)
     assert not any(key.startswith("com.apple.security.temporary-exception") for key in entitlements)

@@ -53,7 +53,7 @@ for name, product_type, extension in (
     products.append(product)
     settings = {
         "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.1.48", "CURRENT_PROJECT_VERSION": "49",
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.1.49", "CURRENT_PROJECT_VERSION": "50",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
