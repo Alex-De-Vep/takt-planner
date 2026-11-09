@@ -49,7 +49,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.google.gson.JsonParser
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -64,27 +63,18 @@ internal fun TaskEditor(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val baseline by rememberSaveable { mutableStateOf(task?.let { json.toJson(it) }) }
-    val original = remember(baseline) { baseline?.let { json.fromJson(it, Entity::class.java) } }
-    val originalLocation by rememberSaveable {
-        mutableStateOf(task?.let(library::location) ?: section.takeUnless { it in listOf("today", "all") } ?: "inbox")
-    }
-    val originalFocus by rememberSaveable { mutableStateOf(task?.focused ?: (section == "today")) }
-    var title by rememberSaveable { mutableStateOf(original?.text("title").orEmpty()) }
-    var description by rememberSaveable { mutableStateOf(original?.text("description").orEmpty()) }
-    var location by rememberSaveable { mutableStateOf(originalLocation) }
-    var focused by rememberSaveable { mutableStateOf(originalFocus) }
-    var deadlineWire by rememberSaveable { mutableStateOf(original?.deadline?.wire()?.toString()) }
-    val deadline = remember(deadlineWire) { deadlineWire?.let { Deadline.read(JsonParser.parseString(it)) } }
-    val activeLocation = location.takeIf { it in listOf("inbox", "week", "month") ||
+    val draft = remember { model.openDraft(library, task, section) }
+    val deadline = draft.deadline
+    val activeLocation = draft.location.takeIf { it in listOf("inbox", "week", "month") ||
         library.folders.any { folder -> folder.id == it } } ?: "inbox"
-    var newItems by rememberSaveable { mutableStateOf(arrayListOf<String>()) }
     var action by rememberSaveable { mutableStateOf<String?>(null) }
     var folderMenu by remember { mutableStateOf(false) }
 
-    val dirty = title != original?.text("title").orEmpty() || description != original?.text("description").orEmpty() ||
-        location != originalLocation || focused != originalFocus || deadline != original?.deadline || newItems.isNotEmpty()
-    val navigateBack = { if (dirty) action = "discard" else close() }
+    val finish = {
+        model.closeDraft()
+        close()
+    }
+    val navigateBack = { if (!draft.saving) { if (draft.dirty) action = "discard" else finish() } }
     BackHandler(onBack = navigateBack)
 
     Scaffold(
@@ -93,7 +83,7 @@ internal fun TaskEditor(
                 title = { Text(stringResource(if (task == null) R.string.new_task else R.string.task_details)) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, onClick = navigateBack) },
                 actions = {
-                    if (task != null) ActionIcon(R.drawable.ic_delete, R.string.delete_task) { action = "delete" }
+                    if (task != null && !draft.saving) ActionIcon(R.drawable.ic_delete, R.string.delete_task) { action = "delete" }
                 },
             )
         },
@@ -104,9 +94,9 @@ internal fun TaskEditor(
                 Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), singleLine = true,
+                OutlinedTextField(draft.title, { draft.title = it }, Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text(stringResource(R.string.task_title)) })
-                OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), minLines = 3,
+                OutlinedTextField(draft.description, { draft.description = it }, Modifier.fillMaxWidth(), minLines = 3,
                     label = { Text(stringResource(R.string.description)) })
                 Box {
                     TextButton(onClick = { folderMenu = true }) {
@@ -116,7 +106,7 @@ internal fun TaskEditor(
                     DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
                         (listOf("inbox", "week", "month") + library.folders.map(Entity::id)).forEach { key ->
                             DropdownMenuItem(text = { Text(sectionName(key, library)) }, onClick = {
-                                location = key
+                                draft.location = key
                                 folderMenu = false
                             })
                         }
@@ -124,7 +114,7 @@ internal fun TaskEditor(
                 }
                 val focusLabel = stringResource(R.string.show_in_today)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(focused, { focused = it }, Modifier.semantics {
+                    Checkbox(draft.focused, { draft.focused = it }, Modifier.semantics {
                         contentDescription = focusLabel
                     })
                     Text(focusLabel)
@@ -137,7 +127,7 @@ internal fun TaskEditor(
                         Text(deadline?.let(::deadlineLabel) ?: stringResource(R.string.choose_date), Modifier.padding(start = 8.dp))
                     }
                     if (deadline != null) {
-                        ActionIcon(R.drawable.ic_close, R.string.remove_deadline) { deadlineWire = null }
+                        ActionIcon(R.drawable.ic_close, R.string.remove_deadline) { draft.deadline = null }
                     }
                 }
                 if (deadline != null) {
@@ -147,7 +137,7 @@ internal fun TaskEditor(
                         }
                         if (deadline.instant != null) {
                             TextButton(onClick = {
-                                deadlineWire = Deadline(deadline.agendaDate(), null, ZoneId.systemDefault()).wire().toString()
+                                draft.deadline = Deadline(deadline.agendaDate(), null, ZoneId.systemDefault())
                             }) { Text(stringResource(R.string.remove_time)) }
                         }
                     }
@@ -155,8 +145,8 @@ internal fun TaskEditor(
                 if (task != null) {
                     TextButton(onClick = {
                         val calendar = Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
-                            .putExtra(CalendarContract.Events.TITLE, title)
-                            .putExtra(CalendarContract.Events.DESCRIPTION, description)
+                            .putExtra(CalendarContract.Events.TITLE, draft.title)
+                            .putExtra(CalendarContract.Events.DESCRIPTION, draft.description)
                         deadline?.instant?.let {
                             calendar.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it.toEpochMilli())
                             calendar.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it.plusSeconds(1800).toEpochMilli())
@@ -183,12 +173,12 @@ internal fun TaskEditor(
                         }
                     }
                 }
-                newItems.forEachIndexed { index, text ->
+                draft.newItems.forEachIndexed { index, text ->
                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(text, Modifier.weight(1f))
                         ActionIcon(R.drawable.ic_edit, R.string.edit_item) { action = "draft:$index" }
                         ActionIcon(R.drawable.ic_delete, R.string.delete_item) {
-                            newItems = ArrayList(newItems.filterIndexed { i, _ -> i != index })
+                            draft.newItems = draft.newItems.filterIndexed { i, _ -> i != index }
                         }
                     }
                 }
@@ -197,9 +187,9 @@ internal fun TaskEditor(
                     Text(stringResource(R.string.add_item), Modifier.padding(start = 8.dp))
                 }
                 Button(
-                    onClick = { model.saveTask(original, originalLocation, title, description, activeLocation, focused, deadline, newItems, close) },
+                    onClick = { model.saveTask(draft, finish) },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = title.isNotBlank() || task != null,
+                    enabled = !draft.saving && (draft.title.isNotBlank() || task != null),
                 ) { Text(stringResource(R.string.save)) }
             }
         }
@@ -207,24 +197,24 @@ internal fun TaskEditor(
 
     val dismiss = { action = null }
     when (val dialog = action) {
-        "discard" -> Confirm(R.string.discard_title, R.string.discard_hint, R.string.discard, dismiss, close)
+        "discard" -> Confirm(R.string.discard_title, R.string.discard_hint, R.string.discard, dismiss, finish)
         "delete" -> if (task != null) {
-            Confirm(R.string.delete_task, R.string.delete_task_hint, R.string.delete, dismiss) { model.remove(task, close) }
+            Confirm(R.string.delete_task, R.string.delete_task_hint, R.string.delete, dismiss) { model.remove(task, finish) }
         }
         "date" -> PickDate(deadline?.agendaDate(), dismiss) { date ->
             val zone = ZoneId.systemDefault()
             val time = deadline?.instant?.atZone(zone)?.toLocalTime()
-            deadlineWire = Deadline(date, time?.atDate(date)?.atZone(zone)?.toInstant(), zone).wire().toString()
+            draft.deadline = Deadline(date, time?.atDate(date)?.atZone(zone)?.toInstant(), zone)
             dismiss()
         }
         "time" -> if (deadline != null) PickTime(deadline, dismiss) { time ->
             val zone = ZoneId.systemDefault()
             val day = deadline.agendaDate()
-            deadlineWire = Deadline(day, day.atTime(time).atZone(zone).toInstant(), zone).wire().toString()
+            draft.deadline = Deadline(day, day.atTime(time).atZone(zone).toInstant(), zone)
             dismiss()
         }
         "item" -> NameDialog(R.string.add_item, R.string.item_title, "", dismiss) { text ->
-            newItems = ArrayList(newItems + text)
+            draft.newItems = draft.newItems + text
             dismiss()
         }
         else -> {
@@ -234,8 +224,8 @@ internal fun TaskEditor(
             if (item != null) NameDialog(R.string.edit_item, R.string.item_title, item.text("title").orEmpty(), dismiss) {
                 model.updateItem(item, it, dismiss)
             }
-            if (index != null && index in newItems.indices) NameDialog(R.string.edit_item, R.string.item_title, newItems[index], dismiss) {
-                newItems = ArrayList(newItems).apply { set(index, it) }
+            if (index != null && index in draft.newItems.indices) NameDialog(R.string.edit_item, R.string.item_title, draft.newItems[index], dismiss) {
+                draft.newItems = draft.newItems.toMutableList().apply { set(index, it) }
                 dismiss()
             }
         }

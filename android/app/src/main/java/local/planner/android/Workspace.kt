@@ -79,7 +79,7 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
         if (route == NEW_TASK || task != null) {
             TaskEditor(library, task, section, model, snackbar) { route = null }
         } else {
-            MissingTask(snackbar) { route = null }
+            MissingTask(snackbar) { model.closeDraft(); route = null }
         }
         return
     }

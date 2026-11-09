@@ -66,7 +66,7 @@ internal object DeadlineReminders {
         }
     }
 
-    fun isDeadline(intent: Intent) = intent.action == ALARM
+    fun shouldDeliver(intent: Intent) = intent.action == ALARM || intent.action == Intent.ACTION_BOOT_COMPLETED
 
     private fun notify(context: Context, manager: NotificationManager, task: Entity) {
         if (!permissionGranted(context)) return
@@ -93,7 +93,7 @@ class DeadlineReceiver : BroadcastReceiver() {
             try {
                 PlannerStore(context.applicationContext).use { store ->
                     store.load()
-                    DeadlineReminders.update(context, store.library.value, deliver = DeadlineReminders.isDeadline(intent))
+                    DeadlineReminders.update(context, store.library.value, deliver = DeadlineReminders.shouldDeliver(intent))
                 }
             } finally {
                 pending.finish()
