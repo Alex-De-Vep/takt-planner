@@ -126,7 +126,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     }
 
     fun saveTask(
-        original: Entity?, title: String, description: String, location: String,
+        original: Entity?, originalLocation: String, title: String, description: String, location: String,
         focused: Boolean, deadline: Deadline?, newItems: List<String>, done: () -> Unit,
     ) {
         if (!validText(title, 16_384) || !validText(description, 1_048_576) ||
@@ -140,7 +140,9 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         if (original == null) fields["createdAt"] = value(wireTime())
         if (focused != (original?.focused ?: false)) fields["focusDay"] = value(FOCUS_MARK.takeIf { focused })
         if (original != null) {
-            if (location == current.location(original)) fields.remove("placement")
+            if (location == originalLocation) fields.remove("placement")
+            if (title == original.text("title").orEmpty()) fields.remove("title")
+            if (deadline == original.deadline) fields.remove("deadline")
             if (description == original.text("description").orEmpty()) fields.remove("description")
             fields.entries.removeAll { (key, value) ->
                 (original.fields[key] ?: JsonNull.INSTANCE) == value

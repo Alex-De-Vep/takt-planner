@@ -150,7 +150,7 @@ private fun TaskList(
             searching = !searching
             if (!searching) search = ""
         }
-        ActionIcon(R.drawable.ic_folder, R.string.manage_folders, manage)
+        ActionIcon(R.drawable.ic_folder, R.string.manage_folders, onClick = manage)
     }
     Row(
         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
@@ -328,10 +328,10 @@ internal fun Glyph(@DrawableRes id: Int, description: String? = null, tint: Colo
 
 @Composable
 internal fun ActionIcon(
-    @DrawableRes id: Int, label: Int, action: () -> Unit = {},
-    tint: Color = MaterialTheme.colorScheme.onSurface, onClick: (() -> Unit)? = null,
+    @DrawableRes id: Int, label: Int,
+    tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit,
 ) {
-    IconButton(onClick = onClick ?: action) { Glyph(id, stringResource(label), tint) }
+    IconButton(onClick = onClick) { Glyph(id, stringResource(label), tint) }
 }
 
 internal fun deadlineLabel(deadline: Deadline): String {
