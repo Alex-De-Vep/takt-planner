@@ -130,8 +130,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.11";
-				"CURRENT_PROJECT_VERSION" = "61";
+				"MARKETING_VERSION" = "0.2.13";
+				"CURRENT_PROJECT_VERSION" = "63";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)";
@@ -155,8 +155,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.11";
-				"CURRENT_PROJECT_VERSION" = "61";
+				"MARKETING_VERSION" = "0.2.13";
+				"CURRENT_PROJECT_VERSION" = "63";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)";
@@ -241,8 +241,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.11";
-				"CURRENT_PROJECT_VERSION" = "61";
+				"MARKETING_VERSION" = "0.2.13";
+				"CURRENT_PROJECT_VERSION" = "63";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner";
@@ -256,8 +256,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.11";
-				"CURRENT_PROJECT_VERSION" = "61";
+				"MARKETING_VERSION" = "0.2.13";
+				"CURRENT_PROJECT_VERSION" = "63";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner";
@@ -332,8 +332,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.11";
-				"CURRENT_PROJECT_VERSION" = "61";
+				"MARKETING_VERSION" = "0.2.13";
+				"CURRENT_PROJECT_VERSION" = "63";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
@@ -346,8 +346,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.11";
-				"CURRENT_PROJECT_VERSION" = "61";
+				"MARKETING_VERSION" = "0.2.13";
+				"CURRENT_PROJECT_VERSION" = "63";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";

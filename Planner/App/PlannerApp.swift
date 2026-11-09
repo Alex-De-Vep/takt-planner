@@ -9,7 +9,17 @@ final class AppRuntime {
     var service: TaskService?
     var startupError: String?
 
-    init() { load() }
+    private let assistantModel = ModelManager(defaults: PlannerPersistence.defaults())
+    private(set) var assistant: AssistantService?
+
+    let cloud = CloudWorkspace(defaults: PlannerPersistence.defaults())
+
+    init() {
+        cloud.didOpen = { [weak self] library in
+            self?.open(library)
+        }
+        load()
+    }
 
     func load() {
         do {
@@ -18,15 +28,33 @@ final class AppRuntime {
             let container = try PlannerPersistence.makeContainer(inMemory: true)
             try ShowcaseData.populate(container.mainContext)
             #else
+            if let library = try cloud.resume() {
+                open(library)
+                return
+            }
             let container = try PlannerPersistence.makeContainer(at: PlannerPersistence.liveStoreURL())
             try PlannerPersistence.bootstrap(container.mainContext)
             #endif
-            self.container = container
-            service = TaskService(context: container.mainContext)
-            startupError = nil
+            open(CloudLibrary(container: container, service: TaskService(context: container.mainContext)))
         } catch {
             startupError = error.localizedDescription
         }
+    }
+
+    private func open(_ library: CloudLibrary) {
+        let store: AssistantStore
+        if library.service.syncRepository != nil || PlannerPersistence.testID != nil,
+           let database = library.container.configurations.first?.url {
+            let path = database.deletingLastPathComponent().appending(path: "Assistant/conversations.json")
+            store = AssistantStore(url: path)
+        } else {
+            store = AssistantStore()
+        }
+        assistant?.stop()
+        assistant = AssistantService(model: assistantModel, store: store)
+        container = library.container
+        service = library.service
+        startupError = nil
     }
 }
 
@@ -36,12 +64,15 @@ struct PlannerApp: App {
     @State private var preferences = AppPreferences()
     @State private var calendar = CalendarService()
     @State private var notifications = PlannerNotifications()
-    @State private var assistant = AssistantService()
     @State private var taskDrag = TaskDragState()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup(preferences.translations["Задачи"], id: "workspace") {
-            workspace
+            launchContent
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active { runtime.cloud.engine?.wake() }
+                }
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)
                 .tint(PlannerStyle.accent)
@@ -54,11 +85,35 @@ struct PlannerApp: App {
         .defaultSize(width: 1100, height: 700)
         #endif
         .windowResizability(.contentMinSize)
-        .commands { PlannerCommands(strings: preferences.translations) }
+        .commands { PlannerCommands(strings: preferences.translations, canShowWelcome: runtime.service != nil) }
+
+        Window(preferences.translations["Справка по приложению"], id: PlannerHelpView.windowID) {
+            PlannerHelpView(guide: preferences.translations.helpGuide)
+                .environment(\.translations, preferences.translations)
+                .tint(PlannerStyle.accent)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .defaultSize(width: 830, height: 570)
+        .windowResizability(.contentMinSize)
+
+        #if !SHOWCASE
+        Window(preferences.translations["Добро пожаловать в «Задачи»"], id: "welcome") {
+            WelcomeView(cloud: runtime.cloud, service: runtime.service, openedFromHelp: true)
+                .environment(\.translations, preferences.translations)
+                .environment(\.locale, preferences.language.locale)
+                .tint(PlannerStyle.accent)
+        }
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+        .defaultSize(width: 950, height: 600)
+        .windowResizability(.contentMinSize)
+        #endif
 
         Settings {
-            if let container = runtime.container {
-            SettingsView(preferences: preferences, calendar: calendar, notifications: notifications, assistant: assistant)
+            if let container = runtime.container, let assistant = runtime.assistant {
+                SettingsView(preferences: preferences, calendar: calendar, notifications: notifications,
+                             cloud: runtime.cloud, service: runtime.service, assistant: assistant)
                 .modelContainer(container)
                 .modifier(NotificationLifecycle(service: runtime.service, preferences: preferences, notifications: notifications))
                 .environment(\.translations, preferences.translations)
@@ -68,11 +123,26 @@ struct PlannerApp: App {
         }
     }
 
+    @ViewBuilder private var launchContent: some View {
+        #if SHOWCASE
+        workspace
+        #else
+        let forceWelcome = ProcessInfo.processInfo.environment["PLANNER_SHOW_WELCOME"] == "1"
+        if runtime.service != nil && !runtime.cloud.welcomeCompleted &&
+           (PlannerPersistence.testID == nil || forceWelcome) {
+            WelcomeView(cloud: runtime.cloud, service: runtime.service)
+        } else {
+            workspace
+        }
+        #endif
+    }
+
     @ViewBuilder private var workspace: some View {
-            if let container = runtime.container, let service = runtime.service {
+            if let container = runtime.container, let service = runtime.service, let assistant = runtime.assistant {
                 WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications, taskDrag: taskDrag, assistant: assistant)
                     .modifier(NotificationLifecycle(service: service, preferences: preferences, notifications: notifications))
                     .modelContainer(container)
+                    .id(ObjectIdentifier(container))
             } else {
                 ContentUnavailableView {
                     Label(preferences.translations["Не удалось открыть библиотеку"], systemImage: "externaldrive.badge.exclamationmark")

@@ -36,6 +36,7 @@ struct ChecklistTextEditor: NSViewRepresentable {
         // Локальный ввод уже находится в NSTextView. Повторное присваивание строки сбрасывало бы курсор.
         let replacesText = editor.string != text && !editor.hasMarkedText()
         if replacesText {
+            editor.clearTaskSelection()
             let selected = editor.selectedRange()
             editor.string = text
             let length = (text as NSString).length

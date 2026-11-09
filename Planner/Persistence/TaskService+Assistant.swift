@@ -21,7 +21,7 @@ extension TaskService {
         let task = PlannerTask(title: p.title.trimmingCharacters(in: .whitespacesAndNewlines), folder: folder)
         task.id = action.id; task.descriptionText = p.description ?? ""
         task.systemFolderKind = destination == .week ? "week" : destination == .month ? "month" : "inbox"
-        if p.today == true { task.focusDay = LocalDay.key(for: .now) }
+        if p.today == true { task.focusDay = PlannerTask.persistentTodayMark }
         task.deadlineDate = deadline; task.deadlineIncludesTime = p.time != nil
         task.deadlineTimeZoneID = deadline == nil ? nil : action.context.timeZoneID
         guard persistAssistant({

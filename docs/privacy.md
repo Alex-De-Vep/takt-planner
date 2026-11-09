@@ -1,12 +1,16 @@
 # Конфиденциальность / Privacy
 
-Обновлено: 27 октября 2026 года. Применяется к приложению Tasks / «Задачи» в этом репозитории.
+Обновлено: 10 ноября 2026 года. Применяется к приложению Tasks / «Задачи» в этом репозитории.
 
 ## Что хранится на устройстве
 
 Названия задач и папок, описания, подзадачи, сроки, отметки выполнения и связи с событиями сохраняются в локальной библиотеке SwiftData внутри sandbox-контейнера приложения. Язык, размеры панелей и выбор календарей сохраняются локально в настройках.
 
-Приложение не требует аккаунта. У него нет собственного сервера, рекламы, аналитических SDK или отправки содержимого задач разработчику.
+Режим «Только на устройстве» доступен без аккаунта. В облачном режиме сервер приложения получает адрес электронной почты и данные синхронизируемой библиотеки. Обмен идёт по HTTPS, токены входа хранятся в Связке ключей macOS. В приложении нет рекламы и аналитических SDK.
+
+## ИИ-помощник
+
+Локальная модель обрабатывает запросы на Mac. При выборе ChatGPT приложение отправляет запрос и необходимый контекст в OpenAI. Для подключения используется отдельный вход, токены сохраняются в Связке ключей macOS.
 
 ## Доступ к календарю
 
@@ -32,7 +36,9 @@
 
 ## English
 
-Tasks stores task content, folders, subtasks, deadlines and event links in a local SwiftData library inside its app sandbox. Preferences are stored locally. The app has no account system, backend, ads or analytics SDKs and does not send your task content to the developer.
+Tasks stores task content, folders, subtasks, deadlines and event links in a local SwiftData library inside its app sandbox. Preferences are stored locally. On-device mode requires no account. In cloud mode, the app server receives your email address and the library data you sync. The app connects over HTTPS and keeps sign-in tokens in the macOS Keychain. There are no ads or analytics SDKs.
+
+The local assistant processes requests on your Mac. If you choose ChatGPT, the app sends the request and relevant context to OpenAI. Sign-in tokens are stored in the macOS Keychain.
 
 Calendar access is requested only after you choose to connect calendars. EventKit reads and writes the system calendar. Events may sync via iCloud or another calendar provider configured in macOS; that provider's privacy terms apply. Declining calendar access does not prevent task management.
 

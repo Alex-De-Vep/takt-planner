@@ -18,6 +18,23 @@ import Testing
     private func tempStore() -> AssistantStore {
         AssistantStore(url: FileManager.default.temporaryDirectory.appending(path: "assistant-tests-\(UUID())/history.json"))
     }
+    @Test func approvedTaskAndChecklistEnterSyncQueue() throws {
+        let container = try PlannerPersistence.makeContainer(inMemory: true)
+        let tasks = TaskService(context: container.mainContext)
+        let queue = try SyncRepository(context: container.mainContext, libraryID: UUID().syncID, deviceID: UUID().syncID)
+        tasks.syncRepository = queue
+        var action = AssistantAction(proposal: proposal(), context: context())
+        action.proposal.today = true
+        action.proposal.checklist = ["Один", "Два"]
+        let task = try tasks.createAssistantTask(action, folders: [])
+        _ = try tasks.createAssistantTask(action, folders: [])
+
+        let pending = try queue.pendingOperations()
+        #expect(pending.map(\.entityType) == [.task, .checklistItem, .checklistItem])
+        #expect(pending.first?.changes?["focusDay"]?.value == .text(PlannerTask.persistentTodayMark))
+        #expect(pending.dropFirst().allSatisfy { $0.changes?["taskId"]?.value == .text(task.id.syncID) })
+    }
+
     @Test func rejectsInvalidDatesAndMissingEventTime() throws {
         #expect(throws: (any Error).self) { try ActionPlanValidator.date("2026-02-30", time: nil, zone: "Europe/Moscow") }
         #expect(throws: (any Error).self) { try ActionPlanValidator.date("2026-03-29", time: "02:30", zone: "Europe/Berlin") }

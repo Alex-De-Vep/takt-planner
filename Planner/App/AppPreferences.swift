@@ -55,7 +55,7 @@ final class AppPreferences {
         reviewNotificationsEnabled = defaults.bool(forKey: "reviewNotificationsEnabled")
         reviewNotificationMinutes = min(1439, max(0, defaults.object(forKey: "reviewNotificationMinutes") as? Int ?? 540))
         reviewWeekdaysOnly = defaults.bool(forKey: "reviewWeekdaysOnly")
-        language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .russian
+        language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .system
         rightPanel = defaults.string(forKey: "rightPanel").flatMap(RightPanel.init(rawValue:))
         assistantWidth = min(520, max(360, defaults.object(forKey: "assistantWidth") as? Double ?? 420))
         assistantDefaultFolder = defaults.string(forKey: "assistantDefaultFolder") ?? "inbox"

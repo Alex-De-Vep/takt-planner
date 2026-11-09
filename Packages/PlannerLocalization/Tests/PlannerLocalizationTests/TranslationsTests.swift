@@ -15,6 +15,14 @@ struct TranslationsTests {
         #expect(Translations(language: .russian).format("Задач: %d", 12) == "Задач: 12")
     }
 
+    @Test func helpGuidesLoadInBothInterfaceLanguages() throws {
+        let russian = try #require(Translations(language: .russian).helpGuide)
+        let english = try #require(Translations(language: .english).helpGuide)
+        #expect(russian.contains("\n## Быстрый старт\n"))
+        #expect(english.contains("\n## Getting started\n"))
+        #expect(russian.components(separatedBy: "\n## ").count == english.components(separatedBy: "\n## ").count)
+    }
+
     @Test func missingKeyFallsBackToReadableSourceText() {
         #expect(Translations(language: .english)["Будущая строка"] == "Будущая строка")
     }

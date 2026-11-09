@@ -38,7 +38,7 @@ import SwiftData
         for (index, title) in titles.enumerated() {
             let task = PlannerTask(title: title, now: Date.now.addingTimeInterval(-Double(index + 1) * 3600))
             context.insert(task)
-            if index < 2 { task.focusDay = LocalDay.key(for: .now) }
+            if index < 2 { task.focusDay = PlannerTask.persistentTodayMark }
             if index == 0 {
                 task.descriptionText = text(
                     "Собрать всё необходимое к запуску. Начать с главного, а детали проверить перед публикацией.\n\nОставить время для спокойной финальной проверки.",

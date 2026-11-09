@@ -30,4 +30,10 @@ public struct Translations: Sendable {
     public func format(_ key: String, _ arguments: CVarArg...) -> String {
         String(format: self[key], locale: language.locale, arguments: arguments)
     }
+
+    public var helpGuide: String? {
+        guard let url = Bundle.module.url(forResource: "Help", withExtension: "md",
+                                         subdirectory: nil, localization: language.resolvedCode) else { return nil }
+        return try? String(contentsOf: url, encoding: .utf8)
+    }
 }
