@@ -2,8 +2,12 @@ package local.planner.android
 
 import android.app.Application
 import android.os.Build
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.JsonElement
 import com.google.gson.JsonNull
 import com.google.gson.JsonPrimitive
 import java.time.LocalDate
@@ -28,6 +32,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     private val network = Mutex()
     private var nextSync = 0L
     private var failures = 0
+    private var draft: TaskDraft? = null
 
     val library = store.library
     private val _cloud = MutableStateFlow(CloudState())
@@ -44,6 +49,9 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 loadConnection()
                 _ready.value = true
                 refresh()
+                library.collect {
+                    withContext(Dispatchers.IO) { DeadlineReminders.update(getApplication(), it) }
+                }
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 _error.value = R.string.storage_error
@@ -52,6 +60,14 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     }
 
     fun clearError() { _error.value = null }
+
+    fun openDraft(library: Library, task: Entity?, section: String): TaskDraft {
+        draft?.let { if (it.workspace == library.workspace && it.original?.id == task?.id) return it }
+        val location = task?.let(library::location) ?: section.takeUnless { it in listOf("today", "all") } ?: "inbox"
+        return TaskDraft(library.workspace, task, location, task?.focused ?: (section == "today")).also { draft = it }
+    }
+
+    fun closeDraft() { draft = null }
 
     fun refresh() {
         val profile = library.value.profile ?: return
@@ -125,35 +141,32 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         else -> R.string.cloud_error
     }
 
-    fun saveTask(
-        original: Entity?, title: String, description: String, location: String,
-        focused: Boolean, deadline: Deadline?, newItems: List<String>, done: () -> Unit,
-    ) {
-        if (!validText(title, 16_384) || !validText(description, 1_048_576) ||
-            newItems.any { !validText(it, 16_384) }) return
+    fun saveTask(draft: TaskDraft, done: () -> Unit) {
+        if (draft.saving || !validText(draft.title, 16_384) || !validText(draft.description, 1_048_576) ||
+            draft.newItems.any { !validText(it, 16_384) }) return
         val current = library.value
+        val original = draft.original
         val id = original?.id ?: newId()
-        val fields = mutableMapOf(
-            "title" to value(title.trim()), "description" to value(description),
-            "placement" to placement(location), "deadline" to (deadline?.wire() ?: JsonNull.INSTANCE),
-        )
+        val fields = mutableMapOf<String, JsonElement>()
         if (original == null) fields["createdAt"] = value(wireTime())
-        if (focused != (original?.focused ?: false)) fields["focusDay"] = value(FOCUS_MARK.takeIf { focused })
-        if (original != null) {
-            if (location == current.location(original)) fields.remove("placement")
-            if (description == original.text("description").orEmpty()) fields.remove("description")
-            fields.entries.removeAll { (key, value) ->
-                (original.fields[key] ?: JsonNull.INSTANCE) == value
-            }
+        if (original == null || draft.title != original.text("title").orEmpty()) fields["title"] = value(draft.title.trim())
+        if (original == null || draft.description != original.text("description").orEmpty()) fields["description"] = value(draft.description)
+        if (original == null || draft.location != draft.originalLocation) {
+            val destination = draft.location.takeIf { it in listOf("inbox", "week", "month") ||
+                current.folders.any { folder -> folder.id == it } } ?: "inbox"
+            fields["placement"] = placement(destination)
         }
+        if (draft.deadline != original?.deadline) fields["deadline"] = draft.deadline?.wire() ?: JsonNull.INSTANCE
+        if (draft.focused != (original != null && draft.originalFocus)) fields["focusDay"] = value(FOCUS_MARK.takeIf { draft.focused })
         val firstOrder = nextOrder(current.items(id))
         val edits = buildList {
             if (fields.isNotEmpty()) add(Edit(id, "task", if (original == null) "create" else "update", fields))
-            newItems.forEachIndexed { index, text ->
+            draft.newItems.forEachIndexed { index, text ->
                 add(checklistEdit(id, text.trim(), (firstOrder.toLong() + index).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             }
         }
-        apply(edits, done)
+        draft.saving = true
+        apply(edits, done, failed = { draft.saving = false })
     }
 
     fun toggleFocus(task: Entity) = apply(listOf(Edit(task.id, "task", "update", mapOf(
@@ -173,11 +186,6 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         val fields = mutableMapOf("name" to value(text))
         if (existing == null) fields["sortOrder"] = JsonPrimitive(nextOrder(library.value.folders))
         apply(listOf(Edit(existing?.id ?: newId(), "folder", if (existing == null) "create" else "update", fields)), done)
-    }
-
-    fun addItem(task: Entity, title: String, done: () -> Unit) {
-        if (!validText(title, 16_384)) return
-        apply(listOf(checklistEdit(task.id, title.trim(), nextOrder(library.value.items(task.id)))), done)
     }
 
     fun updateItem(item: Entity, title: String, done: () -> Unit) {
@@ -208,7 +216,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     private fun nextOrder(items: List<Entity>) =
         ((items.maxOfOrNull { it.number("sortOrder") } ?: -1).toLong() + 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
-    private fun apply(edits: List<Edit>, done: () -> Unit = {}) {
+    private fun apply(edits: List<Edit>, done: () -> Unit = {}, failed: () -> Unit = {}) {
         val workspace = library.value.workspace
         viewModelScope.launch {
             try {
@@ -220,9 +228,25 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 _error.value = R.string.storage_error
+                failed()
             }
         }
     }
+}
+
+internal class TaskDraft(
+    val workspace: String, val original: Entity?, val originalLocation: String, val originalFocus: Boolean,
+) {
+    var title by mutableStateOf(original?.text("title").orEmpty())
+    var description by mutableStateOf(original?.text("description").orEmpty())
+    var location by mutableStateOf(originalLocation)
+    var focused by mutableStateOf(originalFocus)
+    var deadline by mutableStateOf(original?.deadline)
+    var newItems by mutableStateOf(emptyList<String>())
+    var saving by mutableStateOf(false)
+
+    val dirty get() = title != original?.text("title").orEmpty() || description != original?.text("description").orEmpty() ||
+        location != originalLocation || focused != originalFocus || deadline != original?.deadline || newItems.isNotEmpty()
 }
 
 internal fun Entity.inSection(section: String, library: Library): Boolean = when (section) {
