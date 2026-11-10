@@ -6,6 +6,8 @@ struct AssistantCloudThread: Codable {
     var effort: String?
     var historyStart: Int?
     var draftIDs: Set<UUID>?
+    var gateway: AssistantGateway?
+    var gatewayProfileID: UUID?
 }
 
 /// Контекст облачного запроса содержит текст, но не идентификаторы объектов и не библиотеку задач.
@@ -15,6 +17,12 @@ struct AssistantCloudRequest {
 
     init(thread: AssistantThread, text: String, context: AssistantContext, edit: AssistantTextEdit?,
          model: ChatGPTModel, effort: String?) throws {
+        try self.init(thread: thread, text: text, context: context, edit: edit, modelID: model.slug,
+                      effort: effort.flatMap { model.efforts.contains($0) ? $0 : nil })
+    }
+
+    init(thread: AssistantThread, text: String, context: AssistantContext, edit: AssistantTextEdit?,
+         modelID: String, effort: String? = nil, gateway: AssistantGateway? = nil, supportsTools: Bool = true) throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: context.timeZoneID) ?? .current
         var metadata: [String: Any] = [
@@ -22,7 +30,7 @@ struct AssistantCloudRequest {
             "time_zone": context.timeZoneID, "interface_language": context.language
         ]
         let pending = thread.actions.filter { action in
-            action.proposal.kind == .task && [.pending, .failed].contains(action.status)
+            supportsTools && action.proposal.kind == .task && [.pending, .failed].contains(action.status)
                 && (thread.cloud?.draftIDs?.contains(action.id) ?? true)
         }.suffix(8)
         var aliases: [String: UUID] = [:]
@@ -36,7 +44,7 @@ struct AssistantCloudRequest {
                     "today": action.proposal.today ?? false]
         }
         drafts = aliases
-        if let edit {
+        if supportsTools, let edit {
             let snapshot = edit.selected
             guard snapshot.title.count <= 500, snapshot.description.count <= 12000,
                   snapshot.checklist.count <= 100, snapshot.checklist.allSatisfy({ $0.title.count <= 500 }) else {
@@ -47,8 +55,8 @@ struct AssistantCloudRequest {
                                        "checklist": snapshot.checklist.map { ["title": $0.title, "completed": $0.isCompleted] as [String: Any] }]
         }
         let contextData = try JSONSerialization.data(withJSONObject: metadata)
-        var input: [[String: String]] = [["role": "developer", "content": "Local context (JSON data): " + String(decoding: contextData, as: UTF8.self)]]
-        input += thread.messages.dropFirst(max(0, thread.cloud?.historyStart ?? 0)).suffix(16).map { message in
+        let contextMessage = "Local context (JSON data): " + String(decoding: contextData, as: UTF8.self)
+        var input: [[String: String]] = thread.messages.dropFirst(max(0, thread.cloud?.historyStart ?? 0)).suffix(16).map { message in
             // Текст уточнения может быть только в кнопках, поэтому передаём и его.
             let questions = message.questions.map { $0.text + " (" + $0.options.joined(separator: ", ") + ")" }
             let content = ([message.text] + questions).joined(separator: "\n")
@@ -61,16 +69,85 @@ struct AssistantCloudRequest {
             "description": "Propose tasks or edits for review in the planner. This cannot save changes.",
             "parameters": parameters
         ]
-        var request: [String: Any] = [
-            "model": model.slug, "instructions": Self.instructions, "input": input,
-            "tools": [["type": "namespace", "name": "planner", "description": "Task proposal cards.", "tools": [tool]]],
-            "parallel_tool_calls": false, "store": false, "stream": true
-        ]
-        if let effort, model.efforts.contains(effort) { request["reasoning"] = ["effort": effort] }
+        var request: [String: Any]
+        if let gateway {
+            let instructions = supportsTools
+                ? Self.instructions.replacingOccurrences(of: "planner.propose_changes", with: "propose_changes")
+                    .replacingOccurrences(of: "Return null for unchanged optional fields.", with: "Omit unchanged optional fields.")
+                : "You are the Tasks app assistant. Reply naturally in the user's language. The selected model can chat but cannot propose changes in the app. Never claim to have saved anything."
+            let system = instructions + "\n\n" + contextMessage
+            var function = tool
+            function["type"] = nil
+            function["strict"] = nil
+            if let schema = parameters as? [String: Any] {
+                function["parameters"] = Self.portableSchema(schema)
+            }
+            switch gateway.wire {
+            case .chat:
+                input.insert(["role": "system", "content": system], at: 0)
+                request = ["model": modelID, "messages": input, "stream": true]
+                if gateway == .liteLLM { request["stream_options"] = ["include_usage": true] }
+                if supportsTools {
+                    request["tools"] = [["type": "function", "function": function]]
+                    if gateway == .openRouter { request["provider"] = ["require_parameters": true] }
+                }
+                if gateway == .gigaChat {
+                    request["tools"] = nil
+                    if supportsTools { request["functions"] = [function] }
+                    request["function_call"] = supportsTools ? "auto" : "none"
+                }
+                if let effort, gateway == .copilot { request["reasoning_effort"] = effort }
+                if gateway == .glm { request["thinking"] = ["type": "disabled"] }
+                if gateway == .qwen, supportsTools { request["enable_thinking"] = false }
+            case .messages:
+                // При переключении модели первая реплика сегмента может оказаться ответом.
+                while input.first?["role"] == "assistant" { input.removeFirst() }
+                request = ["model": modelID, "system": system, "messages": input, "stream": true, "max_tokens": 4096]
+                if let effort, gateway.isMiniMax {
+                    request["thinking"] = ["type": "adaptive"]
+                    request["output_config"] = ["effort": effort]
+                }
+                if supportsTools {
+                    function["input_schema"] = function.removeValue(forKey: "parameters")
+                    request["tools"] = [function]
+                    request["tool_choice"] = ["type": "auto", "disable_parallel_tool_use": true]
+                }
+            case .responses:
+                request = ["model": modelID, "instructions": system, "input": input, "stream": true, "store": false]
+                if supportsTools {
+                    function["type"] = "function"
+                    request["tools"] = [function]
+                }
+                if let effort, gateway == .deepSeek { request["reasoning"] = ["effort": effort] }
+            }
+        } else {
+            input.insert(["role": "developer", "content": contextMessage], at: 0)
+            request = [
+                "model": modelID, "instructions": Self.instructions, "input": input,
+                "tools": [["type": "namespace", "name": "planner", "description": "Task proposal cards.", "tools": [tool]]],
+                "parallel_tool_calls": false, "store": false, "stream": true
+            ]
+            if let effort { request["reasoning"] = ["effort": effort] }
+        }
         body = try JSONSerialization.data(withJSONObject: request)
         guard body.count <= 160_000 else {
             throw AssistantFailure(message: "Выбранная задача слишком большая для одного облачного запроса.")
         }
+    }
+
+    /// Нестрогие API принимают необязательные поля без объединения типов с null.
+    private static func portableSchema(_ source: [String: Any]) -> [String: Any] {
+        var schema = source
+        schema["additionalProperties"] = nil
+        if let types = schema["type"] as? [String] { schema["type"] = types.first { $0 != "null" } }
+        if let items = schema["items"] as? [String: Any] { schema["items"] = portableSchema(items) }
+        if let properties = schema["properties"] as? [String: [String: Any]] {
+            schema["properties"] = properties.mapValues(portableSchema)
+            schema["required"] = (schema["required"] as? [String])?.filter {
+                (properties[$0]?["type"] as? [String])?.contains("null") != true
+            }
+        }
+        return schema
     }
 
     private static let instructions = """

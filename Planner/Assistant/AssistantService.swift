@@ -12,6 +12,7 @@ final class AssistantService {
     var storageFailed = false
     let model: ModelManager
     let cloud = AssistantCloudConnection()
+    let gateways = AssistantGatewayConnections()
     var cloudPreview = ""
     @ObservationIgnored private let store: AssistantStore
     @ObservationIgnored var generation: Task<Void, Never>?

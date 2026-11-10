@@ -11,16 +11,18 @@ final class ChatGPTLoopback {
     }
     private let state: String
     private let registeredClientID: String?
+    private let openRouterPath: String?
     private let russian: Bool
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: NWConnection] = [:]
     private var completion: CheckedContinuation<Grant, Error>?
     private var timeout: Task<Void, Never>?
 
-    init(state: String, registeredClientID: String?, russian: Bool) {
+    init(state: String, registeredClientID: String?, russian: Bool, openRouterPath: String? = nil) {
         self.state = state
         self.registeredClientID = registeredClientID
         self.russian = russian
+        self.openRouterPath = openRouterPath
     }
 
     func receive(openBrowser: @escaping @MainActor (URL) -> Bool) async throws -> Grant {
@@ -41,9 +43,9 @@ final class ChatGPTLoopback {
                         switch state {
                         case .ready:
                             guard let port = self.listener?.port,
-                                  let url = URL(string: "http://127.0.0.1:\(port.rawValue)\(Self.path)"),
+                                  let url = URL(string: "http://127.0.0.1:\(port.rawValue)\(self.openRouterPath ?? Self.path)"),
                                   openBrowser(url) else {
-                                self.finish(.failure(AssistantFailure(message: "Не удалось открыть вход в ChatGPT.")))
+                                self.finish(.failure(AssistantFailure(message: "Не удалось открыть страницу входа.")))
                                 return
                             }
                         case .failed, .cancelled:
@@ -58,7 +60,7 @@ final class ChatGPTLoopback {
                 listener.start(queue: .main)
                 timeout = Task { [weak self] in
                     do { try await Task.sleep(for: .seconds(180)) } catch { return }
-                    self?.finish(.failure(AssistantFailure(message: "Время входа в ChatGPT истекло.")))
+                    self?.finish(.failure(AssistantFailure(message: "Время входа истекло.")))
                 }
             }
         } onCancel: {
@@ -97,7 +99,14 @@ final class ChatGPTLoopback {
     }
 
     private func handle(_ header: String, on connection: NWConnection) {
-        let result = Self.callback(header, expectedState: state, registeredClientID: registeredClientID)
+        let result: Result<Grant, Error>?
+        if let openRouterPath {
+            result = Self.openRouterCallback(header, path: openRouterPath, expectedState: state).map {
+                $0.map { Grant(code: $0, clientID: "") }
+            }
+        } else {
+            result = Self.callback(header, expectedState: state, registeredClientID: registeredClientID)
+        }
         let id = ObjectIdentifier(connection)
         let status: String
         let message: String
@@ -146,6 +155,25 @@ final class ChatGPTLoopback {
             return .failure(AssistantFailure(message: "Не удалось проверить ответ входа в ChatGPT."))
         }
         return .success(Grant(code: code, clientID: clientID))
+    }
+
+    /// Случайный путь привязывает ответ к попытке входа, а PKCE привязывает обмен к этому приложению.
+    static func openRouterCallback(_ header: String, path: String, expectedState: String) -> Result<String, Error>? {
+        let parts = (header.components(separatedBy: "\r\n").first ?? "").split(separator: " ")
+        guard parts.count == 3, parts[0] == "GET", parts[2].hasPrefix("HTTP/"),
+              parts[1].hasPrefix(path + "?"),
+              let url = URLComponents(string: "http://127.0.0.1" + parts[1]), url.path == path else { return nil }
+        let items = url.queryItems ?? []
+        if items.contains(where: { $0.name == "error" }) {
+            return .failure(AssistantFailure(message: "Вход в OpenRouter не завершён."))
+        }
+        let states = items.filter { $0.name == "state" }
+        guard states.count == 1, states[0].value == expectedState else { return nil }
+        let codes = items.filter { $0.name == "code" }
+        guard codes.count == 1, let code = codes[0].value, !code.isEmpty, code.utf8.count <= 4096 else {
+            return .failure(AssistantFailure(message: "Вход в OpenRouter не завершён."))
+        }
+        return .success(code)
     }
 
     private func close(_ id: ObjectIdentifier) { connections.removeValue(forKey: id)?.cancel() }

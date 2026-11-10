@@ -23,8 +23,8 @@ def verify(app):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
     assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == 'Задачи'
-    assert metadata['CFBundleShortVersionString'] == '0.2.13'
-    assert metadata['CFBundleVersion'] == '63'
+    assert metadata['CFBundleShortVersionString'] == '0.2.15'
+    assert metadata['CFBundleVersion'] == '65'
     assert metadata['LSMinimumSystemVersion'] == '26.0'
     for language, expected in [('ru', 'Задачи'), ('en', 'Tasks')]:
         localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
@@ -36,6 +36,8 @@ def verify(app):
     assert architectures == 'arm64', architectures
     resources = app / 'Contents/Resources'
     assert (resources / 'ModelManifest.json').exists()
+    for name in ('start.sh', 'bridge.mjs', 'package.json', 'package-lock.json'):
+        assert (resources / 'CopilotBridge.bundle' / name).is_file()
     assert list(resources.glob('*.bundle')), 'Отсутствуют ресурсы Swift-пакетов'
     assert list(resources.rglob('*.metallib')), 'Отсутствует скомпилированная библиотека Metal'
     assert not list(app.rglob('*.safetensors')), 'Веса должны скачиваться отдельно'
@@ -101,7 +103,7 @@ def main():
             'Доработка новой задачи меняет черновик: создание остаётся отдельным действием.\n'
             'Отдельная AI Preview и её данные не переносятся в основную библиотеку.\n'
             'Откройте кнопку чата в шапке и нажмите «Скачать и включить». Загрузка модели — около 3,06 GB.\n'
-            'Локальная модель работает на Mac. Для ChatGPT откройте список моделей внизу чата.\n'
+            'Локальная модель работает на Mac. Облачные модели подключаются в настройках помощника.\n'
             'Перед созданием задач и событий проверьте предложения.\n'
             'При разрешении EventKit события сохраняются в настоящие системные календари.\n'
             'Сборка подписана ad-hoc, без Developer ID и нотариализации.\n', encoding='utf-8')

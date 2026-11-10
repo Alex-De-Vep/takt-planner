@@ -14,6 +14,9 @@ struct AssistantCloudStream {
     private var lines: [String] = []
     private var eventSize = 0
     private var previewSize = 0
+    private let supportsTools: Bool
+
+    init(supportsTools: Bool = true) { self.supportsTools = supportsTools }
 
     mutating func consume(_ line: String) throws -> (delta: String?, reply: AssistantCloudCompletion?) {
         let line = line.hasSuffix("\r") ? String(line.dropLast()) : line
@@ -47,7 +50,7 @@ struct AssistantCloudStream {
                       let count = value as? Int, count >= 0, Int32(exactly: count) != nil else { return nil }
                 return count
             }
-            return (nil, try AssistantCloudCompletion(response: Self.decode(output), usage: .init(tokens: tokens)))
+            return (nil, try AssistantCloudCompletion(response: Self.decode(output, supportsTools: supportsTools), usage: .init(tokens: tokens)))
         case "response.incomplete", "response.failed", "error":
             let response = event["response"] as? [String: Any]
             let error = response?["error"] as? [String: Any] ?? event["error"] as? [String: Any] ?? event
@@ -71,7 +74,7 @@ struct AssistantCloudStream {
         }
     }
 
-    private static func decode(_ output: [[String: Any]]) throws -> AssistantResponse {
+    private static func decode(_ output: [[String: Any]], supportsTools: Bool) throws -> AssistantResponse {
         var text: [String] = []
         var proposal: AssistantResponse?
         for item in output {
@@ -84,7 +87,7 @@ struct AssistantCloudStream {
                 }
             case "function_call":
                 let name = item["name"] as? String
-                guard proposal == nil, name == "propose_changes" || name == "planner.propose_changes",
+                guard supportsTools, proposal == nil, name == "propose_changes" || name == "planner.propose_changes",
                       item["namespace"] == nil || item["namespace"] as? String == "planner",
                       let arguments = item["arguments"] as? String, arguments.utf8.count <= 120_000 else { throw invalid }
                 let value = try ActionPlanValidator.decode(arguments)

@@ -104,20 +104,31 @@ struct AssistantThread: Codable, Identifiable {
     var usesCloudModel: Bool { cloud != nil && localModelSelected != true }
 
     mutating func chooseModel(_ model: ChatGPTModel?) {
-        let switchingProvider = usesCloudModel != (model != nil)
+        chooseModel(id: model?.id, efforts: model?.efforts ?? [])
+    }
+
+    mutating func chooseModel(id: String?, efforts: [String] = [], accountID: String? = nil,
+                              gateway: AssistantGateway? = nil, profileID: UUID? = nil) {
+        let switchingProvider = usesCloudModel != (id != nil)
+            || (id != nil && (cloud?.gateway != gateway || cloud?.gatewayProfileID != profileID
+                || (gateway == nil && accountID != nil && cloud?.accountID != nil && cloud?.accountID != accountID)))
         if switchingProvider {
             activeTextEditID = nil
             clarificationContext = nil
         }
-        if let model {
+        if let id {
             var settings = cloud ?? AssistantCloudThread()
             if switchingProvider {
-                // Видимая история остаётся в чате. В сеть попадает контекст только после выбора ChatGPT.
+                // Сохраняем видимый чат, но начинаем новый сетевой контекст для выбранного подключения.
                 settings.historyStart = messages.count
                 settings.draftIDs = []
+                settings.effort = nil
             }
-            settings.modelID = model.id
-            if let effort = settings.effort, !model.efforts.contains(effort) { settings.effort = nil }
+            settings.modelID = id
+            settings.accountID = gateway == nil ? (accountID ?? (settings.gateway == nil ? settings.accountID : nil)) : nil
+            settings.gateway = gateway
+            settings.gatewayProfileID = profileID
+            if let effort = settings.effort, !efforts.contains(effort) { settings.effort = nil }
             cloud = settings
             localModelSelected = nil
         } else if switchingProvider {

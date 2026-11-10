@@ -6,6 +6,7 @@ struct AssistantTextEditCard: View {
     let edit: AssistantTextEdit
     let busy: Bool
     let active: Bool
+    var canRefine = true
     let update: (AssistantTextEdit) -> Void
     let refine: () -> Void
     let apply: () -> Void
@@ -66,13 +67,15 @@ struct AssistantTextEditCard: View {
             }
             if let error = edit.error { Text(strings[error]).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             if pending {
-                if edit.error == AssistantTextEdit.conflict {
+                if canRefine, edit.error == AssistantTextEdit.conflict {
                     Button(strings["Обновить предложение по текущему тексту"], action: refresh).disabled(busy)
                 }
                 HStack {
                     Button(strings["Отмена"], action: cancel).disabled(locked)
                     Spacer(minLength: 0)
-                    Button(strings[active ? "Продолжить доработку" : "Доработать"], action: refine).disabled(locked)
+                    if canRefine {
+                        Button(strings[active ? "Продолжить доработку" : "Доработать"], action: refine).disabled(locked)
+                    }
                 }
                 Button(strings[edit.target == .savedTask ? "Применить к задаче" : "Принять правки"], action: apply)
                     .buttonStyle(.borderedProminent).frame(maxWidth: .infinity, alignment: .trailing)

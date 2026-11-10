@@ -7,7 +7,7 @@ struct AssistantModelPicker: View {
     let openConnections: () -> Void
 
     private var isCloud: Bool { service.current?.usesCloudModel == true }
-    private var cloudReady: Bool { service.cloud.canSend(to: service.current?.cloud?.accountID) }
+    private var cloudReady: Bool { service.cloud.canSend(to: service.chatGPTAccountID) }
     private var locked: Bool { service.generating || service.applying || service.storageFailed }
 
     var body: some View {
@@ -25,26 +25,41 @@ struct AssistantModelPicker: View {
                     }
                     Divider()
                 }
+                ForEach(AssistantGateway.allCases) { gateway in
+                    if let models = service.gateways.catalogs[gateway], !models.isEmpty {
+                        Menu(gateway.name) {
+                            if gateway == .openRouter, models.count > 40 {
+                                let groups = Dictionary(grouping: models) { $0.id.split(separator: "/").first.map(String.init) ?? gateway.name }
+                                ForEach(groups.keys.sorted(), id: \.self) { group in
+                                    Menu(group) { gatewayRows(groups[group] ?? [], gateway: gateway) }
+                                }
+                            } else {
+                                gatewayRows(models, gateway: gateway)
+                            }
+                        }.disabled(service.gateways.busy.contains(gateway))
+                    }
+                }
+                Divider()
                 Button(action: openConnections) {
-                    Label(strings[cloudReady ? "Подключения моделей…" : "Подключить ChatGPT…"], systemImage: "person.crop.circle")
+                    Label(strings["Подключения моделей…"], systemImage: "person.crop.circle")
                 }
             } label: {
-                Label(isCloud ? (service.cloudModel?.name ?? "ChatGPT") : service.model.displayName,
+                Label(isCloud ? service.cloudModelName : service.model.displayName,
                       systemImage: isCloud ? "cloud" : "desktopcomputer")
-                    .lineLimit(1)
+                    .lineLimit(1).frame(maxWidth: 154, alignment: .leading)
             }
             .menuStyle(.borderlessButton).fixedSize()
             .help(strings["Выбрать модель"])
             .accessibilityLabel(strings["Выбрать модель"])
             .accessibilityIdentifier("assistant-model-picker")
 
-            if isCloud, let model = service.cloudModel, !model.efforts.isEmpty {
+            if isCloud, !service.cloudEfforts.isEmpty {
                 Menu {
                     Button { service.selectCloudEffort(nil) } label: {
                         if service.cloudEffort == nil { Label(strings["По умолчанию"], systemImage: "checkmark") }
                         else { Text(strings["По умолчанию"]) }
                     }
-                    ForEach(model.efforts, id: \.self) { effort in
+                    ForEach(service.cloudEfforts, id: \.self) { effort in
                         Button { service.selectCloudEffort(effort) } label: {
                             if effort == service.cloudEffort { Label(effortLabel(effort), systemImage: "checkmark") }
                             else { Text(effortLabel(effort)) }
@@ -58,6 +73,20 @@ struct AssistantModelPicker: View {
             }
         }
         .font(.caption).disabled(locked)
+    }
+
+    private func gatewayRows(_ models: [AssistantGatewayModel], gateway: AssistantGateway) -> some View {
+        ForEach(models) { model in
+            Button {
+                service.selectGatewayModel(model.id, gateway: gateway)
+            } label: {
+                if service.gatewayProfile?.gateway == gateway && service.gatewayModel?.id == model.id {
+                    Label(model.name, systemImage: "checkmark")
+                } else {
+                    Text(model.name)
+                }
+            }
+        }
     }
 
     private func effortLabel(_ effort: String) -> String {
@@ -77,21 +106,47 @@ struct AssistantModelConnections: View {
     var boundAccountID: String? = nil
     var selectModel: ((String) -> Void)? = nil
 
+    @State private var gateway: AssistantGateway?
     private var cloud: AssistantCloudConnection { service.cloud }
     private var accountMismatch: Bool { boundAccountID.map { $0 != cloud.account?.id } ?? false }
     private var locked: Bool { cloud.busy || service.generating || service.applying }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text(strings["Подключения моделей"]).font(.headline)
-                Spacer()
-                accountMenu
+            Text(strings["Подключения моделей"]).font(.headline)
+            Picker(strings["Подключения моделей"], selection: $gateway) {
+                Text("ChatGPT").tag(nil as AssistantGateway?)
+                ForEach(AssistantGateway.allCases) { gateway in
+                    Text(gateway.name).tag(Optional(gateway))
+                }
+            }.pickerStyle(.menu)
+
+            if let gateway {
+                AssistantGatewaySettings(service: service, gateway: gateway, russian: russian).id(gateway)
+            } else {
+                chatGPTSettings
             }
+            HStack {
+                Spacer()
+                Button(strings["Готово"]) { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+        .onAppear {
+            gateway = service.current?.usesCloudModel == true ? service.current?.cloud?.gateway : nil
+            cloud.activate()
+            service.gateways.activate()
+        }
+    }
+
+    private var chatGPTSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Label(cloud.account?.label ?? "ChatGPT", systemImage: "cloud").lineLimit(1)
                 Spacer()
                 if cloud.isConnected { Link(strings["Лимиты"], destination: ChatGPTHTTP.usageURL) }
+                accountMenu
             }
             if cloud.signingIn {
                 HStack {
@@ -139,14 +194,7 @@ struct AssistantModelConnections: View {
             if let error = cloud.error {
                 Text(strings[error]).foregroundStyle(.red).textSelection(.enabled)
             }
-            HStack {
-                Spacer()
-                Button(strings["Готово"]) { dismiss() }.keyboardShortcut(.defaultAction)
-            }
         }
-        .padding(20)
-        .frame(width: 370)
-        .onAppear { cloud.activate() }
     }
 
     private var modelList: some View {
