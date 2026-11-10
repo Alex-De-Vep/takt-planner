@@ -61,7 +61,7 @@ enum AssistantGateway: String, Codable, CaseIterable, Identifiable, Sendable {
             }
         case .kimi: addresses = ["https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1"]
         case .yandex: addresses = ["https://ai.api.cloud.yandex.net/v1"]
-        case .gigaChat: addresses = ["https://api.giga.chat/v1"]
+        case .gigaChat: addresses = [GigaChatTrust.apiBase.absoluteString]
         }
         return addresses.compactMap { URL(string: $0) }
     }

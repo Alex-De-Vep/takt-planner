@@ -55,8 +55,18 @@ final class AssistantService {
     func setDraft(_ text: String) { guard let i = currentIndex else { return }; archive.threads[i].draft = text; persist() }
     func clearHistory() {
         guard !generating, !applying else { return }
-        let previous = archive; archive = AssistantArchive(); storageFailed = false
-        if persist() { newConversation() } else { archive = previous; storageFailed = true }
+        var thread = AssistantThread()
+        if let current, current.usesCloudModel, var cloud = current.cloud {
+            // Переносим настройки модели, а сетевой контекст начинаем с пустого диалога.
+            cloud.historyStart = 0
+            cloud.draftIDs = []
+            thread.cloud = cloud
+        }
+        let previous = archive
+        archive = AssistantArchive(currentID: thread.id, threads: [thread])
+        storageFailed = false
+        if persist() { error = nil }
+        else { archive = previous; storageFailed = true }
     }
     // Следующий запрос ждёт фактического завершения отмены, чтобы не запускать две генерации.
     func stop() { generation?.cancel() }

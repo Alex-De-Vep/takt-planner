@@ -584,7 +584,7 @@
 "Для бизнеса (B2B)" = "Business (B2B)";
 "Корпоративный (CORP)" = "Corporate (CORP)";
 "Инструкция" = "Setup Guide";
-"macOS не доверяет сертификату GigaChat. Проверьте сертификаты по инструкции Сбера." = "macOS doesn’t trust the GigaChat certificate. See Sber’s certificate setup guide.";
+"Не удалось проверить TLS-сертификат GigaChat." = "Couldn’t verify the GigaChat TLS certificate.";
 "ID каталога Yandex Cloud" = "Yandex Cloud Folder ID";
 "Укажите идентификатор каталога Yandex Cloud." = "Enter your Yandex Cloud folder ID.";
 "Используйте ключ сервисного аккаунта с доступом к Yandex AI Studio." = "Use a service account key with access to Yandex AI Studio.";

@@ -23,8 +23,8 @@ def verify(app):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
     assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == 'Задачи'
-    assert metadata['CFBundleShortVersionString'] == '0.2.15'
-    assert metadata['CFBundleVersion'] == '65'
+    assert metadata['CFBundleShortVersionString'] == '0.2.17'
+    assert metadata['CFBundleVersion'] == '67'
     assert metadata['LSMinimumSystemVersion'] == '26.0'
     for language, expected in [('ru', 'Задачи'), ('en', 'Tasks')]:
         localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
@@ -38,6 +38,12 @@ def verify(app):
     assert (resources / 'ModelManifest.json').exists()
     for name in ('start.sh', 'bridge.mjs', 'package.json', 'package-lock.json'):
         assert (resources / 'CopilotBridge.bundle' / name).is_file()
+    anchor = resources / 'GigaChatTrust.bundle' / 'RussianTrustedRootCA.der'
+    assert hashlib.sha256(anchor.read_bytes()).hexdigest() == 'd26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31'
+    assert metadata['NSAppTransportSecurity']['NSExceptionDomains'] == {
+        host: {'NSExceptionAllowsInsecureHTTPLoads': True}
+        for host in ('ngw.devices.sberbank.ru', 'api.giga.chat')
+    }
     assert list(resources.glob('*.bundle')), 'Отсутствуют ресурсы Swift-пакетов'
     assert list(resources.rglob('*.metallib')), 'Отсутствует скомпилированная библиотека Metal'
     assert not list(app.rglob('*.safetensors')), 'Веса должны скачиваться отдельно'

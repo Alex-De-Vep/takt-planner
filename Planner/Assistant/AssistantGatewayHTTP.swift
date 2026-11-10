@@ -42,6 +42,8 @@ struct AssistantGatewayModel: Identifiable, Sendable {
 
 struct AssistantGatewayHTTP: Sendable {
     private let session: URLSession
+    private let gigaChatSession: URLSession
+    private let gigaChatDelegate: AssistantGatewaySessionDelegate
     private let gigaTokens = GigaChatTokenCache()
 
     init() {
@@ -51,7 +53,11 @@ struct AssistantGatewayHTTP: Sendable {
         config.urlCache = nil
         config.timeoutIntervalForRequest = 45
         config.timeoutIntervalForResource = 180
-        session = URLSession(configuration: config, delegate: RejectRedirects(), delegateQueue: nil)
+        session = URLSession(configuration: config, delegate: AssistantGatewaySessionDelegate(), delegateQueue: nil)
+        config.tlsMinimumSupportedProtocolVersion = .TLSv12
+        let delegate = AssistantGatewaySessionDelegate(gigaChatAnchor: GigaChatTrust.bundledAnchor)
+        gigaChatDelegate = delegate
+        gigaChatSession = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     }
 
     func openRouterKey(code: String, verifier: String) async throws -> String {
@@ -115,7 +121,7 @@ struct AssistantGatewayHTTP: Sendable {
             url.queryItems = [.init(name: "limit", value: "1000")]
             catalogRequest.url = url.url
         }
-        return try await get(Catalog.self, request: catalogRequest).models(for: gateway)
+        return try await get(Catalog.self, request: catalogRequest, gigaChat: gateway == .gigaChat).models(for: gateway)
     }
 
     func copilotAccount(_ profile: AssistantGatewayProfile) async throws -> String {
@@ -173,7 +179,7 @@ struct AssistantGatewayHTTP: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.httpBody = body
-        let (bytes, response) = try await session.bytes(for: request)
+        let (bytes, response) = try await responseBytes(for: request, gigaChat: profile.gateway == .gigaChat)
         try Self.check(response)
         guard response.mimeType == "text/event-stream" else { throw Self.invalid }
         var stream = AssistantGatewayStream(tools: tools, legacyFunctions: profile.gateway == .gigaChat,
@@ -215,19 +221,13 @@ struct AssistantGatewayHTTP: Sendable {
     }
 
     fileprivate func exchangeGigaKey(_ profile: AssistantGatewayProfile) async throws -> GigaChatAccess {
-        var request = URLRequest(url: URL(string: "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")!)
+        var request = URLRequest(url: GigaChatTrust.tokenURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "RqUID")
         request.setValue("Basic " + profile.key, forHTTPHeaderField: "Authorization")
         request.httpBody = Data(("scope=" + (profile.gigaScope ?? .personal).rawValue).utf8)
-        do {
-            return try await get(GigaChatAccess.self, request: request)
-        } catch let error as URLError where [
-            .serverCertificateUntrusted, .serverCertificateHasUnknownRoot, .secureConnectionFailed
-        ].contains(error.code) {
-            throw AssistantFailure(message: "macOS не доверяет сертификату GigaChat. Проверьте сертификаты по инструкции Сбера.")
-        }
+        return try await get(GigaChatAccess.self, request: request, gigaChat: true)
     }
 
     private func request(_ profile: AssistantGatewayProfile, _ endpoint: String) -> URLRequest {
@@ -247,8 +247,21 @@ struct AssistantGatewayHTTP: Sendable {
         return request
     }
 
-    private func get<Value: Decodable>(_ type: Value.Type, request: URLRequest) async throws -> Value {
-        let (bytes, response) = try await session.bytes(for: request)
+    private func responseBytes(for request: URLRequest, gigaChat: Bool) async throws -> (URLSession.AsyncBytes, URLResponse) {
+        guard gigaChat else { return try await session.bytes(for: request) }
+        guard let url = request.url, GigaChatTrust.allows(url) else { throw Self.invalid }
+        do {
+            return try await gigaChatSession.bytes(for: request, delegate: gigaChatDelegate)
+        } catch let error as URLError where [
+            .serverCertificateUntrusted, .serverCertificateHasUnknownRoot, .serverCertificateHasBadDate,
+            .serverCertificateNotYetValid, .secureConnectionFailed
+        ].contains(error.code) {
+            throw AssistantFailure(message: "Не удалось проверить TLS-сертификат GigaChat.")
+        }
+    }
+
+    private func get<Value: Decodable>(_ type: Value.Type, request: URLRequest, gigaChat: Bool = false) async throws -> Value {
+        let (bytes, response) = try await responseBytes(for: request, gigaChat: gigaChat)
         try Self.check(response)
         var data = Data()
         for try await byte in bytes {
@@ -373,13 +386,6 @@ struct AssistantGatewayHTTP: Sendable {
                 return .init(id: item.id, name: (item.display_name ?? item.name ?? item.aliases?.first).flatMap { $0.isEmpty ? nil : String($0.prefix(160)) } ?? item.id,
                              reportedTools: tools, efforts: effort.filter { ["low", "medium", "high", "xhigh", "max"].contains($0) })
             }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        }
-    }
-
-    private final class RejectRedirects: NSObject, URLSessionTaskDelegate {
-        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-            completionHandler(nil)
         }
     }
 }
