@@ -21,7 +21,7 @@ python3 scripts/build_release.py
 
 ## GitHub Release
 
-В [Releases](https://github.com/Alex-De-Vep/tasks-macos/releases) создайте выпуск с тегом версии, например `v0.1.42`, на проверенном коммите. Для текущего этапа используйте **pre-release**. Заголовок — «Задачи 0.1.42 / Tasks 0.1.42».
+В [Releases](https://github.com/Alex-De-Vep/takt-planner/releases) создайте выпуск с тегом версии, например `v0.1.42`, на проверенном коммите. Для текущего этапа используйте **pre-release**. Заголовок — «Задачи 0.1.42 / Tasks 0.1.42».
 
 Вложите только:
 

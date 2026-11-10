@@ -30,7 +30,7 @@ Tasks brings folders, a focused daily list and your system calendar into one nat
 
 Source version: **0.2.13 (build 63)**. [Changes in 0.2.13](docs/releases/v0.2.13.md) · [Release history](docs/releases).
 
-Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/tasks-macos/releases), open it, drag **Tasks** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
+Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Tasks** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
 
 **Signing:** this build uses an ad-hoc signature. It is not Developer ID signed or notarized by Apple. Gatekeeper may restrict opening a download on another Mac. You can build the app in Xcode if macOS does not allow the downloaded package to open. The project does not require disabling system security.
 
@@ -97,7 +97,7 @@ Artifacts are written to `dist/`. [Development guide](docs/development.md) · [R
 
 ## Contributing
 
-Bug reports and suggestions are welcome in [**Issues**](https://github.com/Alex-De-Vep/tasks-macos/issues). Please read [CONTRIBUTING.md](CONTRIBUTING.md). Do not attach personal task libraries, calendar information, tokens or signing keys.
+Bug reports and suggestions are welcome in [**Issues**](https://github.com/Alex-De-Vep/takt-planner/issues). Please read [CONTRIBUTING.md](CONTRIBUTING.md). Do not attach personal task libraries, calendar information, tokens or signing keys.
 
 Compiling tests does not mean they have passed. Check the release notes for the validation performed.
 
