@@ -30,7 +30,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,8 +48,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -152,9 +149,8 @@ internal fun ChatScreen(library: Library, model: PlannerModel, settings: () -> U
                         Glyph(R.drawable.ic_attach, stringResource(R.string.chat_attach_task), LocalContentColor.current)
                     }
                 }
-                val label = stringResource(R.string.chat_message)
-                OutlinedTextField(prompt, { prompt = it.take(4000) }, Modifier.weight(1f).semantics { contentDescription = label },
-                    placeholder = { Text(label) }, shape = MaterialTheme.shapes.extraLarge, maxLines = 3)
+                PlannerTextField(prompt, { prompt = it.take(4000) }, Modifier.weight(1f),
+                    placeholder = R.string.chat_message, maxLines = 3)
                 FilledIconButton(onClick = { send(prompt) }, enabled = !chat.busy && prompt.isNotBlank()) {
                     Glyph(R.drawable.ic_send, stringResource(R.string.chat_send), LocalContentColor.current)
                 }
@@ -168,7 +164,7 @@ internal fun ChatScreen(library: Library, model: PlannerModel, settings: () -> U
             text = {
                 Column {
                     Text(stringResource(R.string.chat_context_hint))
-                    OutlinedTextField(search, { search = it }, label = { Text(stringResource(R.string.search)) }, singleLine = true)
+                    PlannerTextField(search, { search = it }, placeholder = R.string.search, singleLine = true)
                     LazyColumn(Modifier.heightIn(max = 280.dp)) {
                         items(library.tasks.filter { it.text("title").orEmpty().contains(search.trim(), ignoreCase = true) },
                             key = Entity::id) { entry ->
@@ -337,8 +333,8 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
                     else -> Text(stringResource(R.string.chat_connect_hint))
                 }
                 if (provider.bases.isEmpty()) {
-                    OutlinedTextField(address, { address = it; controller.clearCandidate() }, enabled = !state.busy,
-                        label = { Text(stringResource(R.string.chat_gateway_address)) }, singleLine = true)
+                    PlannerTextField(address, { address = it; controller.clearCandidate() }, enabled = !state.busy,
+                        placeholder = R.string.chat_gateway_address, singleLine = true)
                 } else if (provider.bases.size > 1) {
                     GatewayPicker(stringResource(R.string.chat_endpoint), provider.bases, address, !state.busy, {
                         runCatching { java.net.URI(it).host }.getOrNull() ?: it
@@ -350,17 +346,17 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
                     }
                 }
                 if (provider != GatewayProvider.ChatGPT) {
-                    OutlinedTextField(key, { key = it; controller.clearCandidate() }, enabled = !state.busy,
-                        label = { Text(stringResource(if (provider.bases.isEmpty()) R.string.chat_gateway_key else R.string.chat_api_key)) },
+                    PlannerTextField(key, { key = it; controller.clearCandidate() }, enabled = !state.busy,
+                        placeholder = if (provider.bases.isEmpty()) R.string.chat_gateway_key else R.string.chat_api_key,
                         singleLine = true, visualTransformation = PasswordVisualTransformation(),
                         supportingText = if (saved != null) ({ Text(stringResource(R.string.chat_existing_key)) }) else null)
                     if (provider == GatewayProvider.Yandex) {
-                        OutlinedTextField(project, { project = it; controller.clearCandidate() }, enabled = !state.busy,
-                            label = { Text(stringResource(R.string.chat_yandex_project)) }, singleLine = true)
+                        PlannerTextField(project, { project = it; controller.clearCandidate() }, enabled = !state.busy,
+                            placeholder = R.string.chat_yandex_project, singleLine = true)
                     }
                     if (provider.configuredModels?.isNotEmpty() == true) {
-                        OutlinedTextField(modelIds, { modelIds = it; controller.clearCandidate() }, enabled = !state.busy,
-                            label = { Text(stringResource(R.string.chat_model_ids)) }, maxLines = 3)
+                        PlannerTextField(modelIds, { modelIds = it; controller.clearCandidate() }, enabled = !state.busy,
+                            placeholder = R.string.chat_model_ids, maxLines = 3)
                     }
                     if (provider == GatewayProvider.GigaChat) {
                         val labels = GigaScope.entries.associateWith { stringResource(it.label) }

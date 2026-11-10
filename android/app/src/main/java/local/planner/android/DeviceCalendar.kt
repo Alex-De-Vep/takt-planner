@@ -6,6 +6,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.database.Cursor
+import android.net.Uri
 import android.provider.CalendarContract
 import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
@@ -117,16 +118,41 @@ internal class DeviceCalendar(private val context: Context, private val workspac
             body.put(Events.CALENDAR_ID, values.calendarId)
             checkNotNull(resolver.insert(Events.CONTENT_URI, body))
         } else {
-            check(values.calendarId == original.calendarId && original.editable && !original.recurring)
-            val uri = ContentUris.withAppendedId(Events.CONTENT_URI, original.id)
-            val current = resolver.query(uri, arrayOf(Events.DTSTART, Events.DTEND, Events.DELETED, Events.STATUS) + eventColumns,
-                null, null, null).rows {
-                if (getInt(2) != 0 || getInt(3) == Events.STATUS_CANCELED) null
-                else event(original.id, getLong(0), getLong(1), 4)
-            }.singleOrNull()
-            if (current != original) throw StaleCalendarEvent()
+            check(values.calendarId == original.calendarId)
+            val uri = unchangedEvent(original)
             check(resolver.update(uri, body, null, null) == 1)
         }
+    }
+
+    fun delete(original: PhoneEvent) {
+        check(mayRead() && mayWrite())
+        check(calendars().any { it.id == original.calendarId && it.writable })
+        unchangedEvent(original)
+        val selection = listOf(
+            "${Events._ID} = ?", "${Events.CALENDAR_ID} = ?", "${Events.DELETED} = 0",
+            "COALESCE(${Events.STATUS}, 0) != ${Events.STATUS_CANCELED}",
+            "${Events.DTSTART} = ?", "${Events.DTEND} = ?", "${Events.ALL_DAY} = ?",
+            "COALESCE(${Events.TITLE}, '') = ?", "COALESCE(${Events.DESCRIPTION}, '') = ?",
+            "COALESCE(${Events.EVENT_LOCATION}, '') = ?", "COALESCE(${Events.EVENT_TIMEZONE}, '') = ?",
+        ) + recurrenceColumns.map { "COALESCE($it, '') = ''" }
+        val args = arrayOf(
+            original.id.toString(), original.calendarId.toString(), original.start.toString(), original.end.toString(),
+            if (original.allDay) "1" else "0", original.title, original.description, original.location, original.zoneId,
+        )
+        // Apply the recurrence and snapshot checks inside the provider's delete transaction too.
+        if (resolver.delete(Events.CONTENT_URI, selection.joinToString(" AND "), args) != 1) throw StaleCalendarEvent()
+    }
+
+    private fun unchangedEvent(original: PhoneEvent): Uri {
+        check(original.editable && !original.recurring)
+        val uri = ContentUris.withAppendedId(Events.CONTENT_URI, original.id)
+        val current = resolver.query(uri, arrayOf(Events.DTSTART, Events.DTEND, Events.DELETED, Events.STATUS) + eventColumns,
+            null, null, null).rows {
+            if (getInt(2) != 0 || getInt(3) == Events.STATUS_CANCELED) null
+            else event(original.id, getLong(0), getLong(1), 4)
+        }.singleOrNull()
+        if (current != original) throw StaleCalendarEvent()
+        return uri
     }
 
     private fun Cursor.event(id: Long, start: Long, end: Long, offset: Int): PhoneEvent {
@@ -139,9 +165,10 @@ internal class DeviceCalendar(private val context: Context, private val workspac
     }
 
     private companion object {
+        val recurrenceColumns = arrayOf(Events.RRULE, Events.RDATE, Events.EXRULE, Events.EXDATE, Events.ORIGINAL_ID)
         val eventColumns = arrayOf(Events.CALENDAR_ID, Events.TITLE, Events.DESCRIPTION, Events.EVENT_LOCATION,
-            Events.EVENT_TIMEZONE, Events.ALL_DAY, Events.RRULE, Events.RDATE, Events.EXRULE, Events.EXDATE, Events.ORIGINAL_ID,
-            Calendars.CALENDAR_ACCESS_LEVEL, Events.IS_ORGANIZER, Events.GUESTS_CAN_MODIFY, Events.ORGANIZER)
+            Events.EVENT_TIMEZONE, Events.ALL_DAY) + recurrenceColumns +
+            arrayOf(Calendars.CALENDAR_ACCESS_LEVEL, Events.IS_ORGANIZER, Events.GUESTS_CAN_MODIFY, Events.ORGANIZER)
     }
 }
 

@@ -26,6 +26,7 @@
     <string name="task_details">Задача</string>
     <string name="task_title">Название</string>
     <string name="description">Описание</string>
+    <string name="add_description">Добавить описание</string>
     <string name="show_in_today">Показывать в «Сегодня»</string>
     <string name="deadline">Срок</string>
     <string name="choose_date">Выбрать дату</string>
@@ -91,7 +92,7 @@
     <string name="cloud_error">Не удалось синхронизироваться с сервером.</string>
     <string name="deadline_notifications">Напоминания о сроках</string>
     <string name="notification_hint">Напоминания о сроках без времени учитывают часовой пояс срока. Android может задержать доставку.</string>
-    <string name="settings_date_only_time">Время для сроков без времени</string>
+    <string name="settings_date_only_time">Время напоминания</string>
     <string name="notification_denied">Разрешите уведомления в настройках Android, чтобы получать напоминания.</string>
     <string name="events">События</string>
     <string name="chat">Чат</string>
@@ -140,9 +141,14 @@
     <string name="event_start">Начало</string>
     <string name="event_end">Окончание</string>
     <string name="event_location">Место</string>
+    <string name="add_event_location">Добавить место</string>
+    <string name="event_save_calendar">Календарь для сохранения</string>
     <string name="event_time_error">Выберите допустимое время окончания позже начала.</string>
     <string name="event_stale">Событие изменилось. Закройте редактор и откройте событие снова.</string>
     <string name="calendar_write_error">Не удалось сохранить событие.</string>
+    <string name="delete_event">Удалить событие</string>
+    <string name="delete_event_hint">Событие будет удалено из календаря.</string>
+    <string name="event_delete_error">Не удалось удалить событие.</string>
     <string name="calendar_write_permission">Разрешите изменение календаря в настройках Android.</string>
     <string name="no_writable_calendar">Подключите календарь, в который можно сохранять события.</string>
     <string name="chat_rate_limited">Шлюз занят. Повторите попытку чуть позже.</string>

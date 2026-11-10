@@ -177,7 +177,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         draft: TaskDraft, done: () -> Unit, proposal: ChatProposal? = null, failed: () -> Unit = {},
         completion: Boolean? = null,
     ) {
-        if (draft.saving || !validText(draft.title, 16_384) || !validText(draft.description, 1_048_576) ||
+        if (draft.saving || !finishChecklistEdit(draft) || !validText(draft.title, 16_384) || !validText(draft.description, 1_048_576) ||
             draft.newItems.any { !validText(it, 16_384) }) {
             failed()
             return
@@ -197,9 +197,16 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         if (draft.deadline != original?.deadline) fields["deadline"] = draft.deadline?.wire() ?: JsonNull.INSTANCE
         if (draft.focused != (original != null && draft.originalFocus)) fields["focusDay"] = value(FOCUS_MARK.takeIf { draft.focused })
         if (completion != null) fields["completedAt"] = value(wireTime().takeIf { completion })
-        val firstOrder = nextOrder(current.items(id))
+        val items = current.items(id)
+        val firstOrder = nextOrder(items)
         val edits = buildList {
             if (fields.isNotEmpty()) add(Edit(id, "task", if (original == null) "create" else "update", fields))
+            items.forEach { item ->
+                val title = draft.itemTitles[item.id]
+                if (title != null && title != item.text("title")) {
+                    add(Edit(item.id, item.type, "update", mapOf("title" to value(title))))
+                }
+            }
             draft.newItems.forEachIndexed { index, text ->
                 add(checklistEdit(id, text.trim(), (firstOrder.toLong() + index).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()))
             }
@@ -257,9 +264,21 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         apply(listOf(Edit(existing?.id ?: newId(), "folder", if (existing == null) "create" else "update", fields)), done)
     }
 
-    fun updateItem(item: Entity, title: String, done: () -> Unit) {
-        if (!validText(title, 16_384)) return
-        apply(listOf(Edit(item.id, item.type, "update", mapOf("title" to value(title.trim())))), done)
+    fun finishChecklistEdit(draft: TaskDraft): Boolean {
+        val edit = draft.checklistEdit ?: return true
+        if (edit.hasChanges) {
+            val title = edit.text.trim()
+            if (!validText(title, 16_384)) return false
+            when (val target = edit.target) {
+                ChecklistTarget.Add -> draft.newItems = draft.newItems + title
+                is ChecklistTarget.Saved -> draft.itemTitles = draft.itemTitles + (target.id to title)
+                is ChecklistTarget.Draft -> draft.newItems = draft.newItems.mapIndexed { index, previous ->
+                    if (index == target.index) title else previous
+                }
+            }
+        }
+        draft.checklistEdit = null
+        return true
     }
 
     fun toggleItem(item: Entity) = apply(listOf(Edit(item.id, item.type, "update", mapOf(
@@ -306,6 +325,16 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     }
 }
 
+internal sealed interface ChecklistTarget {
+    data object Add : ChecklistTarget
+    data class Saved(val id: String) : ChecklistTarget
+    data class Draft(val index: Int) : ChecklistTarget
+}
+
+internal data class ChecklistEdit(val target: ChecklistTarget, val initial: String, val text: String = initial) {
+    val hasChanges get() = text.isNotBlank() && text.trim() != initial.trim()
+}
+
 internal class TaskDraft(
     val workspace: String, val original: Entity?, val originalLocation: String, val originalFocus: Boolean,
 ) {
@@ -315,10 +344,13 @@ internal class TaskDraft(
     var focused by mutableStateOf(originalFocus)
     var deadline by mutableStateOf(original?.deadline)
     var newItems by mutableStateOf(emptyList<String>())
+    var itemTitles by mutableStateOf(emptyMap<String, String>())
+    var checklistEdit by mutableStateOf<ChecklistEdit?>(null)
     var saving by mutableStateOf(false)
 
     val dirty get() = title != original?.text("title").orEmpty() || description != original?.text("description").orEmpty() ||
-        location != originalLocation || focused != originalFocus || deadline != original?.deadline || newItems.isNotEmpty()
+        location != originalLocation || focused != originalFocus || deadline != original?.deadline ||
+        newItems.isNotEmpty() || itemTitles.isNotEmpty() || checklistEdit?.hasChanges == true
 }
 
 internal fun Entity.inSection(section: String, library: Library): Boolean = when (section) {

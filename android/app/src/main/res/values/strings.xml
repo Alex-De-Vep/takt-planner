@@ -26,6 +26,7 @@
     <string name="task_details">Task</string>
     <string name="task_title">Title</string>
     <string name="description">Description</string>
+    <string name="add_description">Add description</string>
     <string name="show_in_today">Show in Today</string>
     <string name="deadline">Deadline</string>
     <string name="choose_date">Choose date</string>
@@ -91,7 +92,7 @@
     <string name="cloud_error">Could not sync with the server.</string>
     <string name="deadline_notifications">Deadline reminders</string>
     <string name="notification_hint">Date-only reminders use the deadline’s time zone. Android may delay delivery.</string>
-    <string name="settings_date_only_time">Time for date-only reminders</string>
+    <string name="settings_date_only_time">Reminder time</string>
     <string name="notification_denied">Allow notifications in Android settings to receive reminders.</string>
     <string name="events">Events</string>
     <string name="chat">Chat</string>
@@ -140,9 +141,14 @@
     <string name="event_start">Starts</string>
     <string name="event_end">Ends</string>
     <string name="event_location">Location</string>
+    <string name="add_event_location">Add location</string>
+    <string name="event_save_calendar">Save to calendar</string>
     <string name="event_time_error">Choose valid times and an end after the start.</string>
     <string name="event_stale">This event changed. Close the editor and open it again.</string>
     <string name="calendar_write_error">Could not save the event.</string>
+    <string name="delete_event">Delete event</string>
+    <string name="delete_event_hint">This event will be removed from the calendar.</string>
+    <string name="event_delete_error">Could not delete the event.</string>
     <string name="calendar_write_permission">Allow calendar editing in Android settings.</string>
     <string name="no_writable_calendar">Add a writable calendar on this device.</string>
     <string name="chat_rate_limited">The gateway is busy. Try again shortly.</string>

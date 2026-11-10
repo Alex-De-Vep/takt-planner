@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -143,7 +144,7 @@ private fun CreationCalendarSetting(calendar: DeviceCalendar, refresh: Int) {
 @Composable
 private fun PreferenceRow(label: Int, value: String, enabled: Boolean = true, onClick: () -> Unit) {
     TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(vertical = 6.dp)) {
+        shape = RectangleShape, contentPadding = PaddingValues(vertical = 6.dp)) {
         Text(stringResource(label), Modifier.weight(1f).padding(end = 12.dp))
         Text(value, Modifier.weight(0.8f), textAlign = TextAlign.End,
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,

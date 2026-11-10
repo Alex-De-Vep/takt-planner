@@ -33,7 +33,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -227,7 +226,7 @@ internal fun CalendarChooser(calendar: DeviceCalendar, done: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismiss: () -> Unit, saved: () -> Unit) {
+internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismiss: () -> Unit, changed: () -> Unit) {
     val original = request.event
     val readOnly = original != null && !original.editable
     val zone = original?.zoneId?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
@@ -247,6 +246,7 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
     var selected by rememberSaveable { mutableStateOf(original?.calendarId) }
     var menu by remember { mutableStateOf(false) }
     var picker by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf<Int?>(null) }
     var canRead by remember { mutableStateOf(calendar.mayRead()) }
@@ -261,6 +261,22 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
     val destination = calendars.firstOrNull { it.id == selected }
         ?: if (original == null) calendar.creationCalendar(writable) else null
     val scope = rememberCoroutineScope()
+    fun write(fallbackError: Int, operation: () -> Unit) {
+        if (busy) return
+        busy = true
+        error = null
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { operation() }
+                changed()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                error = if (failure is StaleCalendarEvent) R.string.event_stale else fallbackError
+            } finally {
+                busy = false
+            }
+        }
+    }
     val save = save@{
         if (busy || destination == null) return@save
         val startMillis = if (allDay) eventTime(start.toLocalDate().atStartOfDay(), ZoneOffset.UTC)
@@ -271,25 +287,20 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
             error = R.string.event_time_error
             return@save
         }
-        busy = true
-        error = null
-        scope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    calendar.save(original, EventValues(destination.id, title.trim(), description, location,
-                        startMillis, endMillis, if (allDay) "UTC" else zone.id, allDay))
-                }
-                saved()
-            } catch (failure: Exception) {
-                if (failure is CancellationException) throw failure
-                error = if (failure is StaleCalendarEvent) R.string.event_stale else R.string.calendar_write_error
-            } finally {
-                busy = false
-            }
+        val values = EventValues(destination.id, title.trim(), description, location,
+            startMillis, endMillis, if (allDay) "UTC" else zone.id, allDay)
+        write(R.string.calendar_write_error) {
+            calendar.save(original, values)
         }
     }
     val requestWrite = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         if (it) save() else error = R.string.calendar_write_permission
+    }
+    val delete = {
+        if (original != null) write(R.string.event_delete_error) { calendar.delete(original) }
+    }
+    val requestDelete = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        if (it) delete() else error = R.string.calendar_write_permission
     }
     val navigateBack = { if (!busy) dismiss() }
     BackHandler(onBack = navigateBack)
@@ -302,6 +313,13 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
                     else -> R.string.new_event
                 })) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, enabled = !busy, onClick = navigateBack) },
+                actions = {
+                    if (original != null && !readOnly) {
+                        ActionIcon(R.drawable.ic_delete, R.string.delete_event, enabled = !busy && destination?.writable == true) {
+                            confirmDelete = true
+                        }
+                    }
+                },
             )
         },
         bottomBar = {
@@ -317,6 +335,26 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
                 Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (destination != null) {
+                    Column {
+                        Text(stringResource(R.string.event_save_calendar), style = MaterialTheme.typography.labelLarge)
+                        if (original == null) {
+                            Box {
+                                TextButton(onClick = { menu = true }, enabled = !busy) {
+                                    Text(destination.name)
+                                    Glyph(R.drawable.ic_chevron_down, tint = MaterialTheme.colorScheme.primary)
+                                }
+                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                    writable.forEach {
+                                        DropdownMenuItem(text = { Text(it.name) }, onClick = { selected = it.id; menu = false })
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(destination.name)
+                        }
+                    }
+                }
                 if (!canRead) {
                     Text(stringResource(R.string.calendar_read_hint))
                     TextButton(onClick = { requestRead.launch(Manifest.permission.READ_CALENDAR) }) {
@@ -325,19 +363,9 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
                 } else if (!readOnly && destination?.writable != true) {
                     Text(stringResource(R.string.no_writable_calendar))
                 }
-                OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth().focusNewTitle(original == null),
-                    label = { Text(stringResource(R.string.event_title)) },
+                PlannerTextField(title, { title = it }, Modifier.fillMaxWidth().focusOnEntry(original == null),
+                    placeholder = R.string.event_title,
                     singleLine = true, enabled = !busy, readOnly = readOnly)
-                Box {
-                    TextButton(onClick = { menu = true }, enabled = !busy && original == null && writable.isNotEmpty()) {
-                        Text(destination?.name ?: stringResource(R.string.calendars))
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        writable.forEach {
-                            DropdownMenuItem(text = { Text(it.name) }, onClick = { selected = it.id; menu = false })
-                        }
-                    }
-                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(allDay, {
                         allDay = it
@@ -351,12 +379,18 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
                 }
                 EventDateTime(R.string.event_start, start, allDay, readOnly, !busy) { picker = "start$it" }
                 EventDateTime(R.string.event_end, end, allDay, readOnly, !busy) { picker = "end$it" }
-                OutlinedTextField(location, { location = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.event_location)) },
+                OptionalEditorField(location, { location = it }, R.string.event_location, R.string.add_event_location,
                     enabled = !busy, readOnly = readOnly)
-                OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.description)) },
-                    enabled = !busy, readOnly = readOnly, minLines = 3)
+                OptionalEditorField(description, { description = it }, R.string.description, R.string.add_description,
+                    enabled = !busy, readOnly = readOnly)
                 error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
             }
+        }
+    }
+    if (confirmDelete) {
+        Confirm(R.string.delete_event, R.string.delete_event_hint, R.string.delete, { confirmDelete = false }) {
+            confirmDelete = false
+            if (calendar.mayWrite()) delete() else requestDelete.launch(Manifest.permission.WRITE_CALENDAR)
         }
     }
     picker?.let { field ->

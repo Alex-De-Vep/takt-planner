@@ -34,7 +34,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -225,9 +224,9 @@ private fun TaskList(
         }
     }
     if (searching) {
-        OutlinedTextField(
+        PlannerTextField(
             value = search, onValueChange = { search = it }, singleLine = true,
-            label = { Text(stringResource(R.string.search)) },
+            placeholder = R.string.search,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
         )
     }

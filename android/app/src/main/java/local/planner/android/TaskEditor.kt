@@ -2,6 +2,7 @@ package local.planner.android
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,13 +19,13 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,6 +39,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,6 +74,14 @@ internal fun TaskEditor(
         library.folders.any { folder -> folder.id == it } } ?: "inbox"
     var action by rememberSaveable { mutableStateOf<String?>(null) }
     var folderMenu by remember { mutableStateOf(false) }
+    val hadDescription = rememberSaveable { draft.description.isNotEmpty() }
+    var addingDescription by rememberSaveable { mutableStateOf(false) }
+    val showDescription = hadDescription || addingDescription || draft.description.isNotEmpty()
+    val openChecklistEditor: (ChecklistTarget, String) -> Unit = { target, title ->
+        if (draft.checklistEdit?.target != target && model.finishChecklistEdit(draft)) {
+            draft.checklistEdit = ChecklistEdit(target, title)
+        }
+    }
 
     val finish = {
         model.closeDraft()
@@ -128,10 +138,17 @@ internal fun TaskEditor(
                         }
                     }
                 }
-                OutlinedTextField(draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusNewTitle(task == null), singleLine = true,
-                    enabled = !draft.saving, label = { Text(stringResource(R.string.task_title)) })
-                OutlinedTextField(draft.description, { draft.description = it }, Modifier.fillMaxWidth(), minLines = 3,
-                    enabled = !draft.saving, label = { Text(stringResource(R.string.description)) })
+                PlannerTextField(
+                    draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(task == null),
+                    placeholder = R.string.task_title, singleLine = true, enabled = !draft.saving,
+                    textStyle = MaterialTheme.typography.headlineSmall,
+                )
+                if (showDescription) {
+                    EditorDetailField(
+                        draft.description, { draft.description = it }, R.string.description,
+                        enabled = !draft.saving, focusOnEntry = addingDescription,
+                    )
+                }
                 val accent = MaterialTheme.colorScheme.primary
                 val inactive = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -145,7 +162,12 @@ internal fun TaskEditor(
                     ActionIcon(R.drawable.ic_calendar, R.string.choose_date, if (deadline != null) accent else inactive,
                         enabled = !draft.saving) { action = "date" }
                     ActionIcon(R.drawable.ic_add_subtask, R.string.add_item, inactive, enabled = !draft.saving) {
-                        action = "item"
+                        openChecklistEditor(ChecklistTarget.Add, "")
+                    }
+                    if (!showDescription) {
+                        ActionIcon(R.drawable.ic_list, R.string.add_description, inactive, enabled = !draft.saving) {
+                            addingDescription = true
+                        }
                     }
                 }
                 if (deadline != null) {
@@ -166,26 +188,46 @@ internal fun TaskEditor(
                     }
                 }
                 val items = task?.let { library.items(it.id) }.orEmpty()
-                if (items.isNotEmpty() || draft.newItems.isNotEmpty()) {
+                val checklistEdit = draft.checklistEdit
+                if (items.isNotEmpty() || draft.newItems.isNotEmpty() || checklistEdit != null) {
                     Text(stringResource(R.string.checklist), style = MaterialTheme.typography.titleMedium)
                 }
+                if (checklistEdit?.target == ChecklistTarget.Add) InlineChecklistEditor(checklistEdit, draft, model)
                 items.forEach { item ->
-                    val itemTitle = item.text("title").orEmpty()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(item.flag("isCompleted"), { model.toggleItem(item) }, Modifier.semantics {
-                            contentDescription = itemTitle
-                        }, enabled = !draft.saving)
-                        Text(itemTitle, Modifier.weight(1f))
-                        ActionIcon(R.drawable.ic_edit, R.string.edit_item, enabled = !draft.saving) { action = "item:${item.id}" }
-                        ActionIcon(R.drawable.ic_delete, R.string.delete_item, enabled = !draft.saving) { model.remove(item) }
+                    key(item.id) {
+                        val target = ChecklistTarget.Saved(item.id)
+                        if (checklistEdit?.target == target) {
+                            InlineChecklistEditor(checklistEdit, draft, model)
+                        } else {
+                            val itemTitle = draft.itemTitles[item.id] ?: item.text("title").orEmpty()
+                            val edit = { openChecklistEditor(target, itemTitle) }
+                            Row(verticalAlignment = Alignment.Top) {
+                                Checkbox(item.flag("isCompleted"), { model.toggleItem(item) }, Modifier.semantics {
+                                    contentDescription = itemTitle
+                                }, enabled = !draft.saving)
+                                Text(itemTitle, Modifier.weight(1f).clickable(enabled = !draft.saving, onClick = edit)
+                                    .padding(vertical = 12.dp))
+                                ActionIcon(R.drawable.ic_edit, R.string.edit_item, enabled = !draft.saving, onClick = edit)
+                                ActionIcon(R.drawable.ic_delete, R.string.delete_item, enabled = !draft.saving) { model.remove(item) }
+                            }
+                        }
                     }
                 }
                 draft.newItems.forEachIndexed { index, text ->
-                    Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(text, Modifier.weight(1f))
-                        ActionIcon(R.drawable.ic_edit, R.string.edit_item, enabled = !draft.saving) { action = "draft:$index" }
-                        ActionIcon(R.drawable.ic_delete, R.string.delete_item, enabled = !draft.saving) {
-                            draft.newItems = draft.newItems.filterIndexed { i, _ -> i != index }
+                    val target = ChecklistTarget.Draft(index)
+                    if (checklistEdit?.target == target) {
+                        InlineChecklistEditor(checklistEdit, draft, model)
+                    } else {
+                        val edit = { openChecklistEditor(target, text) }
+                        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.Top) {
+                            Text(text, Modifier.weight(1f).clickable(enabled = !draft.saving, onClick = edit)
+                                .padding(vertical = 12.dp))
+                            ActionIcon(R.drawable.ic_edit, R.string.edit_item, enabled = !draft.saving, onClick = edit)
+                            ActionIcon(R.drawable.ic_delete, R.string.delete_item, enabled = !draft.saving) {
+                                if (model.finishChecklistEdit(draft)) {
+                                    draft.newItems = draft.newItems.filterIndexed { i, _ -> i != index }
+                                }
+                            }
                         }
                     }
                 }
@@ -194,7 +236,7 @@ internal fun TaskEditor(
     }
 
     val dismiss = { action = null }
-    when (val dialog = action) {
+    when (action) {
         "discard" -> Confirm(R.string.discard_title, R.string.discard_hint, R.string.discard, dismiss, finish)
         "delete" -> if (task != null) {
             Confirm(R.string.delete_task, R.string.delete_task_hint, R.string.delete, dismiss) { model.remove(task, finish) }
@@ -213,28 +255,30 @@ internal fun TaskEditor(
             draft.deadline = Deadline(day, day.atTime(time).atZone(zone).toInstant(), zone)
             dismiss()
         }
-        "item" -> NameDialog(R.string.add_item, R.string.item_title, "", dismiss) { text ->
-            draft.newItems = draft.newItems + text
-            dismiss()
-        }
-        else -> {
-            val itemId = dialog?.substringAfter("item:", "")?.takeIf(String::isNotBlank)
-            val item = task?.let { library.items(it.id) }?.firstOrNull { it.id == itemId }
-            val index = dialog?.substringAfter("draft:", "")?.toIntOrNull()
-            if (item != null) NameDialog(R.string.edit_item, R.string.item_title, item.text("title").orEmpty(), dismiss) {
-                model.updateItem(item, it, dismiss)
+    }
+}
+
+@Composable
+private fun InlineChecklistEditor(edit: ChecklistEdit, draft: TaskDraft, model: PlannerModel) {
+    Column(Modifier.revealAboveKeyboard()) {
+        PlannerTextField(
+            edit.text, { draft.checklistEdit = edit.copy(text = it) }, Modifier.fillMaxWidth().focusOnEntry(true),
+            placeholder = R.string.item_title, enabled = !draft.saving, minLines = 2, maxLines = 6,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { draft.checklistEdit = null }, enabled = !draft.saving) {
+                Text(stringResource(R.string.cancel))
             }
-            if (index != null && index in draft.newItems.indices) NameDialog(R.string.edit_item, R.string.item_title, draft.newItems[index], dismiss) {
-                draft.newItems = draft.newItems.toMutableList().apply { set(index, it) }
-                dismiss()
+            TextButton(onClick = { model.finishChecklistEdit(draft) }, enabled = !draft.saving && edit.text.isNotBlank()) {
+                Text(stringResource(R.string.ok))
             }
         }
     }
 }
 
 @Composable
-internal fun Modifier.focusNewTitle(creating: Boolean): Modifier {
-    if (!creating) return this
+internal fun Modifier.focusOnEntry(enabled: Boolean): Modifier {
+    if (!enabled) return this
     val requester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     var requested by rememberSaveable { mutableStateOf(false) }
@@ -304,7 +348,7 @@ internal fun PickDate(initial: LocalDate?, dismiss: () -> Unit, choose: (LocalDa
             }, enabled = state.selectedDateMillis != null) { Text(stringResource(R.string.ok)) }
         },
         dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } },
-    ) { DatePicker(state, title = null, headline = null) }
+    ) { DatePicker(state, title = null, headline = null, colors = DatePickerDefaults.colors(dateTextFieldColors = plannerTextFieldColors())) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -345,7 +389,7 @@ internal fun NameDialog(title: Int, label: Int, initial: String, dismiss: () -> 
     var text by rememberSaveable(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = dismiss, title = { Text(stringResource(title)) },
-        text = { OutlinedTextField(text, { text = it }, singleLine = true, label = { Text(stringResource(label)) }) },
+        text = { PlannerTextField(text, { text = it }, placeholder = label, singleLine = true) },
         confirmButton = { TextButton(onClick = { submit(text) }, enabled = text.isNotBlank()) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } },
     )

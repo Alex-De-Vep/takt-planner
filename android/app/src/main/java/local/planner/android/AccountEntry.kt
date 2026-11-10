@@ -18,7 +18,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -183,17 +182,17 @@ private fun AccountDialog(initial: AccountForm, cloud: CloudState, model: Planne
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (confirming) Text(stringResource(R.string.email_code_hint, email))
                 if (!confirming) {
-                    OutlinedTextField(email, { email = it }, label = { Text(stringResource(R.string.email)) },
+                    PlannerTextField(email, { email = it }, placeholder = R.string.email,
                         singleLine = true, enabled = !cloud.busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 }
                 if (confirming) {
-                    OutlinedTextField(code, { code = it.filter { digit -> digit in '0'..'9' }.take(8) },
-                        label = { Text(stringResource(R.string.email_code)) }, singleLine = true, enabled = !cloud.busy,
+                    PlannerTextField(code, { code = it.filter { digit -> digit in '0'..'9' }.take(8) },
+                        placeholder = R.string.email_code, singleLine = true, enabled = !cloud.busy,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 }
                 if (mode != AccountForm.Reset) {
-                    OutlinedTextField(password, { password = it },
-                        label = { Text(stringResource(if (mode == AccountForm.ResetCode) R.string.new_password else R.string.password)) },
+                    PlannerTextField(password, { password = it },
+                        placeholder = if (mode == AccountForm.ResetCode) R.string.new_password else R.string.password,
                         singleLine = true, enabled = !cloud.busy, visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         supportingText = if (mode != AccountForm.SignIn) ({ Text(stringResource(R.string.password_rules)) }) else null)
