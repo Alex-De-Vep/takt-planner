@@ -5,6 +5,18 @@
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key><true/>
+        <!-- Для этих доменов проверяем цепочку HTTPS с корнем GigaChat внутри приложения. -->
+        <key>NSExceptionDomains</key>
+        <dict>
+            <key>ngw.devices.sberbank.ru</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+            </dict>
+            <key>api.giga.chat</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key><true/>
+            </dict>
+        </dict>
     </dict>
     <key>UTExportedTypeDeclarations</key>
     <array>

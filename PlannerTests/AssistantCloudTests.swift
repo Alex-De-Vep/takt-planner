@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import Planner
 
@@ -23,6 +24,51 @@ import Testing
             {"id":"\(UUID())","title":"Old chat","draft":"","messages":[],"actions":[],"createdAt":0}
             """.utf8)
         #expect(try JSONDecoder().decode(AssistantThread.self, from: data).cloud == nil)
+    }
+
+    @Test func gigaChatTrustIsRestrictedToItsHTTPSOrigins() throws {
+        #expect(GigaChatTrust.allows(GigaChatTrust.tokenURL))
+        #expect(GigaChatTrust.allows(GigaChatTrust.apiBase))
+        for address in ["http://api.giga.chat/v1", "https://api.giga.chat:9443/v1",
+                        "https://ngw.devices.sberbank.ru/api/v2/oauth", "https://other.api.giga.chat/v1",
+                        "https://api.giga.chat.example.com/v1", "https://name@api.giga.chat/v1"] {
+            #expect(!GigaChatTrust.allows(URL(string: address)!))
+        }
+        let anchor = try #require(GigaChatTrust.bundledAnchor)
+        let root = try #require(SecCertificateCreateWithData(nil, anchor as CFData))
+        #expect(GigaChatTrust.evaluate(chain: [root], host: "api.giga.chat", port: 443, anchor: anchor) == nil)
+    }
+
+    @Test(arguments: [AssistantGateway?.none, .some(.deepSeek)])
+    func clearingHistoryKeepsCloudSelectionAcrossReopen(gateway: AssistantGateway?) throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "ClearChat-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AssistantStore(url: directory.appending(path: "chat.json"))
+        let profileID = gateway == nil ? nil : UUID()
+        let accountID = gateway == nil ? "test-account" : nil
+        var thread = AssistantThread()
+        thread.messages = [.init(role: .user, text: "Old history")]
+        thread.draft = "Old draft"
+        thread.chooseModel(id: "test-model", efforts: ["high"], accountID: accountID, gateway: gateway, profileID: profileID)
+        thread.cloud?.effort = "high"
+        let action = AssistantAction(proposal: proposal(), context: context)
+        thread.actions = [action]
+        thread.cloud?.draftIDs = [action.id]
+        thread.clarificationContext = context
+        try store.save(.init(currentID: thread.id, threads: [AssistantThread(), thread]))
+
+        let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
+        service.clearHistory()
+
+        let saved = try store.load()
+        let cleared = try #require(saved.threads.first)
+        #expect(saved.threads.count == 1 && saved.currentID == cleared.id && cleared.id != thread.id)
+        #expect(cleared.messages.isEmpty && cleared.actions.isEmpty && cleared.draft.isEmpty)
+        #expect(cleared.clarificationContext == nil)
+        #expect(cleared.usesCloudModel && cleared.cloud?.modelID == "test-model")
+        #expect(cleared.cloud?.accountID == accountID && cleared.cloud?.gateway == gateway)
+        #expect(cleared.cloud?.gatewayProfileID == profileID && cleared.cloud?.effort == "high")
+        #expect(cleared.cloud?.historyStart == 0 && cleared.cloud?.draftIDs == [])
     }
 
     @Test func requestSendsOnlyExplicitTaskAndSmallHistory() throws {
