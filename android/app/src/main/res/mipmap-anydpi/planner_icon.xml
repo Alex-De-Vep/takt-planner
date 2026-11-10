@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="315"
+                android:startColor="#8C40FF"
+                android:endColor="#5710E6" />
+        </shape>
+    </background>
+    <foreground>
+        <!-- Keep the checklist inside the round mask while the purple layer fills the tile. -->
+        <inset
+            android:drawable="@drawable/planner_icon_artwork"
+            android:inset="13%" />
+    </foreground>
+</adaptive-icon>

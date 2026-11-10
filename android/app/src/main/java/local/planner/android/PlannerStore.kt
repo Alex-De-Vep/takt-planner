@@ -2,13 +2,22 @@ package local.planner.android
 
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
+import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-internal data class Connection(val profile: Profile, val credential: String?)
+internal data class Connection(
+    val profile: Profile,
+    val credential: String?,
+    val refreshing: Boolean = false,
+    val initializeEmpty: Boolean = false,
+)
 
 internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "planner.db", null, 1) {
     private val _library = MutableStateFlow(Library())
@@ -29,7 +38,10 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Unsupported schema")
 
     @Synchronized
-    fun load() = publish()
+    fun load() {
+        val interrupted = connection()?.takeIf(Connection::refreshing)
+        if (interrupted == null) publish() else disconnect(interrupted.profile)
+    }
 
     @Synchronized
     fun deviceId(): String = writableDatabase.transaction {
@@ -42,38 +54,46 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
     }
 
     @Synchronized
-    fun connect(profile: Profile, credential: String, snapshot: Snapshot) {
+    fun beginConnection(connection: Connection) {
+        writableDatabase.transaction {
+            setting("connection", json.toJson(connection))
+            delete("settings", "key = ?", arrayOf("active"))
+        }
+        publish()
+    }
+
+    @Synchronized
+    fun activate(profile: Profile, snapshot: Snapshot) {
+        check(connection()?.profile == profile)
         writableDatabase.transaction {
             replaceSnapshot(profile.workspace, snapshot)
-            setting("connection", json.toJson(Connection(profile, credential)))
             setting("active", profile.workspace)
         }
         publish()
     }
 
     @Synchronized
-    fun credential(profile: Profile, credential: String?) {
-        if (connection()?.profile != profile) return
-        writableDatabase.setting("connection", json.toJson(Connection(profile, credential)))
+    fun credential(profile: Profile, credential: String, refreshing: Boolean = false) {
+        val current = connection()?.takeIf { it.profile == profile } ?: return
+        writableDatabase.setting("connection", json.toJson(current.copy(credential = credential, refreshing = refreshing)))
     }
 
     @Synchronized
-    fun useLocal() {
-        writableDatabase.setting("active", LOCAL_WORKSPACE)
+    fun disconnect(profile: Profile) {
+        val current = connection()?.takeIf { it.profile == profile } ?: return
+        writableDatabase.transaction {
+            setting("connection", json.toJson(current.copy(credential = null, refreshing = false)))
+            delete("settings", "key = ?", arrayOf("active"))
+        }
         publish()
     }
 
     @Synchronized
-    fun useCloud(profile: Profile) {
-        if (connection()?.profile != profile) return
-        writableDatabase.setting("active", profile.workspace)
-        publish()
-    }
-
-    @Synchronized
-    fun edit(workspace: String, edits: List<Edit>, clockOffset: Long) {
+    fun edit(workspace: String, edits: List<Edit>, clockOffset: Long, proposal: ChatProposal? = null) {
         val displayed = _library.value
-        check(displayed.workspace == workspace)
+        val profile = checkNotNull(displayed.profile)
+        check(profile.workspace == workspace)
+        if (proposal != null && !proposal.matches(displayed)) throw StaleChatProposal()
         val deviceId = deviceId()
         writableDatabase.transaction {
             val clockKey = "clock:$workspace"
@@ -87,24 +107,30 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
                 val stamp = Stamp(physical, logical, deviceId, operationId)
                 clock = stamp
                 val mutation = Mutation(
-                    operationId, displayed.profile?.libraryId.orEmpty(), deviceId, edit.id, edit.type, edit.kind,
+                    operationId, profile.libraryId, deviceId, edit.id, edit.type, edit.kind,
                     edit.fields.takeUnless { it.isEmpty() }?.mapValues { FieldChange(it.value, stamp) },
                     stamp.takeIf { edit.kind == "delete" },
                 )
-                if (workspace == LOCAL_WORKSPACE) {
-                    val base = entity(workspace, edit.id)
-                    mutation.overlay(base)?.let { saveEntity(workspace, it) }
-                } else {
-                    insertOrThrow("outbox", null, ContentValues().apply {
-                        put("workspace", workspace)
-                        put("id", operationId)
-                        put("body", json.toJson(mutation))
-                    })
-                }
+                insertOrThrow("outbox", null, ContentValues().apply {
+                    put("workspace", workspace)
+                    put("id", operationId)
+                    putBody(json.toJson(mutation))
+                })
             }
             clock?.let { setting(clockKey, json.toJson(it)) }
         }
         publish()
+    }
+
+    @Synchronized
+    fun reorderFolders(workspace: String, requested: List<String>) {
+        val current = _library.value
+        check(current.profile?.workspace == workspace)
+        val available = current.folders.map(Entity::id)
+        val order = mergeFolderOrder(requested, available)
+        if (order == available) return
+        writableDatabase.setting("folderOrder:$workspace", json.toJson(order))
+        _library.value = current.copy(folderOrder = order)
     }
 
     @Synchronized
@@ -131,7 +157,7 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
             "outbox", arrayOf("body"), "workspace = ? AND error IS NULL", arrayOf(workspace),
             null, null, "sequence", "100",
         ).use { cursor -> buildList {
-            while (cursor.moveToNext()) add(json.fromJson(cursor.getString(0), Mutation::class.java))
+            while (cursor.moveToNext()) add(json.fromJson(cursor.body(), Mutation::class.java))
         } }
         return mutationBatch(queued)
     }
@@ -154,12 +180,16 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
 
     private fun publish() {
         val db = readableDatabase
-        val workspace = db.setting("active") ?: LOCAL_WORKSPACE
-        val profile = connection()?.profile?.takeIf { it.workspace == workspace }
+        val workspace = db.setting("active")
+        val profile = connection()?.takeIf { it.credential != null && it.profile.workspace == workspace }?.profile
+        if (profile == null || workspace == null || db.setting("cursor:$workspace") == null) {
+            _library.value = Library()
+            return
+        }
         val current = db.query("entities", arrayOf("body"), "workspace = ?", arrayOf(workspace), null, null, null)
             .use { cursor -> buildMap {
                 while (cursor.moveToNext()) {
-                    val entity = json.fromJson(cursor.getString(0), Entity::class.java)
+                    val entity = json.fromJson(cursor.body(), Entity::class.java)
                     put(entity.id, entity)
                 }
             }.toMutableMap() }
@@ -167,12 +197,15 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
         var rejected = 0
         db.query("outbox", arrayOf("body", "error"), "workspace = ?", arrayOf(workspace), null, null, "sequence").use { cursor ->
             while (cursor.moveToNext()) {
-                val mutation = json.fromJson(cursor.getString(0), Mutation::class.java)
+                val mutation = json.fromJson(cursor.body(), Mutation::class.java)
                 mutation.overlay(current[mutation.entityId])?.let { current[it.id] = it }
                 if (cursor.isNull(1)) pending++ else rejected++
             }
         }
-        _library.value = Library(workspace, profile, current.values.filterNot(Entity::deleted), pending, rejected)
+        val folderOrder = db.setting("folderOrder:$workspace")?.let {
+            json.fromJson(it, Array<String>::class.java).toList()
+        }.orEmpty()
+        _library.value = Library(workspace, profile, current.values.filterNot(Entity::deleted), pending, rejected, folderOrder)
     }
 
     private fun SQLiteDatabase.replaceSnapshot(workspace: String, snapshot: Snapshot) {
@@ -193,14 +226,32 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
 
     private fun SQLiteDatabase.entity(workspace: String, id: String): Entity? = query(
         "entities", arrayOf("body"), "workspace = ? AND id = ?", arrayOf(workspace, id), null, null, null,
-    ).use { if (it.moveToFirst()) json.fromJson(it.getString(0), Entity::class.java) else null }
+    ).use { if (it.moveToFirst()) json.fromJson(it.body(), Entity::class.java) else null }
 
     private fun SQLiteDatabase.saveEntity(workspace: String, entity: Entity) {
         check(replaceOrThrow("entities", null, ContentValues().apply {
             put("workspace", workspace)
             put("id", entity.id)
-            put("body", json.toJson(entity))
+            putBody(json.toJson(entity))
         }) != -1L)
+    }
+
+    // Крупный JSON хранится сжато, чтобы строка помещалась в окно SQLite CursorWindow.
+    private fun ContentValues.putBody(body: String) {
+        val bytes = body.toByteArray()
+        if (bytes.size < 64 * 1024) {
+            put("body", body)
+        } else {
+            val output = ByteArrayOutputStream()
+            GZIPOutputStream(output).use { it.write(bytes) }
+            put("body", output.toByteArray())
+        }
+    }
+
+    private fun Cursor.body(): String = if (getType(0) == Cursor.FIELD_TYPE_BLOB) {
+        GZIPInputStream(getBlob(0).inputStream()).bufferedReader(Charsets.UTF_8).use { it.readText() }
+    } else {
+        getString(0)
     }
 
     private fun SQLiteDatabase.setting(key: String): String? = query(

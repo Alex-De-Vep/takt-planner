@@ -24,6 +24,8 @@ Tasks brings folders, a focused daily list and your system calendar into one nat
 - **Search:** find tasks by title and description within the current section.
 - **Native macOS:** light and dark appearances, glass sidebars, keyboard shortcuts and Russian/English localization.
 
+A [separately buildable Android client](android/README.md) is available.
+
 ## Install
 
 **macOS 26 or later and Apple Silicon.** The `main` branch builds for Intel and Apple Silicon.

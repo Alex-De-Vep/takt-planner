@@ -11,7 +11,6 @@ import java.time.ZoneId
 import java.util.UUID
 
 internal const val FOCUS_MARK = "9999-12-31"
-internal const val LOCAL_WORKSPACE = "local"
 internal val json = GsonBuilder().disableHtmlEscaping().serializeNulls().create()
 
 internal fun newId() = UUID.randomUUID().toString()
@@ -120,19 +119,24 @@ internal data class Edit(
 internal data class Profile(val origin: String, val email: String, val libraryId: String, val workspace: String)
 
 internal data class Library(
-    val workspace: String = LOCAL_WORKSPACE,
+    val workspace: String = "",
     val profile: Profile? = null,
     val entities: List<Entity> = emptyList(),
     val pending: Int = 0,
     val rejected: Int = 0,
+    val folderOrder: List<String> = emptyList(),
 ) {
-    val folders get() = entities.filter { it.type == "folder" }.sortedWith(compareBy({ it.number("sortOrder") }, { it.id }))
-    val tasks get() = entities.filter { it.type == "task" }.sortedByDescending { it.text("createdAt")?.let(Instant::parse) }
+    private val folderRanks = folderOrder.withIndex().associate { (index, id) -> id to index }
+    val folders = entities.filter { it.type == "folder" }
+        .sortedWith(compareBy({ folderRanks[it.id] ?: Int.MAX_VALUE }, { it.number("sortOrder") }, { it.id }))
+    val tasks = entities.filter { it.type == "task" }.sortedByDescending { it.text("createdAt")?.let(Instant::parse) }
+    private val folderIds = folders.mapTo(mutableSetOf(), Entity::id)
+    private val itemsByTask = entities.filter { it.type == "checklistItem" }
+        .sortedWith(compareBy({ it.number("sortOrder") }, { it.id })).groupBy { it.text("taskId") }
 
-    fun items(taskId: String) = entities.filter { it.type == "checklistItem" && it.text("taskId") == taskId }
-        .sortedWith(compareBy({ it.number("sortOrder") }, { it.id }))
+    fun items(taskId: String) = itemsByTask[taskId].orEmpty()
 
     fun location(task: Entity) = task.placement.takeIf { key ->
-        key in listOf("inbox", "week", "month") || folders.any { it.id == key }
+        key == "inbox" || key == "week" || key == "month" || key in folderIds
     } ?: "inbox"
 }

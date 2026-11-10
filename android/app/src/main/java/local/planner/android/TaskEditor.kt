@@ -1,9 +1,7 @@
 package local.planner.android
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.provider.CalendarContract
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -23,12 +22,13 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -36,15 +36,19 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -54,15 +58,14 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
-import kotlinx.coroutines.launch
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TaskEditor(
     library: Library, task: Entity?, section: String, model: PlannerModel, snackbar: SnackbarHostState, close: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val draft = remember { model.openDraft(library, task, section) }
     val deadline = draft.deadline
     val activeLocation = draft.location.takeIf { it in listOf("inbox", "week", "month") ||
@@ -74,7 +77,15 @@ internal fun TaskEditor(
         model.closeDraft()
         close()
     }
-    val navigateBack = { if (!draft.saving) { if (draft.dirty) action = "discard" else finish() } }
+    val navigateBack = {
+        if (!draft.saving) {
+            when {
+                !draft.dirty -> finish()
+                task == null -> action = "discard"
+                else -> model.saveTask(draft, finish)
+            }
+        }
+    }
     BackHandler(onBack = navigateBack)
 
     Scaffold(
@@ -87,19 +98,24 @@ internal fun TaskEditor(
                 },
             )
         },
+        bottomBar = {
+            EditorBottomAction(when {
+                task == null -> R.string.save
+                task.completed -> R.string.reopen_task
+                else -> R.string.task_mark_done
+            }, enabled = !draft.saving && (task != null || draft.title.isNotBlank())) {
+                model.saveTask(draft, finish, completion = task?.let { !it.completed })
+            }
+        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             Column(
                 Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                OutlinedTextField(draft.title, { draft.title = it }, Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text(stringResource(R.string.task_title)) })
-                OutlinedTextField(draft.description, { draft.description = it }, Modifier.fillMaxWidth(), minLines = 3,
-                    label = { Text(stringResource(R.string.description)) })
                 Box {
-                    TextButton(onClick = { folderMenu = true }) {
+                    TextButton(onClick = { folderMenu = true }, enabled = !draft.saving) {
                         Glyph(R.drawable.ic_folder)
                         Text(sectionName(activeLocation, library), Modifier.padding(start = 8.dp))
                     }
@@ -112,85 +128,67 @@ internal fun TaskEditor(
                         }
                     }
                 }
-                val focusLabel = stringResource(R.string.show_in_today)
+                OutlinedTextField(draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusNewTitle(task == null), singleLine = true,
+                    enabled = !draft.saving, label = { Text(stringResource(R.string.task_title)) })
+                OutlinedTextField(draft.description, { draft.description = it }, Modifier.fillMaxWidth(), minLines = 3,
+                    enabled = !draft.saving, label = { Text(stringResource(R.string.description)) })
+                val accent = MaterialTheme.colorScheme.primary
+                val inactive = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(draft.focused, { draft.focused = it }, Modifier.semantics {
-                        contentDescription = focusLabel
-                    })
-                    Text(focusLabel)
-                }
-                HorizontalDivider()
-                Text(stringResource(R.string.deadline), style = MaterialTheme.typography.titleMedium)
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { action = "date" }) {
-                        Glyph(R.drawable.ic_calendar)
-                        Text(deadline?.let(::deadlineLabel) ?: stringResource(R.string.choose_date), Modifier.padding(start = 8.dp))
+                    IconToggleButton(draft.focused, { draft.focused = it }, enabled = !draft.saving) {
+                        Glyph(
+                            if (draft.focused) R.drawable.ic_star else R.drawable.ic_star_outline,
+                            stringResource(if (draft.focused) R.string.unstar else R.string.star),
+                            if (draft.focused) accent else inactive,
+                        )
                     }
-                    if (deadline != null) {
-                        ActionIcon(R.drawable.ic_close, R.string.remove_deadline) { draft.deadline = null }
+                    ActionIcon(R.drawable.ic_calendar, R.string.choose_date, if (deadline != null) accent else inactive,
+                        enabled = !draft.saving) { action = "date" }
+                    ActionIcon(R.drawable.ic_add_subtask, R.string.add_item, inactive, enabled = !draft.saving) {
+                        action = "item"
                     }
                 }
                 if (deadline != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { action = "time" }) {
-                            Text(stringResource(if (deadline.instant == null) R.string.add_time else R.string.change_time))
-                        }
-                        if (deadline.instant != null) {
-                            TextButton(onClick = {
-                                draft.deadline = Deadline(deadline.agendaDate(), null, ZoneId.systemDefault())
-                            }) { Text(stringResource(R.string.remove_time)) }
-                        }
+                    val date = deadline.agendaDate()
+                    val time = deadline.instant?.atZone(ZoneId.systemDefault())?.toLocalTime()
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DeadlineChip(
+                            R.drawable.ic_calendar, dateLabel(date), R.string.choose_date, !draft.saving,
+                            edit = { action = "date" }, clearLabel = R.string.remove_deadline,
+                            clear = { draft.deadline = null },
+                        )
+                        DeadlineChip(
+                            R.drawable.ic_clock, time?.let { timeLabel(it) } ?: stringResource(R.string.add_time),
+                            if (time == null) R.string.add_time else R.string.change_time, !draft.saving,
+                            edit = { action = "time" }, clearLabel = R.string.remove_time.takeIf { time != null },
+                            clear = { draft.deadline = Deadline(date, null, ZoneId.systemDefault()) },
+                        )
                     }
                 }
-                if (task != null) {
-                    TextButton(onClick = {
-                        val calendar = Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
-                            .putExtra(CalendarContract.Events.TITLE, draft.title)
-                            .putExtra(CalendarContract.Events.DESCRIPTION, draft.description)
-                        deadline?.instant?.let {
-                            calendar.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, it.toEpochMilli())
-                            calendar.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, it.plusSeconds(1800).toEpochMilli())
-                        }
-                        try {
-                            context.startActivity(calendar)
-                        } catch (_: ActivityNotFoundException) {
-                            scope.launch { snackbar.showSnackbar(context.getString(R.string.calendar_unavailable)) }
-                        }
-                    }) { Text(stringResource(R.string.add_calendar_event)) }
+                val items = task?.let { library.items(it.id) }.orEmpty()
+                if (items.isNotEmpty() || draft.newItems.isNotEmpty()) {
+                    Text(stringResource(R.string.checklist), style = MaterialTheme.typography.titleMedium)
                 }
-                HorizontalDivider()
-                Text(stringResource(R.string.checklist), style = MaterialTheme.typography.titleMedium)
-                task?.let { current ->
-                    library.items(current.id).forEach { item ->
-                        val itemTitle = item.text("title").orEmpty()
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(item.flag("isCompleted"), { model.toggleItem(item) }, Modifier.semantics {
-                                contentDescription = itemTitle
-                            })
-                            Text(itemTitle, Modifier.weight(1f))
-                            ActionIcon(R.drawable.ic_edit, R.string.edit_item) { action = "item:${item.id}" }
-                            ActionIcon(R.drawable.ic_delete, R.string.delete_item) { model.remove(item) }
-                        }
+                items.forEach { item ->
+                    val itemTitle = item.text("title").orEmpty()
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(item.flag("isCompleted"), { model.toggleItem(item) }, Modifier.semantics {
+                            contentDescription = itemTitle
+                        }, enabled = !draft.saving)
+                        Text(itemTitle, Modifier.weight(1f))
+                        ActionIcon(R.drawable.ic_edit, R.string.edit_item, enabled = !draft.saving) { action = "item:${item.id}" }
+                        ActionIcon(R.drawable.ic_delete, R.string.delete_item, enabled = !draft.saving) { model.remove(item) }
                     }
                 }
                 draft.newItems.forEachIndexed { index, text ->
                     Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(text, Modifier.weight(1f))
-                        ActionIcon(R.drawable.ic_edit, R.string.edit_item) { action = "draft:$index" }
-                        ActionIcon(R.drawable.ic_delete, R.string.delete_item) {
+                        ActionIcon(R.drawable.ic_edit, R.string.edit_item, enabled = !draft.saving) { action = "draft:$index" }
+                        ActionIcon(R.drawable.ic_delete, R.string.delete_item, enabled = !draft.saving) {
                             draft.newItems = draft.newItems.filterIndexed { i, _ -> i != index }
                         }
                     }
                 }
-                TextButton(onClick = { action = "item" }) {
-                    Glyph(R.drawable.ic_add)
-                    Text(stringResource(R.string.add_item), Modifier.padding(start = 8.dp))
-                }
-                Button(
-                    onClick = { model.saveTask(draft, finish) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !draft.saving && (draft.title.isNotBlank() || task != null),
-                ) { Text(stringResource(R.string.save)) }
             }
         }
     }
@@ -207,7 +205,9 @@ internal fun TaskEditor(
             draft.deadline = Deadline(date, time?.atDate(date)?.atZone(zone)?.toInstant(), zone)
             dismiss()
         }
-        "time" -> if (deadline != null) PickTime(deadline, dismiss) { time ->
+        "time" -> if (deadline != null) PickTime(
+            deadline.instant?.atZone(ZoneId.systemDefault())?.toLocalTime() ?: LocalTime.of(9, 0), dismiss,
+        ) { time ->
             val zone = ZoneId.systemDefault()
             val day = deadline.agendaDate()
             draft.deadline = Deadline(day, day.atTime(time).atZone(zone).toInstant(), zone)
@@ -232,11 +232,70 @@ internal fun TaskEditor(
     }
 }
 
+@Composable
+internal fun Modifier.focusNewTitle(creating: Boolean): Modifier {
+    if (!creating) return this
+    val requester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    var requested by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!requested && requester.requestFocus()) {
+            keyboard?.show()
+            requested = true
+        }
+    }
+    return focusRequester(requester)
+}
+
+@Composable
+private fun DeadlineChip(
+    icon: Int, text: String, editLabel: Int, enabled: Boolean, edit: () -> Unit, clearLabel: Int?, clear: () -> Unit,
+) {
+    val label = stringResource(editLabel)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Glyph(icon, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(shape = MaterialTheme.shapes.small, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = edit, enabled = enabled,
+                    modifier = Modifier.weight(1f, fill = false).semantics { contentDescription = label },
+                ) { Text(text) }
+                if (clearLabel != null) ActionIcon(R.drawable.ic_close, clearLabel, enabled = enabled, onClick = clear)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun EditorBottomAction(label: Int, enabled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().navigationBarsPadding().imePadding(), contentAlignment = Alignment.Center) {
+        Button(
+            onClick = onClick, enabled = enabled,
+            modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+        ) { Text(stringResource(label)) }
+    }
+}
+
+@Composable
+internal fun dateLabel(date: LocalDate, style: FormatStyle = FormatStyle.MEDIUM): String = date.format(
+    DateTimeFormatter.ofLocalizedDate(style).withLocale(LocalConfiguration.current.locales[0]),
+)
+
+@Composable
+internal fun timeLabel(time: LocalTime): String {
+    val pattern = if (android.text.format.DateFormat.is24HourFormat(LocalContext.current)) "HH:mm" else "h:mm a"
+    return time.format(DateTimeFormatter.ofPattern(pattern, LocalConfiguration.current.locales[0]))
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PickDate(initial: LocalDate?, dismiss: () -> Unit, choose: (LocalDate) -> Unit) {
-    val millis = (initial ?: LocalDate.now()).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-    val state = rememberDatePickerState(initialSelectedDateMillis = millis)
+internal fun PickDate(initial: LocalDate?, dismiss: () -> Unit, choose: (LocalDate) -> Unit) {
+    val date = initial ?: LocalDate.now()
+    val millis = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = millis,
+        yearRange = minOf(1900, date.year)..maxOf(2100, date.year),
+    )
     DatePickerDialog(
         onDismissRequest = dismiss,
         confirmButton = {
@@ -245,15 +304,14 @@ private fun PickDate(initial: LocalDate?, dismiss: () -> Unit, choose: (LocalDat
             }, enabled = state.selectedDateMillis != null) { Text(stringResource(R.string.ok)) }
         },
         dismissButton = { TextButton(onClick = dismiss) { Text(stringResource(R.string.cancel)) } },
-    ) { DatePicker(state, title = null, headline = null, showModeToggle = false) }
+    ) { DatePicker(state, title = null, headline = null) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PickTime(deadline: Deadline, dismiss: () -> Unit, choose: (LocalTime) -> Unit) {
-    val time = deadline.instant?.atZone(ZoneId.systemDefault())?.toLocalTime() ?: LocalTime.of(9, 0)
+internal fun PickTime(time: LocalTime, dismiss: () -> Unit, choose: (LocalTime) -> Unit) {
     val state = rememberTimePickerState(initialHour = time.hour, initialMinute = time.minute,
-        is24Hour = android.text.format.DateFormat.is24HourFormat(androidx.compose.ui.platform.LocalContext.current))
+        is24Hour = android.text.format.DateFormat.is24HourFormat(LocalContext.current))
     AlertDialog(
         onDismissRequest = dismiss, title = { Text(stringResource(R.string.choose_time)) },
         text = { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { TimePicker(state) } },

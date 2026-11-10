@@ -21,7 +21,9 @@ import kotlinx.coroutines.withContext
 
 internal data class CloudState(
     val savedProfile: Profile? = null,
-    val requiresLogin: Boolean = false,
+    val firstSyncPending: Boolean = false,
+    val needsLibrary: Boolean = false,
+    val closing: Boolean = false,
     val busy: Boolean = false,
     val message: Int? = null,
 )
@@ -35,6 +37,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     private var draft: TaskDraft? = null
 
     val library = store.library
+    val chat = ChatController(application, viewModelScope)
     private val _cloud = MutableStateFlow(CloudState())
     val cloud = _cloud.asStateFlow()
     private val _ready = MutableStateFlow(false)
@@ -48,8 +51,10 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 withContext(Dispatchers.IO) { store.load() }
                 loadConnection()
                 _ready.value = true
-                refresh()
+                if (cloud.value.firstSyncPending) firstSync() else refresh()
                 library.collect {
+                    chat.bind(it.workspace)
+                    if (it.profile == null) draft = null
                     withContext(Dispatchers.IO) { DeadlineReminders.update(getApplication(), it) }
                 }
             } catch (failure: Exception) {
@@ -63,7 +68,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     fun openDraft(library: Library, task: Entity?, section: String): TaskDraft {
         draft?.let { if (it.workspace == library.workspace && it.original?.id == task?.id) return it }
-        val location = task?.let(library::location) ?: section.takeUnless { it in listOf("today", "all") } ?: "inbox"
+        val location = task?.let(library::location) ?: section.takeUnless { it == "today" || it == "all" } ?: "inbox"
         return TaskDraft(library.workspace, task, location, task?.focused ?: (section == "today")).also { draft = it }
     }
 
@@ -71,33 +76,53 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     fun refresh() {
         val profile = library.value.profile ?: return
-        if (cloud.value.requiresLogin || System.currentTimeMillis() < nextSync) return
+        if (System.currentTimeMillis() < nextSync) return
         cloudAction {
             sync.synchronize(profile)
         }
     }
 
-    fun login(server: String, email: String, password: String, done: () -> Unit) {
-        val origin = runCatching { serverOrigin(server) }.getOrElse {
-            _cloud.value = cloud.value.copy(message = R.string.server_address_error)
-            return
-        }
-        if (email.isBlank() || password.isBlank()) {
-            _cloud.value = cloud.value.copy(message = R.string.sign_in_fields)
-            return
-        }
+    fun login(server: String, email: String, password: String) {
+        val origin = origin(server) ?: return
+        cloudAction { sync.login(origin, email, password, Build.MODEL.orEmpty()) }
+    }
+
+    fun requestCode(server: String, email: String, password: String, request: AccountRequest, done: (String) -> Unit) {
+        val origin = origin(server) ?: return
+        var challenge = ""
+        cloudAction({ done(challenge) }) { challenge = sync.challenge(origin, request, email, password) }
+    }
+
+    fun confirmCode(
+        server: String, email: String, password: String, challenge: String, code: String,
+        reset: Boolean, done: () -> Unit,
+    ) {
+        val origin = origin(server) ?: return
         cloudAction(done) {
-            sync.login(origin, email, password, Build.MODEL.orEmpty())
+            sync.confirm(origin, challenge, code, password, reset)
+            if (!reset) sync.login(origin, email, password, Build.MODEL.orEmpty(), initializeEmpty = true)
         }
     }
 
-    fun local() = cloudAction { store.useLocal() }
-    fun online(profile: Profile) = cloudAction { store.useCloud(profile) }
-    fun logout(profile: Profile) = cloudAction { sync.logout(profile) }
+    fun firstSync(initializeEmpty: Boolean = false) = cloudAction {
+        val connection = store.connection() ?: return@cloudAction
+        sync.firstSync(connection.profile, initializeEmpty || connection.initializeEmpty)
+    }
 
-    private fun cloudAction(done: () -> Unit = {}, work: () -> Unit) {
+    fun logout(profile: Profile) = cloudAction(closing = true) { sync.logout(profile) }
+
+    fun clearCloudMessage() {
+        _cloud.value = cloud.value.copy(message = null)
+    }
+
+    private fun origin(server: String): String? = runCatching { serverOrigin(server) }.getOrElse {
+        _cloud.value = cloud.value.copy(message = R.string.server_address_error)
+        null
+    }
+
+    private fun cloudAction(done: () -> Unit = {}, closing: Boolean = false, work: () -> Unit) {
         if (!network.tryLock()) return
-        _cloud.value = cloud.value.copy(busy = true, message = null)
+        _cloud.value = cloud.value.copy(busy = true, closing = closing, message = null)
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { work() }
@@ -111,9 +136,12 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 val delay = (failure as? ServerFailure)?.retryAfter ?: (2L shl failures)
                 nextSync = System.currentTimeMillis() + delay.coerceIn(1, 900) * 1000
                 loadConnection()
-                _cloud.value = cloud.value.copy(message = cloudError(failure))
+                _cloud.value = cloud.value.copy(
+                    message = cloudError(failure),
+                    needsLibrary = (failure as? ServerFailure)?.code == "library_not_initialized",
+                )
             } finally {
-                _cloud.value = cloud.value.copy(busy = false)
+                _cloud.value = cloud.value.copy(busy = false, closing = false)
                 network.unlock()
             }
         }
@@ -123,7 +151,8 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         val connection = withContext(Dispatchers.IO) { store.connection() }
         _cloud.value = cloud.value.copy(
             savedProfile = connection?.profile,
-            requiresLogin = connection != null && connection.credential == null,
+            firstSyncPending = connection?.credential != null && library.value.profile == null,
+            needsLibrary = false,
         )
     }
 
@@ -132,6 +161,9 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             "sign_in_required", "unauthorized", "invalid_token", "invalid_refresh" -> R.string.sign_in_again
             "invalid_credentials" -> R.string.invalid_credentials
             "email_not_verified" -> R.string.email_not_verified
+            "registration_closed" -> R.string.registration_closed
+            "invalid_code" -> R.string.invalid_email_code
+            "invalid_request" -> R.string.invalid_account_input
             "library_not_initialized" -> R.string.library_not_initialized
             "incompatible_protocol" -> R.string.incompatible_protocol
             "rate_limited", "busy" -> R.string.cloud_rate_limited
@@ -141,9 +173,15 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         else -> R.string.cloud_error
     }
 
-    fun saveTask(draft: TaskDraft, done: () -> Unit) {
+    fun saveTask(
+        draft: TaskDraft, done: () -> Unit, proposal: ChatProposal? = null, failed: () -> Unit = {},
+        completion: Boolean? = null,
+    ) {
         if (draft.saving || !validText(draft.title, 16_384) || !validText(draft.description, 1_048_576) ||
-            draft.newItems.any { !validText(it, 16_384) }) return
+            draft.newItems.any { !validText(it, 16_384) }) {
+            failed()
+            return
+        }
         val current = library.value
         val original = draft.original
         val id = original?.id ?: newId()
@@ -158,6 +196,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         }
         if (draft.deadline != original?.deadline) fields["deadline"] = draft.deadline?.wire() ?: JsonNull.INSTANCE
         if (draft.focused != (original != null && draft.originalFocus)) fields["focusDay"] = value(FOCUS_MARK.takeIf { draft.focused })
+        if (completion != null) fields["completedAt"] = value(wireTime().takeIf { completion })
         val firstOrder = nextOrder(current.items(id))
         val edits = buildList {
             if (fields.isNotEmpty()) add(Edit(id, "task", if (original == null) "create" else "update", fields))
@@ -166,7 +205,26 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             }
         }
         draft.saving = true
-        apply(edits, done, failed = { draft.saving = false })
+        apply(edits, done, failed = { draft.saving = false; failed() }, proposal = proposal)
+    }
+
+    fun applyChatProposal(proposal: ChatProposal, done: () -> Unit, failed: () -> Unit) {
+        val current = library.value
+        val original = current.tasks.firstOrNull { it.id == proposal.task?.id }
+        if (current.profile == null || !proposal.matches(current)) {
+            _error.value = R.string.chat_proposal_stale
+            failed()
+            return
+        }
+        val draft = TaskDraft(current.workspace, original, original?.let(current::location) ?: "inbox", original?.focused ?: false)
+        proposal.title?.let { draft.title = it }
+        proposal.description?.let { draft.description = it }
+        draft.newItems = proposal.checklist
+        if (original == null) {
+            draft.deadline = proposal.deadline
+            draft.focused = proposal.focused
+        }
+        saveTask(draft, done, proposal, failed)
     }
 
     fun toggleFocus(task: Entity) = apply(listOf(Edit(task.id, "task", "update", mapOf(
@@ -176,6 +234,17 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     fun toggleCompletion(task: Entity) = apply(listOf(Edit(task.id, "task", "update", mapOf(
         "completedAt" to value(wireTime().takeUnless { task.completed }),
     ))))
+
+    fun reorderFolders(workspace: String, ids: List<String>) {
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { store.reorderFolders(workspace, ids) }
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _error.value = R.string.storage_error
+            }
+        }
+    }
 
     fun folder(name: String, existing: Entity?, done: () -> Unit) {
         val text = name.trim()
@@ -208,7 +277,8 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     )
 
     private fun validText(text: String, bytes: Int): Boolean {
-        if ('\u0000' !in text && text.toByteArray().size <= bytes) return true
+        if ('\u0000' !in text && text.toByteArray().size <= bytes &&
+            (bytes < 1_048_576 || value(text).toString().toByteArray().size <= MAX_BATCH_BYTES - 128 * 1024)) return true
         _error.value = R.string.text_limit
         return false
     }
@@ -216,18 +286,20 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     private fun nextOrder(items: List<Entity>) =
         ((items.maxOfOrNull { it.number("sortOrder") } ?: -1).toLong() + 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
-    private fun apply(edits: List<Edit>, done: () -> Unit = {}, failed: () -> Unit = {}) {
+    private fun apply(
+        edits: List<Edit>, done: () -> Unit = {}, failed: () -> Unit = {}, proposal: ChatProposal? = null,
+    ) {
         val workspace = library.value.workspace
         viewModelScope.launch {
             try {
                 if (edits.isNotEmpty()) withContext(Dispatchers.IO) {
-                    store.edit(workspace, edits, if (workspace == LOCAL_WORKSPACE) 0 else sync.clockOffset)
+                    store.edit(workspace, edits, sync.clockOffset, proposal)
                 }
                 done()
                 refresh()
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
-                _error.value = R.string.storage_error
+                _error.value = if (failure is StaleChatProposal) R.string.chat_proposal_stale else R.string.storage_error
                 failed()
             }
         }
