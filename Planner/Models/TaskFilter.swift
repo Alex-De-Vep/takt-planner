@@ -14,7 +14,7 @@ enum TaskFilter: Hashable, Identifiable {
     case inbox, today, week, month, all
     case folder(UUID)
 
-    static let smartFilters: [TaskFilter] = [.inbox, .today, .week, .month, .all]
+    static let smartFilters: [TaskFilter] = [.today, .inbox, .week, .month, .all]
     static let systemFolders: [TaskFilter] = [.inbox, .week, .month]
 
     var isPrimaryFolder: Bool {
