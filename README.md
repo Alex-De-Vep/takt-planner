@@ -1,97 +1,109 @@
-> **Ветка с ИИ-помощником для Apple Silicon.** [Требования и сборка](docs/ai-preview.md).
+<p align="center">
+  <img src="Design/AppIcon/tasks-icon-preview.png" width="112" alt="Tasks app icon">
+</p>
+<h1 align="center">Takt</h1>
+<p align="center">Your tasks, their next steps, and time to work on them.</p>
+<p align="center"><strong>English</strong> · <a href="README.ru.md">Русский</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a></p>
+
+Takt brings tasks, a focused daily list, and your calendar together on macOS and Android. On macOS, you can keep your task library on your device without an account. Enable cloud sync to pick up your tasks on Android.
+
+![Tasks with folders, a task editor, subtasks and the calendar panel](docs/screenshots/workspace-light-en.png)
+
+*An actual app screenshot using fictional demonstration data.*
+
+## Features
+
+- **Folders:** each task belongs to Inbox, This Week, Month or a custom folder. Today shows starred tasks; All Tasks shows the full library ordered by creation date.
+- **Move tasks:** drag a task onto a sidebar folder, or use “Move to Folder” in its context menu or the toolbar “…” menu. Dropping onto Today adds a star and keeps the original folder.
+- **Focus:** starred tasks stay in Today until you unstar them, without changing their order.
+- **Descriptions and subtasks:** plain text with list continuation, plus a checklist with completion progress.
+- **Deadlines:** choose a date and optionally a time, independently of calendar events. System notifications follow deadline edits and are canceled when a task is completed or deleted.
+- **Review reminder:** enable “Time to review your tasks” in Settings, choose a local time and optionally weekdays only. Off by default.
+- **Calendar sidebar:** a compact month and a day, three-day or weekly agenda, with vertical and horizontal layouts.
+- **Time for tasks:** create standalone events or schedule multiple time blocks for a task. Edit writable one-off events, drag them between days and undo a move.
+- **Search:** find tasks by title and description within the current section.
+- **Native macOS:** light and dark appearances, glass sidebars, keyboard shortcuts and Russian/English localization.
+
+<details>
+<summary>AI assistant on macOS</summary>
+
+![The macOS assistant beside the task editor, with a draft task and its checklist ready for review](docs/screenshots/macos-assistant-en.png)
+
+*Sample conversation and task proposal.*
+
+</details>
+
+## Install
+
+**macOS 26 or later and Apple Silicon.**
+
+Source version **0.2.17 (build 67)** · [Release history](docs/releases).
+
+Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Tasks** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
+
+**Signing:** this build uses an ad-hoc signature. It is not Developer ID signed or notarized by Apple. Gatekeeper may restrict opening a download on another Mac. You can build the app in Xcode if macOS does not allow the downloaded package to open. The project does not require disabling system security.
+
+## Android
+
+The Android client runs on **Android 8.0 or later**. It includes task lists, subtasks, deadline reminders, a calendar, and an AI assistant. Sign in with the same account you use for cloud sync on macOS to see your tasks. After the first sync, Android queues edits while offline and sends them when you reconnect.
 
 <p align="center">
-  <img src="Design/AppIcon/tasks-icon-preview.png" width="112" alt="Иконка приложения Задачи">
+  <img src="docs/screenshots/android-today-en.png" width="200" alt="Today task list with a deadline">
+  <img src="docs/screenshots/android-task-en.png" width="200" alt="Task details with a checklist">
+  <img src="docs/screenshots/android-calendar-en.png" width="200" alt="Events agenda with three sample events">
+  <img src="docs/screenshots/android-assistant-en.png" width="200" alt="Built-in AI chat with a task proposal and confirmation buttons">
 </p>
 
-<h1 align="center">Задачи для macOS</h1>
-<p align="center">Задачи, подзадачи и время для них — в одном нативном приложении.</p>
-<p align="center"><strong>Русский</strong> · <a href="README.en.md">English</a></p>
+*Android screenshots with sample data.*
 
-«Задачи» помогает собрать дела по папкам, выбрать главное на сегодня и выделить время в системном календаре. Привычный интерфейс macOS, локальное сохранение и никаких обязательных аккаунтов.
+Open [the Android project](android/) in Android Studio or build a debug APK by running `./gradlew :app:assembleDebug` in `android/`. See the [Android guide](android/README.md) for build requirements, account setup, and calendar access.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/workspace-dark-ru.png">
-  <img src="docs/screenshots/workspace-light-ru.png" alt="Задачи: папки, список дел, описание с подзадачами и календарь справа">
-</picture>
+## Getting started
 
-*Настоящие снимки приложения с вымышленными демонстрационными данными.*
+Open **Help → Planner Help** in the app or read the [complete guide](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
-## Что умеет приложение
+Press **⌘N** to create a task. Enter its title, then press **Return** to move to the description. Star it for today, add subtasks with the checklist button, or open the calendar using the rightmost toolbar button.
 
-- **Папки.** Каждая задача находится во «Входящих», «На неделе», «Месяц» или своей папке. «Сегодня» собирает отмеченные звёздочкой задачи, «Все задачи» показывает общую библиотеку по дате создания.
-- **Перенос задач.** Перетащите задачу на папку слева или выберите «Переместить в папку» в контекстном меню либо меню «…» в шапке. Перетаскивание на «Сегодня» добавляет звезду и сохраняет основную папку.
-- **Фокус.** Жёлтая звезда добавляет задачу в «Сегодня» до ручного снятия отметки. Изменение звезды и названия сохраняет порядок списка.
-- **Описание и подзадачи.** Отдельные название и описание, текстовые списки, контрольный список с прогрессом выполнения.
-- **Сроки.** Дата и необязательное время, независимо от звезды и календарных событий. Системные уведомления переносятся вместе со сроком и отменяются при выполнении или удалении задачи.
-- **Напоминание о планах.** В настройках можно включить «Пора проверить задачи», выбрать время и режим «Только по будням». По умолчанию оно выключено.
-- **Календарь рядом.** Компактный месяц и расписание на день, три дня или неделю; вертикальный список или горизонтальные колонки.
-- **События и планирование.** Создание самостоятельных событий, редактирование разовых событий, перенос между днями и отмена переноса. Для задачи можно выделить несколько отрезков времени.
-- **Поиск.** По названию и описанию внутри выбранного раздела.
-- **Нативное поведение.** Светлая и тёмная темы, стеклянные боковые панели, клавиатурные команды, русский и английский интерфейс.
+A new task belongs to the open folder. Today creates it in Inbox with a star; All Tasks creates it in Inbox. This Week and Month are permanent folders: date changes do not move tasks. The header counts only active search results. Moving a task preserves its contents, deadlines, notifications and calendar links.
 
-Для Android доступен [отдельно собираемый клиент](android/README.md).
+Switching folders clears the open task and collapses completed tasks. Select a task to open it. Creating a task or following a calendar or notification link opens the requested task directly. Deleting the open task clears selection without automatically opening a neighbor.
 
-## Установка
+Click the text or free space in a task row to open it. Star and completion buttons act independently. Titles, descriptions and subtasks remain editable, including in completed tasks.
 
-**Требуется macOS 26 или новее и Mac с Apple Silicon.** Для Intel доступна универсальная ветка `main`.
+Calendar access is optional. Once connected, the app uses calendars already configured in macOS. **Schedule time for task** creates an event linked to the selected task.
 
-Версия исходного кода — **0.2.13 (сборка 63)**. [Изменения 0.2.13](docs/releases/v0.2.13.md) · [История изменений](docs/releases).
+Configure notifications in **⌘, → Notifications**. Timed deadlines notify at their due time; date-only deadlines use the selected hour (09:00 by default). macOS permission is requested after assigning a deadline or explicitly enabling notifications. **Test notification** schedules a message in 5 seconds. macOS delivers scheduled messages even when the app is closed.
 
-1. Скачайте DMG из раздела [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases).
-2. Откройте образ и перетащите **Задачи** в **Applications / Программы**.
-3. Извлеките образ и откройте приложение из «Программ».
+Calendar events support multiple relative or absolute alerts. Editing or removing one alert preserves the others. The system Calendar handles event notifications.
 
-**Подпись:** текущая сборка подписана локально (ad-hoc), без Developer ID и нотариализации Apple. На другом Mac Gatekeeper может ограничить открытие загруженного приложения. Если macOS не позволяет открыть пакет, можно собрать приложение самостоятельно в Xcode. Проект не требует отключать системную защиту.
+**Settings** includes **Account** for sign-in and language, **Notifications** for reminders, **Calendar** for visible calendars and the default calendar, and **Assistant** for AI options. [Settings and notification behavior](docs/settings.md#english).
 
-При обновлении сначала завершите приложение. Не удаляйте его sandbox-контейнер: там хранится библиотека задач.
-
-## Как начать
-
-Полное руководство доступно в **Справка → Справка по приложению** и в [текстовой версии справки](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/ru.lproj/Help.md).
-
-Создайте задачу кнопкой в шапке или **⌘N**. Назовите её и нажмите **Enter**, чтобы перейти к описанию. Звезда добавляет задачу в «Сегодня», а кнопка контрольного списка — подзадачу. Панель календаря открывается крайней правой кнопкой.
-
-Новая задача принадлежит открытой папке. В «Сегодня» она создаётся во «Входящих» со звездой, во «Всех задачах» — во «Входящих». «На неделе» и «Месяц» — постоянные папки: смена даты не перемещает задачи. Счётчик в шапке показывает только активные результаты поиска. Перенос сохраняет содержимое, сроки, уведомления и связи с календарём.
-
-При переходе в другую папку открытая задача сбрасывается, а выполненные сворачиваются. Выберите задачу из списка, чтобы открыть её. Создание задачи и переход из календаря или уведомления сразу открывают нужную карточку. Удаление открытой задачи очищает выбор: соседняя задача сама не открывается.
-
-Задача открывается нажатием на текст или свободную область строки. Звезда и выполнение работают отдельно. Название, описание и подзадачи остаются доступными для редактирования, в том числе у выполненных задач.
-
-Подключение календаря необязательно. Если разрешить доступ, приложение показывает календари, уже настроенные в macOS. Действие **«Выделить время для задачи»** создаёт событие и связывает его с открытой задачей.
-
-Настройте уведомления через **⌘, → Уведомления**. Для срока с временем уведомление приходит в этот момент; для срока без времени используется выбранный в настройках час, по умолчанию 09:00. Разрешение macOS запрашивается при первом назначении срока или явном включении уведомлений. Кнопка **«Проверить уведомление»** отправляет тест через 5 секунд. Уже запланированные уведомления доставляет система, в том числе при закрытом приложении.
-
-У календарного события можно добавить несколько напоминаний, в том числе на конкретную дату. Удаление одной строки сохраняет остальные. Уведомления о событиях доставляет системный календарь.
-
-В **Настройках** доступны три раздела: **Основные** — язык интерфейса; **Уведомления** — сроки, время напоминаний, будни, проверка и системные разрешения; **Календарь** — отображаемые календари и календарь для новых событий. [Все настройки и поведение уведомлений](docs/settings.md).
-
-| Команда | Действие |
+| Shortcut | Action |
 |---|---|
-| ⌘N | Новая задача |
-| ⇧⌘N | Новая папка |
-| ⌘Enter | Переключить выполнение задачи |
-| Delete | Удалить выбранную задачу, когда фокус в списке |
-| ⌘, | Настройки |
+| ⌘N | New task |
+| ⇧⌘N | New folder |
+| ⌘Return | Toggle task completion |
+| Delete | Delete the selected task when the list has focus |
+| ⌘, | Settings |
 
-## Данные и ограничения
+## Privacy and current limitations
 
-Задачи доступны на устройстве. При подключении облачного режима библиотека синхронизируется через сервер приложения. В приложении нет рекламы и аналитических SDK. События хранятся в системном календаре и могут синхронизироваться через настроенного пользователем провайдера. [Подробнее о конфиденциальности](docs/privacy.md).
+Tasks are available on your device. When you enable cloud sync, the app server syncs the library. The app has no ads or analytics SDKs. Calendar events live in the system event store and may sync through your configured calendar provider. See the [privacy description](docs/privacy.md).
 
-- Облачная синхронизация задач работает после входа в аккаунт. Режим «Только на устройстве» доступен без регистрации.
-- Описание — обычный текст, без форматирования жирным или курсивом.
-- Повторяющиеся события, их исключения и календари только для чтения доступны для просмотра.
-- Удаление задачи сохраняет её календарные события. Выполнение задачи и события независимы.
-- Приложение планирует все будущие сроки. Если macOS ограничивает очередь, приоритет получают ближайшие сроки и повторяющиеся напоминания; очередь пополняется при открытии приложения, возвращении в него и изменениях задач. Показ баннеров зависит от разрешения macOS и режима «Фокусирование».
-- Приложение развивается. Перед использованием с важными данными сохраняйте резервную копию системы.
+- Cloud task sync requires an account. On-device storage is available without registration.
+- Descriptions are plain text, without bold or italic formatting.
+- Recurring events, recurrence exceptions and read-only calendars can be viewed but not edited.
+- Deleting a task keeps its calendar events. Event scheduling and task completion are independent.
+- All future deadlines are submitted. If macOS limits pending requests, the nearest deadlines and repeating reminders take priority; the queue refills when the app launches, becomes active or tasks change. macOS permission and Focus settings control banner presentation.
+- This is an evolving app. Keep a system backup before relying on it for important information.
 
-## Сборка из исходников
+## Build
 
-Нужны macOS 26+, Xcode 26 с поддержкой Swift 6.2 и Command Line Tools. Для вспомогательных скриптов нужен Python 3. Сборка использует закреплённые Swift-пакеты MLX. Пакет переводов находится в репозитории.
+Requires macOS 26+, Xcode 26 with Swift 6.2 support, Command Line Tools and Python 3 for helper scripts. The localization package is included. The build uses pinned MLX Swift packages.
 
-Откройте `Planner.xcodeproj`, выберите схему **Planner** и **My Mac**, затем нажмите **⌘R**.
+Open `Planner.xcodeproj`, select **Planner → My Mac**, and run with **⌘R**.
 
-Сборка приложения и тестовых исходников **без запуска тестов**:
+Compile the app and test sources without running tests:
 
 ```sh
 xcodebuild -project Planner.xcodeproj -scheme Planner \
@@ -99,22 +111,22 @@ xcodebuild -project Planner.xcodeproj -scheme Planner \
   -derivedDataPath .build/DerivedData build-for-testing
 ```
 
-Release-сборка и DMG для Apple Silicon:
+Build a release DMG for Apple Silicon:
 
 ```sh
 python3 scripts/build_release.py
 ```
 
-Результаты находятся в `dist/`: приложение, образ DMG и контрольная сумма SHA-256. [Устройство проекта и разработка](docs/development.md) · [Подготовка релиза](docs/releasing.md).
+Artifacts are written to `dist/`. [Development guide](docs/development.md) · [Release guide](docs/releasing.md).
 
-## Участие в проекте
+## Contributing
 
-Сообщения об ошибках и предложения приветствуются в [**Issues**](https://github.com/Alex-De-Vep/takt-planner/issues). Перед отправкой изменений прочитайте [CONTRIBUTING.md](CONTRIBUTING.md). Не прикладывайте личные задачи, календарные события, токены и ключи подписи.
+Bug reports and suggestions are welcome in [**Issues**](https://github.com/Alex-De-Vep/takt-planner/issues). Please read [CONTRIBUTING.md](CONTRIBUTING.md). Do not attach personal task libraries, calendar information, tokens or signing keys.
 
-Успешная сборка тестовых исходников не означает прохождение тестов: текущий статус проверок указан в описании выпуска.
+Compiling tests does not mean they have passed. Check the release notes for the validation performed.
 
-## Лицензия
+## License
 
-Проект распространяется по [Apache License 2.0](LICENSE). Уведомления об авторстве находятся в [NOTICE](NOTICE).
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.
 
-Автор: [Alex-De-Vep](https://github.com/Alex-De-Vep).
+Created by [Alex-De-Vep](https://github.com/Alex-De-Vep).
