@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">api.giga.chat</domain>
+        <domain includeSubdomains="false">ngw.devices.sberbank.ru</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="@raw/gigachat_root_ca" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 
 class LibraryTest {
@@ -66,8 +67,12 @@ class LibraryTest {
         val dateOnly = Deadline(date, null, zone)
         assertEquals(dateOnly, Deadline.read(dateOnly.wire()))
         assertEquals(Instant.parse("2026-11-10T06:00:00Z").toEpochMilli(), dateOnly.reminderAt())
-        val timed = Deadline(date, Instant.parse("2026-11-09T22:00:00Z"), zone)
+        val customReminder = LocalTime.of(18, 15)
+        assertEquals(Instant.parse("2026-11-10T15:15:00Z").toEpochMilli(), dateOnly.reminderAt(customReminder))
+        val instant = Instant.parse("2026-11-09T22:00:00Z")
+        val timed = Deadline(date, instant, zone)
         assertEquals(timed, Deadline.read(timed.wire()))
+        assertEquals(instant.toEpochMilli(), timed.reminderAt(customReminder))
     }
 
     private fun update(vararg fields: Pair<String, FieldChange>) =

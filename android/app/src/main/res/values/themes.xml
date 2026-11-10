@@ -1,7 +1,7 @@
 <resources>
-    <style name="Theme.Planner" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.Planner" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">@color/window_background</item>
     </style>
-    <color name="window_background">#F9F8FF</color>
+    <color name="window_background">#FDFBFF</color>
 </resources>
