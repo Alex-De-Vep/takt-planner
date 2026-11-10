@@ -47,6 +47,11 @@ Die App ist ad hoc signiert. Gatekeeper kann das Öffnen eines Downloads auf ein
 
 Der Client läuft ab **Android 8.0**. Er bietet Aufgabenlisten, Teilaufgaben, Fristerinnerungen, einen Kalender und einen KI-Assistenten. Melde dich mit demselben Konto an, das du für die Cloud-Synchronisierung auf macOS verwendest. Nach der ersten Synchronisierung speichert Android Änderungen auch offline und überträgt sie, sobald die Verbindung wieder da ist.
 
+- **Aufgaben bearbeiten.** Füge bei Bedarf eine Beschreibung hinzu und bearbeite Checklistenpunkte auf einem eigenen Bildschirm. Das aktive Textfeld bleibt über der Tastatur sichtbar. Aufgaben- und Teilaufgabenentwürfe werden gemeinsam beim Bestätigen gespeichert.
+- **Kalendertermine.** Wähle einen Kalender für neue Termine und ergänze Ort oder Beschreibung. Einzeltermine in beschreibbaren Kalendern lassen sich nach Bestätigung löschen. Wiederkehrende Termine und schreibgeschützte Kalender können angezeigt werden.
+- **KI-Verbindungen.** Wechsle im Chat zwischen gespeicherten Modellen und Anbietern. ChatGPT und OpenRouter unterstützen die Anmeldung im Browser. Für GigaChat ist das offizielle Stammzertifikat für dessen HTTPS-Adressen enthalten.
+- **Darstellung.** Wähle eine helle, dunkle oder systemabhängige Darstellung sowie Englisch, Russisch oder die Gerätesprache in den Einstellungen.
+
 <p align="center">
   <img src="docs/screenshots/android-today-en.png" width="200" alt="Tagesliste mit einer Frist">
   <img src="docs/screenshots/android-task-en.png" width="200" alt="Aufgabendetails mit Checkliste">

@@ -47,6 +47,11 @@ L’application utilise une signature ad hoc. Gatekeeper peut restreindre l’ou
 
 Le client fonctionne sur **Android 8.0 ou ultérieur**. Il propose des listes de tâches, des sous-tâches, des rappels d’échéance, un calendrier et un assistant IA. Connectez-vous avec le même compte que celui utilisé pour la synchronisation sur macOS. Après la première synchronisation, Android conserve les modifications hors connexion et les envoie au retour du réseau.
 
+- **Modification des tâches.** Ajoutez une description au besoin et modifiez les éléments de la liste sur un écran dédié. Le champ actif reste visible au-dessus du clavier. Les brouillons de la tâche et des sous-tâches sont enregistrés ensemble lors de la confirmation.
+- **Événements du calendrier.** Choisissez un calendrier pour un nouvel événement et ajoutez un lieu ou une description. La suppression d’un événement ponctuel modifiable demande une confirmation. Les événements récurrents et les calendriers en lecture seule peuvent être consultés.
+- **Connexions IA.** Changez de modèle ou de fournisseur enregistré dans le chat. ChatGPT et OpenRouter permettent une connexion dans le navigateur. Le certificat racine officiel de GigaChat est inclus pour ses adresses HTTPS.
+- **Apparence.** Dans les réglages, choisissez un thème clair, sombre ou système, ainsi que l’anglais, le russe ou la langue de l’appareil.
+
 <p align="center">
   <img src="docs/screenshots/android-today-en.png" width="200" alt="Liste du jour avec une échéance">
   <img src="docs/screenshots/android-task-en.png" width="200" alt="Détail d’une tâche avec ses sous-tâches">

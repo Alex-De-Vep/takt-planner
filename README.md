@@ -47,6 +47,11 @@ Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner
 
 The Android client runs on **Android 8.0 or later**. It includes task lists, subtasks, deadline reminders, a calendar, and an AI assistant. Sign in with the same account you use for cloud sync on macOS to see your tasks. After the first sync, Android queues edits while offline and sends them when you reconnect.
 
+- **Task editing.** Add a description when needed, edit checklist items on a separate screen, and keep the active text field visible above the keyboard. Task and checklist drafts are saved together when you confirm the task.
+- **Calendar events.** Choose a calendar for a new event, add a location or description, and delete writable one-off events with confirmation. Recurring events and read-only calendars are available for viewing.
+- **AI connections.** Switch between saved models and providers in Chat. ChatGPT and OpenRouter support browser sign-in. GigaChat uses its bundled official root certificate for its HTTPS endpoints.
+- **Appearance.** Choose light, dark or system appearance, and English, Russian or the device language in Settings.
+
 <p align="center">
   <img src="docs/screenshots/android-today-en.png" width="200" alt="Today task list with a deadline">
   <img src="docs/screenshots/android-task-en.png" width="200" alt="Task details with a checklist">
