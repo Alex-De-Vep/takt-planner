@@ -5,7 +5,15 @@
 <p align="center">Vos tâches, les prochaines étapes et du temps pour les réaliser.</p>
 <p align="center"><a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.de.md">Deutsch</a> · <strong>Français</strong></p>
 
+<p align="center">
+  <strong><a href="#installation">macOS</a></strong> 26+ · Apple Silicon
+  &nbsp; | &nbsp;
+  <strong><a href="#android">Android</a></strong> 8.0+ · APK de test
+</p>
+
 Takt réunit vos tâches, vos priorités du jour et votre calendrier sur macOS et Android. Sur macOS, vous pouvez conserver vos tâches sur votre appareil sans compte. Activez la synchronisation en ligne pour retrouver vos tâches sur Android.
+
+[Fonctionnalités](#fonctionnalités) · [Assistant IA sur macOS](#assistant-ia-sur-macos) · [Premiers pas](#premiers-pas-sur-macos) · [Compiler depuis les sources](#compiler-depuis-les-sources)
 
 ![Takt sur macOS avec les dossiers, l’éditeur de tâches, les sous-tâches et le calendrier](docs/screenshots/workspace-light-en.png)
 
@@ -24,14 +32,11 @@ Takt réunit vos tâches, vos priorités du jour et votre calendrier sur macOS e
 - **Recherche.** Retrouvez les titres et les descriptions des tâches dans la section ouverte.
 - **Interface macOS native.** Thèmes clair et sombre, panneaux translucides, raccourcis clavier et interface en anglais et en russe.
 
-<details>
-<summary>Assistant IA sur macOS</summary>
+## Assistant IA sur macOS
 
 ![Assistant intégré à côté de l’éditeur avec une tâche proposée et sa liste de sous-tâches](docs/screenshots/macos-assistant-en.png)
 
-*Conversation fictive et proposition de tâche dans l’interface en anglais.*
-
-</details>
+*Dans cet exemple, l’assistant propose une tâche avec des sous-tâches. Vous pouvez vérifier et modifier la proposition avant de l’ajouter à « Today ».*
 
 ## Installation
 

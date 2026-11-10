@@ -5,7 +5,15 @@
 <p align="center">Deine Aufgaben, die nächsten Schritte und Zeit dafür.</p>
 <p align="center"><a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <strong>Deutsch</strong> · <a href="README.fr.md">Français</a></p>
 
+<p align="center">
+  <strong><a href="#installation">macOS</a></strong> 26+ · Apple Silicon
+  &nbsp; | &nbsp;
+  <strong><a href="#android">Android</a></strong> 8.0+ · Test-APK
+</p>
+
 Takt vereint Aufgaben, Tagesplanung und Kalender auf macOS und Android. Auf dem Mac kannst du deine Aufgaben ohne Konto auf dem Gerät speichern. Aktiviere die Cloud-Synchronisierung, um auf Android weiterzuarbeiten.
+
+[Funktionen](#funktionen) · [KI-Chat auf macOS](#ki-chat-auf-macos) · [Erste Schritte](#erste-schritte-auf-macos) · [Aus dem Quellcode bauen](#aus-dem-quellcode-bauen)
 
 ![Takt mit Ordnern, Aufgabeneditor, Teilaufgaben und Kalender auf macOS](docs/screenshots/workspace-light-en.png)
 
@@ -24,14 +32,11 @@ Takt vereint Aufgaben, Tagesplanung und Kalender auf macOS und Android. Auf dem 
 - **Suche.** Suche im aktuellen Bereich nach Aufgabentiteln und Beschreibungen.
 - **Native macOS-Oberfläche.** Helle und dunkle Darstellung, transparente Seitenleisten, Tastenkürzel sowie eine englische und russische Oberfläche.
 
-<details>
-<summary>KI-Assistent auf macOS</summary>
+## KI-Chat auf macOS
 
 ![KI-Chat neben dem Aufgabeneditor mit einem Aufgabenvorschlag und einer Checkliste](docs/screenshots/macos-assistant-en.png)
 
-*Beispieldialog und Aufgabenvorschlag in der englischen Oberfläche.*
-
-</details>
+*In diesem Beispiel entwirft der Assistent eine Aufgabe mit Checkliste. Du kannst sie prüfen und bearbeiten, bevor du sie zu „Today“ hinzufügst.*
 
 ## Installation
 

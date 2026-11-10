@@ -5,7 +5,15 @@
 <p align="center">Your tasks, their next steps, and time to work on them.</p>
 <p align="center"><strong>English</strong> · <a href="README.ru.md">Русский</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a></p>
 
+<p align="center">
+  <strong><a href="#install">macOS</a></strong> 26+ · Apple Silicon
+  &nbsp; | &nbsp;
+  <strong><a href="#android">Android</a></strong> 8.0+ · test APK
+</p>
+
 Takt brings tasks, a focused daily list, and your calendar together on macOS and Android. On macOS, you can keep your task library on your device without an account. Enable cloud sync to pick up your tasks on Android.
+
+[Features](#features) · [AI chat on macOS](#ai-chat-on-macos) · [Getting started](#getting-started) · [Build](#build)
 
 ![Tasks with folders, a task editor, subtasks and the calendar panel](docs/screenshots/workspace-light-en.png)
 
@@ -24,14 +32,11 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 - **Search:** find tasks by title and description within the current section.
 - **Native macOS:** light and dark appearances, glass sidebars, keyboard shortcuts and Russian/English localization.
 
-<details>
-<summary>AI assistant on macOS</summary>
+## AI chat on macOS
 
 ![The macOS assistant beside the task editor, with a draft task and its checklist ready for review](docs/screenshots/macos-assistant-en.png)
 
-*Sample conversation and task proposal.*
-
-</details>
+*In this example, the assistant drafts a task with a checklist. You can review and edit it before adding it to Today.*
 
 ## Install
 
