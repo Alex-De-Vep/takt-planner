@@ -111,23 +111,25 @@ Vos tâches restent accessibles sur votre appareil. Si vous activez la synchroni
 
 Prérequis pour macOS : macOS 26+, Xcode 26 avec Swift 6.2 et les Command Line Tools. Les scripts nécessitent Python 3. Le paquet de traduction est inclus. La compilation utilise des versions fixes des paquets Swift MLX.
 
-Ouvrez `Planner.xcodeproj`, sélectionnez **Planner → My Mac** et lancez l’application avec **⌘R**.
+Ouvrez `apps/macos/Planner.xcodeproj`, sélectionnez **Planner → My Mac** et lancez l’application avec **⌘R**.
 
 Compiler l’application et les sources des tests :
 
 ```sh
-xcodebuild -project Planner.xcodeproj -scheme Planner \
+xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
   -configuration Debug -destination 'generic/platform=macOS' \
-  -derivedDataPath .build/DerivedData build-for-testing
+  -derivedDataPath apps/macos/.build/DerivedData build-for-testing
 ```
 
 Créer un DMG de distribution pour Apple Silicon :
 
 ```sh
-python3 scripts/build_release.py
+xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
+  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
+python3 apps/macos/scripts/build_release.py
 ```
 
-Les fichiers sont écrits dans `dist/`. [Guide de développement](docs/development.md) · [Guide de publication](docs/releasing.md).
+Les fichiers sont écrits dans `dist/`. [Guide de développement](apps/macos/README.md) · [Guide de publication](docs/releasing.md).
 
 ## Contribuer
 

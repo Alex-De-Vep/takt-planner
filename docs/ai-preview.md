@@ -43,14 +43,15 @@ Enter отправляет, Shift+Enter вставляет строку. Ист�
 ## Сборка и проверка
 
 ```
-python3 scripts/generate_project.py
-xcodebuild -resolvePackageDependencies -project Planner.xcodeproj -scheme Planner
-python3 scripts/build_release.py
+python3 apps/macos/scripts/generate_project.py
+xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
+  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
+python3 apps/macos/scripts/build_release.py
 ```
 
 Зависимость MLX Swift LM закреплена на 2.31.3, транзитивные версии — в Package.resolved. Для сборки нужен Xcode 26.5 и компонент Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`). Код модели подключён в процесс, Python/Ollama/отдельный сервер пользователю не нужны.
 
-Тесты AssistantTests используют fake backend и FakeCalendarStore. AssistantModelSmokeTests включаются только схемой PlannerAIModelSmoke и читают отдельные тестовые веса из `.build/ModelCache`; это вымышленные запросы без доступа к личным календарям. Для запуска UI/тестов используйте SHOWCASE и отдельные bundle ID/хранилище.
+Тесты AssistantTests используют fake backend и FakeCalendarStore. AssistantModelSmokeTests включаются только схемой PlannerAIModelSmoke и читают отдельные тестовые веса из `apps/macos/.build/ModelCache`; это вымышленные запросы без доступа к личным календарям. Для запуска UI/тестов используйте SHOWCASE и отдельные bundle ID/хранилище.
 
 Артефакт — arm64 DMG и SHA-256. Подпись ad-hoc, без Developer ID и нотариализации. Уведомления об авторстве Swift-пакетов включены в приложение; модель имеет собственные условия Apache 2.0.
 
@@ -62,7 +63,7 @@ Inference runs on your Mac. Review editable proposals before creating tasks, sub
 
 The model loads only when a message is sent, not when the app or chat opens. It unloads after 2 idle minutes by default; settings allow immediate release, 1/2/5/10 minutes, a custom 1–60 minute interval, or keeping it until app quit. Manual release and system memory-pressure handling preserve history and files. Settings also include the default folder, event duration/reminder, disabling or deleting the model and clearing chat history. Deleting model files/history does not delete created tasks or events. Task schema V5 remains unchanged. No Intel, recording, cloud fallback, recurrence or editing/deleting existing objects through AI in this preview.
 
-Build with `python3 scripts/build_release.py`. This produces a local arm64 DMG with ad-hoc signing, without Developer ID notarization. No GitHub Release is published by the script.
+Build with `python3 apps/macos/scripts/build_release.py`. This produces a local arm64 DMG with ad-hoc signing, without Developer ID notarization. No GitHub Release is published by the script.
 
 ## Результаты локальной проверки
 
@@ -104,7 +105,7 @@ Build with `python3 scripts/build_release.py`. This produces a local arm64 DMG w
 
 4-битные веса и схема SwiftData V5 сохранены. Доработаны инструкции и контекст, короткие ссылки на папки/календари, правила назначения, звезды, времени, длительности и связей. Неизвестные назначения и время уточняются в чате; дополнительные варианты находятся в меню «Другие варианты». Отдельных модальных форм нет. Модель не нужно скачивать заново.
 
-Два прогона по 26 вымышленных обращений завершились 26/26 каждый. На исходном наборе — 36/36 вместо прежних 24/36; на восьми новых случаях — 16/16. Дополнительный независимый диалог и регрессии входят в 98 итоговых проверок. Это результат конкретного набора, не гарантия для любого текста. [Методика, исходные ответы и ограничения](../Experiments/AssistantReliability/REPORT.md).
+Два прогона по 26 вымышленных обращений завершились 26/26 каждый. На исходном наборе — 36/36 вместо прежних 24/36; на восьми новых случаях — 16/16. Дополнительный независимый диалог и регрессии входят в 98 итоговых проверок. Это результат конкретного набора, не гарантия для любого текста. [Методика, исходные ответы и ограничения](../apps/macos/Experiments/AssistantReliability/REPORT.md).
 
 English: 0.2.2 keeps the same 4-bit weights and on-demand memory lifecycle. Compact prompts, snapshot-scoped references and application rules improve folder defaults, clarification, today/deadline separation, event timing and task links. Additional clarification options remain in chat. No model re-download is required; all actions still require explicit review and confirmation.
 

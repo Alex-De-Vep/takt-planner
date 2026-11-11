@@ -119,23 +119,25 @@
 
 Нужны macOS 26+, Xcode 26 с поддержкой Swift 6.2 и Command Line Tools. Для вспомогательных скриптов нужен Python 3. Сборка использует закреплённые Swift-пакеты MLX. Пакет переводов находится в репозитории.
 
-Откройте `Planner.xcodeproj`, выберите схему **Planner** и **My Mac**, затем нажмите **⌘R**.
+Откройте `apps/macos/Planner.xcodeproj`, выберите схему **Planner** и **My Mac**, затем нажмите **⌘R**.
 
 Сборка приложения и тестовых исходников **без запуска тестов**:
 
 ```sh
-xcodebuild -project Planner.xcodeproj -scheme Planner \
+xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
   -configuration Debug -destination 'generic/platform=macOS' \
-  -derivedDataPath .build/DerivedData build-for-testing
+  -derivedDataPath apps/macos/.build/DerivedData build-for-testing
 ```
 
 Release-сборка и DMG для Apple Silicon:
 
 ```sh
-python3 scripts/build_release.py
+xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
+  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
+python3 apps/macos/scripts/build_release.py
 ```
 
-Результаты находятся в `dist/`: приложение, образ DMG и контрольная сумма SHA-256. [Устройство проекта и разработка](docs/development.md) · [Подготовка релиза](docs/releasing.md).
+Результаты находятся в `dist/`: приложение, образ DMG и контрольная сумма SHA-256. [Устройство проекта и разработка](apps/macos/README.md) · [Подготовка релиза](docs/releasing.md).
 
 ## Участие в проекте
 

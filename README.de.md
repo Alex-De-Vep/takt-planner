@@ -111,23 +111,25 @@ Deine Aufgaben sind auf deinem Gerät verfügbar. Wenn du die Cloud-Synchronisie
 
 Benötigt werden macOS 26+, Xcode 26 mit Unterstützung für Swift 6.2 und die Command Line Tools. Die Hilfsskripte benötigen Python 3. Das Lokalisierungspaket ist enthalten. Der Build verwendet festgelegte Versionen der MLX-Pakete.
 
-Öffne `Planner.xcodeproj`, wähle **Planner → My Mac** und starte die App mit **⌘R**.
+Öffne `apps/macos/Planner.xcodeproj`, wähle **Planner → My Mac** und starte die App mit **⌘R**.
 
 App und Testquellen kompilieren:
 
 ```sh
-xcodebuild -project Planner.xcodeproj -scheme Planner \
+xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
   -configuration Debug -destination 'generic/platform=macOS' \
-  -derivedDataPath .build/DerivedData build-for-testing
+  -derivedDataPath apps/macos/.build/DerivedData build-for-testing
 ```
 
 Release-DMG für Apple Silicon erstellen:
 
 ```sh
-python3 scripts/build_release.py
+xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
+  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
+python3 apps/macos/scripts/build_release.py
 ```
 
-Die Dateien liegen in `dist/`. [Entwicklungsanleitung](docs/development.md) · [Release-Anleitung](docs/releasing.md).
+Die Dateien liegen in `dist/`. [Entwicklungsanleitung](apps/macos/README.md) · [Release-Anleitung](docs/releasing.md).
 
 ## Mitwirken
 

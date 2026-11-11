@@ -5,9 +5,10 @@ import json
 import shutil
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[1]
-source = ROOT / "Design/AppIcon/tasks-icon.png"
-destination = ROOT / "Planner/Assets.xcassets/AppIcon.appiconset"
+MACOS_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = MACOS_ROOT.parents[1]
+source = REPO_ROOT / "Design/AppIcon/tasks-icon.png"
+destination = MACOS_ROOT / "Planner/Assets.xcassets/AppIcon.appiconset"
 destination.mkdir(parents=True, exist_ok=True)
 
 # Меняем только разрешение для упаковки в Xcode; оригинал и прозрачность сохраняются.
@@ -24,7 +25,7 @@ print(destination)
 
 # Tahoe получает собственную композицию, а не вставляет маленький PNG на белую плитку.
 # Оригинал не ретушируем: композиция задаёт масштаб и системную маску скругления.
-native = ROOT / "Planner/TasksIcon.icon"
+native = MACOS_ROOT / "Planner/TasksIcon.icon"
 (native / "Assets").mkdir(parents=True, exist_ok=True)
 shutil.copy2(source, native / "Assets/tasks-icon.png")
 composition = {

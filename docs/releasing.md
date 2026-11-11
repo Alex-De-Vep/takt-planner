@@ -3,14 +3,18 @@
 ## Перед сборкой
 
 1. Зафиксируйте изменения и проверьте состав коммита: без личных данных, ключей, логов и каталогов сборки.
-2. Проверьте версию и номер сборки в Xcode-проекте и `scripts/generate_project.py`.
+2. Проверьте версию и номер сборки в Xcode-проекте и `apps/macos/scripts/generate_project.py`.
 3. Обновите описание выпуска в `docs/releases/`, требования и ограничения в README.
 4. Соберите приложение и тестовые исходники. Отдельно укажите, какие проверки действительно запускались.
 
 ## Сборка пакета
 
+Из корня репозитория:
+
 ```sh
-python3 scripts/build_release.py
+xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
+  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
+python3 apps/macos/scripts/build_release.py
 ```
 
 Скрипт собирает Release для Apple Silicon (`arm64`), проверяет локализованные имена, ресурсы ИИ-помощника, сертификат GigaChat, подпись и разрешения. Затем он упаковывает DMG и проверяет его содержимое после монтирования только для чтения. Тесты и приложение не запускаются.

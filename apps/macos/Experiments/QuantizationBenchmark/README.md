@@ -32,7 +32,7 @@
 
 ## Воспроизведение
 
-Из корня репозитория, Xcode/Metal Toolchain уже установлены:
+Из каталога `apps/macos/`, Xcode и Metal Toolchain уже установлены:
 
 ```sh
 python3 Experiments/QuantizationBenchmark/download_model.py

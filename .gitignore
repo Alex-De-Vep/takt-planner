@@ -9,7 +9,7 @@ __pycache__/
 *.pyc
 
 # Личные настройки Xcode и macOS
-Packages/**/.swiftpm/
+/apps/macos/Packages/**/.swiftpm/
 *.xcuserstate
 xcuserdata/
 .DS_Store

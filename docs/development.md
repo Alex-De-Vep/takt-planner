@@ -2,6 +2,8 @@
 
 ## Стек и структура
 
+Пути в таблице указаны относительно `apps/macos/`. Команды ниже запускаются из корня репозитория.
+
 Приложение использует Swift 6, SwiftUI, AppKit, SwiftData и EventKit. Требуются macOS 26+, Xcode 26 с поддержкой Swift 6.2 и Command Line Tools. Для скриптов — Python 3.
 
 | Путь | Назначение |
@@ -25,14 +27,14 @@ SwiftUI рисует содержимое колонок. `NSSplitViewController
 
 ## Запуск и сборка
 
-Откройте `Planner.xcodeproj`, выберите **Planner → My Mac** и нажмите ⌘R. Bundle ID рабочей версии — `local.planner.Planner`. Не меняйте его без плана переноса существующей библиотеки: sandbox-контейнер привязан к идентификатору приложения.
+Откройте `apps/macos/Planner.xcodeproj`, выберите **Planner → My Mac** и нажмите ⌘R. Bundle ID рабочей версии — `local.planner.Planner`. Не меняйте его без плана переноса существующей библиотеки: sandbox-контейнер привязан к идентификатору приложения.
 
 Сборка приложения и тестовых исходников без запуска:
 
 ```sh
-xcodebuild -project Planner.xcodeproj -scheme Planner \
+xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
   -configuration Debug -destination 'generic/platform=macOS' \
-  -derivedDataPath .build/DerivedData build-for-testing
+  -derivedDataPath apps/macos/.build/DerivedData build-for-testing
 ```
 
 `build-for-testing` не выполняет проверки. UI-тесты отключены в общей схеме. Для фактического запуска сначала согласуйте сценарии и убедитесь, что используется изолированная тестовая библиотека; календарные тесты должны работать с подменяемым хранилищем.
@@ -45,17 +47,17 @@ xcodebuild -project Planner.xcodeproj -scheme Planner \
 
 ## Настройки проекта
 
-Новые Swift-файлы автоматически включаются благодаря синхронизированным группам Xcode. `scripts/generate_project.py` воспроизводит проект и общую схему; изменения build settings должны отражаться и в генераторе. Запускать генератор ради обычного изменения Swift-файла не требуется.
+Новые Swift-файлы автоматически включаются благодаря синхронизированным группам Xcode. `apps/macos/scripts/generate_project.py` воспроизводит проект и общую схему; изменения build settings должны отражаться и в генераторе. Запускать генератор ради обычного изменения Swift-файла не требуется.
 
-Иконка: `python3 scripts/prepare_app_icon.py` обновляет стандартный набор PNG и `Planner/TasksIcon.icon` из `Design/AppIcon/tasks-icon.png`. Активная иконка в build settings — `TasksIcon`. [Исходник и композиция](../Design/AppIcon/README.md).
+Иконка: `python3 apps/macos/scripts/prepare_app_icon.py` обновляет стандартный набор PNG и `apps/macos/Planner/TasksIcon.icon` из `Design/AppIcon/tasks-icon.png`. Активная иконка в build settings — `TasksIcon`. [Исходник и композиция](../Design/AppIcon/README.md).
 
 ## Скриншоты
 
 ```sh
-python3 scripts/prepare_showcase.py
+python3 apps/macos/scripts/prepare_showcase.py
 ```
 
-Команда только собирает три приложения в `.build/showcase`: русский светлый, русский тёмный и английский светлый варианты. Откройте нужный вариант вручную и выберите первую задачу во «Входящих». Сделайте снимок окна и сохраните его в `docs/screenshots`.
+Команда только собирает три приложения в `apps/macos/.build/showcase/`: русский светлый, русский тёмный и английский светлый варианты. Откройте нужный вариант вручную и выберите первую задачу во «Входящих». Сделайте снимок окна и сохраните его в `docs/screenshots`.
 
 Флаг `SHOWCASE` включает отдельное хранилище SwiftData в памяти и вымышленные события. EventKit не создаётся, календарное разрешение не включено в entitlement демонстрационной сборки. У каждого варианта отдельный Bundle ID. Тема задаётся только для этого приложения и не меняет системные настройки. Данные пропадают после выхода.
 

@@ -2,6 +2,8 @@
 
 [Результаты 0.2.2](REPORT.md). Исходные веса не меняются.
 
+Из каталога `apps/macos/`:
+
 ```sh
 python3 Experiments/AssistantReliability/run.py
 python3 Experiments/AssistantReliability/summarize.py

@@ -111,23 +111,25 @@ Tasks are available on your device. When you enable cloud sync, the app server s
 
 Requires macOS 26+, Xcode 26 with Swift 6.2 support, Command Line Tools and Python 3 for helper scripts. The localization package is included. The build uses pinned MLX Swift packages.
 
-Open `Planner.xcodeproj`, select **Planner → My Mac**, and run with **⌘R**.
+Open `apps/macos/Planner.xcodeproj`, select **Planner → My Mac**, and run with **⌘R**.
 
 Compile the app and test sources without running tests:
 
 ```sh
-xcodebuild -project Planner.xcodeproj -scheme Planner \
+xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
   -configuration Debug -destination 'generic/platform=macOS' \
-  -derivedDataPath .build/DerivedData build-for-testing
+  -derivedDataPath apps/macos/.build/DerivedData build-for-testing
 ```
 
 Build a release DMG for Apple Silicon:
 
 ```sh
-python3 scripts/build_release.py
+xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
+  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
+python3 apps/macos/scripts/build_release.py
 ```
 
-Artifacts are written to `dist/`. [Development guide](docs/development.md) · [Release guide](docs/releasing.md).
+Artifacts are written to `dist/`. [Development guide](apps/macos/README.md) · [Release guide](docs/releasing.md).
 
 ## Contributing
 

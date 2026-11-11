@@ -8,9 +8,10 @@ import shutil
 import subprocess
 import tempfile
 
-ROOT = Path(__file__).resolve().parents[1]
-BUILD = ROOT / '.build'
-DIST = ROOT / 'dist'
+MACOS_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = MACOS_ROOT.parents[1]
+BUILD = MACOS_ROOT / '.build'
+DIST = REPO_ROOT / 'dist'
 DERIVED = BUILD / 'AIReleaseDerivedData'
 APP_NAME = 'Задачи.app'
 
@@ -58,25 +59,25 @@ def verify(app):
     assert not entitlements.get('com.apple.security.files.user-selected.read-only', False)
     assert not (app / 'Contents/PlugIns').exists()
     for name in ('LICENSE', 'NOTICE'):
-        assert (resources / name).read_bytes() == (ROOT / name).read_bytes()
+        assert (resources / name).read_bytes() == (REPO_ROOT / name).read_bytes()
     assert not entitlements.get('com.apple.security.get-task-allow', False)
     return metadata
 
 
 def main():
     # Не допускаем случайную упаковку отдельной Preview или демонстрационной библиотеки как обновления.
-    generator = (ROOT / 'scripts/generate_project.py').read_text()
+    generator = (MACOS_ROOT / 'scripts/generate_project.py').read_text()
     assert 'f"local.planner.{name}"' in generator
-    persistence = (ROOT / 'Planner/Persistence/PlannerPersistence.swift').read_text()
+    persistence = (MACOS_ROOT / 'Planner/Persistence/PlannerPersistence.swift').read_text()
     assert '.appending(path: "Planner", directoryHint: .isDirectory)' in persistence
     assert 'PlannerAIPreview' not in persistence
     BUILD.mkdir(exist_ok=True); DIST.mkdir(exist_ok=True)
     with (BUILD / 'ai-release-build.log').open('w') as log:
         try:
-            run('xcodebuild', '-project', ROOT / 'Planner.xcodeproj', '-scheme', 'Planner', '-configuration', 'Release',
+            run('xcodebuild', '-project', MACOS_ROOT / 'Planner.xcodeproj', '-scheme', 'Planner', '-configuration', 'Release',
                 '-destination', 'generic/platform=macOS', '-derivedDataPath', DERIVED,
                 '-clonedSourcePackagesDirPath', BUILD / 'SourcePackages', '-disableAutomaticPackageResolution',
-                '-skipPackagePluginValidation', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=NO', 'build', cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+                '-skipPackagePluginValidation', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=NO', 'build', cwd=MACOS_ROOT, stdout=log, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError:
             print((BUILD / 'ai-release-build.log').read_text()[-12000:]); raise
     with tempfile.TemporaryDirectory(prefix='ai-release-', dir=BUILD) as tmp:
@@ -88,8 +89,8 @@ def main():
         metadata['CFBundleDisplayName'] = metadata['CFBundleName'] = 'Задачи'
         info_path.write_bytes(plistlib.dumps(metadata))
         for name in ('LICENSE', 'NOTICE'):
-            shutil.copy2(ROOT / name, app / 'Contents/Resources' / name)
-            shutil.copy2(ROOT / name, stage / name)
+            shutil.copy2(REPO_ROOT / name, app / 'Contents/Resources' / name)
+            shutil.copy2(REPO_ROOT / name, stage / name)
         # Уведомления об авторстве всех включённых Swift-пакетов и их зависимостей.
         notices = []
         for checkout in sorted((BUILD / 'SourcePackages/checkouts').iterdir()):
@@ -97,7 +98,7 @@ def main():
                 if license_file.is_file(): notices.append(checkout.name + '\n' + license_file.read_text(errors='replace'))
         (app / 'Contents/Resources/ThirdPartyLicenses.txt').write_text('\n\n'.join(notices))
         run('/usr/bin/codesign', '--force', '--sign', '-', '--timestamp=none', '--options', 'runtime',
-            '--entitlements', ROOT / 'Planner/Planner.entitlements', '--generate-entitlement-der', app)
+            '--entitlements', MACOS_ROOT / 'Planner/Planner.entitlements', '--generate-entitlement-der', app)
         metadata = verify(app)
         (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)
         (stage / 'Прочитайте перед установкой.txt').write_text(
