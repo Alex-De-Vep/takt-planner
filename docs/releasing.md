@@ -36,7 +36,7 @@ python3 apps/macos/scripts/build_release.py
 
 Android APK — тестовая сборка с debug-подписью для установки из файла. Для Google Play или другого магазина подготовьте release-сборку с постоянным ключом владельца. Существующий тестовый APK обновляется только APK с той же подписью.
 
-Android собирается из папки `android/` командой `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`. Результат находится в `app/build/outputs/apk/debug/app-debug.apk`. Проверьте подпись через `apksigner verify --verbose --print-certs` и сохраните SHA-256 рядом с установщиком.
+Android собирается из папки `apps/android/` командой `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`. Результат находится в `app/build/outputs/apk/debug/app-debug.apk`. Проверьте подпись через `apksigner verify --verbose --print-certs` и сохраните SHA-256 рядом с установщиком.
 
 Текст этого выпуска находится в [docs/releases/v0.2.17.md](releases/v0.2.17.md). Исходные архивы GitHub создаст из тега. Бинарные сборки хранятся во вложениях релиза. Для исправлений опубликованного выпуска используйте новую версию и новый тег.
 

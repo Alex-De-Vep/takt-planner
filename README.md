@@ -66,11 +66,11 @@ The Android client runs on **Android 8.0 or later**. It includes task lists, sub
 
 *Android screenshots with sample data.*
 
-Open [the Android project](android/) in Android Studio or build a debug APK by running `./gradlew :app:assembleDebug` in `android/`. See the [Android guide](android/README.md) for build requirements, account setup, and calendar access.
+Open [the Android project](apps/android/) in Android Studio or build a debug APK by running `./gradlew :app:assembleDebug` in `apps/android/`. See the [Android guide](apps/android/README.md) for build requirements, account setup, and calendar access.
 
 ## Getting started
 
-Open **Help → Planner Help** in the app or read the [complete guide](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
+Open **Help → Planner Help** in the app or read the [complete guide](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Press **⌘N** to create a task. Enter its title, then press **Return** to move to the description. Star it for today, add subtasks with the checklist button, or open the calendar using the rightmost toolbar button.
 
@@ -109,6 +109,8 @@ Tasks are available on your device. When you enable cloud sync, the app server s
 
 ## Build
 
+[macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (planned)](apps/windows/README.md)
+
 Requires macOS 26+, Xcode 26 with Swift 6.2 support, Command Line Tools and Python 3 for helper scripts. The localization package is included. The build uses pinned MLX Swift packages.
 
 Open `apps/macos/Planner.xcodeproj`, select **Planner → My Mac**, and run with **⌘R**.
@@ -129,7 +131,7 @@ xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -sc
 python3 apps/macos/scripts/build_release.py
 ```
 
-Artifacts are written to `dist/`. [Development guide](apps/macos/README.md) · [Release guide](docs/releasing.md).
+Artifacts are written to `dist/`. [Development guide](docs/development.md) · [Release guide](docs/releasing.md).
 
 ## Contributing
 

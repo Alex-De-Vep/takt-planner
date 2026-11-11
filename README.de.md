@@ -66,11 +66,11 @@ Der Client läuft ab **Android 8.0**. Er bietet Aufgabenlisten, Teilaufgaben, Fr
 
 *Android-Screenshots der englischen Oberfläche mit Beispieldaten.*
 
-Öffne [das Android-Projekt](android/) in Android Studio oder führe in `android/` den Befehl `./gradlew :app:assembleDebug` aus, um ein Debug-APK zu erstellen. Die [Android-Anleitung](android/README.md) beschreibt die Build-Anforderungen, die Einrichtung des Kontos und den Kalenderzugriff.
+Öffne [das Android-Projekt](apps/android/) in Android Studio oder führe in `apps/android/` den Befehl `./gradlew :app:assembleDebug` aus, um ein Debug-APK zu erstellen. Die [Android-Anleitung](apps/android/README.md) beschreibt die Build-Anforderungen, die Einrichtung des Kontos und den Kalenderzugriff.
 
 ## Erste Schritte auf macOS
 
-Öffne **Help → Planner Help** in der App oder lies die [vollständige englische Anleitung](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
+Öffne **Help → Planner Help** in der App oder lies die [vollständige englische Anleitung](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Drücke **⌘N**, um eine Aufgabe anzulegen. Gib einen Titel ein und wechsle mit **Return** zur Beschreibung. Markiere die Aufgabe mit einem Stern, füge über die Checklisten-Schaltfläche Teilaufgaben hinzu oder öffne den Kalender über die rechte Schaltfläche in der Symbolleiste.
 
@@ -109,6 +109,8 @@ Deine Aufgaben sind auf deinem Gerät verfügbar. Wenn du die Cloud-Synchronisie
 
 ## Aus dem Quellcode bauen
 
+[macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (geplant)](apps/windows/README.md)
+
 Benötigt werden macOS 26+, Xcode 26 mit Unterstützung für Swift 6.2 und die Command Line Tools. Die Hilfsskripte benötigen Python 3. Das Lokalisierungspaket ist enthalten. Der Build verwendet festgelegte Versionen der MLX-Pakete.
 
 Öffne `apps/macos/Planner.xcodeproj`, wähle **Planner → My Mac** und starte die App mit **⌘R**.
@@ -129,7 +131,7 @@ xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -sc
 python3 apps/macos/scripts/build_release.py
 ```
 
-Die Dateien liegen in `dist/`. [Entwicklungsanleitung](apps/macos/README.md) · [Release-Anleitung](docs/releasing.md).
+Die Dateien liegen in `dist/`. [Entwicklungsanleitung](docs/development.md) · [Release-Anleitung](docs/releasing.md).
 
 ## Mitwirken
 

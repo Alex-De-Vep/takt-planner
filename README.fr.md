@@ -66,11 +66,11 @@ Le client fonctionne sur **Android 8.0 ou ultérieur**. Il propose des listes de
 
 *Captures d’Android en anglais avec des données fictives.*
 
-Ouvrez [le projet Android](android/) dans Android Studio ou exécutez `./gradlew :app:assembleDebug` dans `android/` pour créer un APK de test. Le [guide Android](android/README.md) détaille les prérequis, la configuration du compte et l’accès aux calendriers.
+Ouvrez [le projet Android](apps/android/) dans Android Studio ou exécutez `./gradlew :app:assembleDebug` dans `apps/android/` pour créer un APK de test. Le [guide Android](apps/android/README.md) détaille les prérequis, la configuration du compte et l’accès aux calendriers.
 
 ## Premiers pas sur macOS
 
-Ouvrez **Help → Planner Help** dans l’application ou lisez le [guide complet en anglais](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
+Ouvrez **Help → Planner Help** dans l’application ou lisez le [guide complet en anglais](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Appuyez sur **⌘N** pour créer une tâche. Saisissez son titre et appuyez sur **Retour** pour passer à la description. Ajoutez une étoile à la tâche, créez des sous-tâches avec le bouton de liste à cocher ou ouvrez le calendrier depuis le bouton à droite de la barre d’outils.
 
@@ -109,6 +109,8 @@ Vos tâches restent accessibles sur votre appareil. Si vous activez la synchroni
 
 ## Compiler depuis les sources
 
+[macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (prévu)](apps/windows/README.md)
+
 Prérequis pour macOS : macOS 26+, Xcode 26 avec Swift 6.2 et les Command Line Tools. Les scripts nécessitent Python 3. Le paquet de traduction est inclus. La compilation utilise des versions fixes des paquets Swift MLX.
 
 Ouvrez `apps/macos/Planner.xcodeproj`, sélectionnez **Planner → My Mac** et lancez l’application avec **⌘R**.
@@ -129,7 +131,7 @@ xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -sc
 python3 apps/macos/scripts/build_release.py
 ```
 
-Les fichiers sont écrits dans `dist/`. [Guide de développement](apps/macos/README.md) · [Guide de publication](docs/releasing.md).
+Les fichiers sont écrits dans `dist/`. [Guide de développement](docs/development.md) · [Guide de publication](docs/releasing.md).
 
 ## Contribuer
 

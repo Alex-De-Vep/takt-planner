@@ -1,6 +1,6 @@
 # Задачи для Android
 
-Нативный клиент на Kotlin и Jetpack Compose для Android 8.0 и новее. Проект открывается из папки `android/`. Клиенты Android и macOS используют [общий протокол синхронизации](../server/docs/API.md).
+Нативный клиент на Kotlin и Jetpack Compose для Android 8.0 и новее. Проект открывается из папки `apps/android/`. Клиенты Android и macOS используют [общий протокол синхронизации](../../server/docs/API.md).
 
 - **Задачи.** Списки, поиск, звёзды, выполненные задачи и подзадачи. В настройках можно включить напоминания и выбрать время для сроков без времени. По умолчанию это 09:00 в часовом поясе срока.
 - **События.** Повестка из выбранных календарей Android. Разовые события можно создавать и редактировать в Planner. В настройках выбирается календарь для новых событий. Подключите один календарный аккаунт на Android и Mac, чтобы видеть одни и те же события.
@@ -23,9 +23,11 @@
 
 ## Сборка
 
-Откройте папку `android/` в Android Studio. Нужны JDK 17, Android SDK Platform 36 и Android SDK Build-Tools 36.0.0. Выберите эмулятор или подключите Android-устройство и нажмите **Run**.
+Откройте папку `apps/android/` в Android Studio. Нужны JDK 17, Android SDK Platform 36 и Android SDK Build-Tools 36.0.0. Выберите эмулятор или подключите Android-устройство и нажмите **Run**.
 
 ```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+На Windows используйте `.\gradlew.bat` вместо `./gradlew`. Команды выполняются из `apps/android/`.

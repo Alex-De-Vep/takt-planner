@@ -74,11 +74,11 @@
 
 *Android, английский интерфейс и вымышленные данные.*
 
-Откройте [проект Android](android/) в Android Studio или соберите тестовый APK командой `./gradlew :app:assembleDebug` из папки `android/`. Требования к сборке, настройка аккаунта и доступ к календарям описаны в [руководстве Android](android/README.md).
+Откройте [проект Android](apps/android/) в Android Studio или соберите тестовый APK командой `./gradlew :app:assembleDebug` из папки `apps/android/`. Требования к сборке, настройка аккаунта и доступ к календарям описаны в [руководстве Android](apps/android/README.md).
 
 ## Как начать
 
-Полное руководство доступно в **Справка → Справка по приложению** и в [текстовой версии справки](Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/ru.lproj/Help.md).
+Полное руководство доступно в **Справка → Справка по приложению** и в [текстовой версии справки](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/ru.lproj/Help.md).
 
 Создайте задачу кнопкой в шапке или **⌘N**. Назовите её и нажмите **Enter**, чтобы перейти к описанию. Звезда добавляет задачу в «Сегодня», а кнопка контрольного списка — подзадачу. Панель календаря открывается крайней правой кнопкой.
 
@@ -117,6 +117,8 @@
 
 ## Сборка из исходников
 
+[macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (в планах)](apps/windows/README.md)
+
 Нужны macOS 26+, Xcode 26 с поддержкой Swift 6.2 и Command Line Tools. Для вспомогательных скриптов нужен Python 3. Сборка использует закреплённые Swift-пакеты MLX. Пакет переводов находится в репозитории.
 
 Откройте `apps/macos/Planner.xcodeproj`, выберите схему **Planner** и **My Mac**, затем нажмите **⌘R**.
@@ -137,7 +139,7 @@ xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -sc
 python3 apps/macos/scripts/build_release.py
 ```
 
-Результаты находятся в `dist/`: приложение, образ DMG и контрольная сумма SHA-256. [Устройство проекта и разработка](apps/macos/README.md) · [Подготовка релиза](docs/releasing.md).
+Результаты находятся в `dist/`: приложение, образ DMG и контрольная сумма SHA-256. [Устройство проекта и разработка](docs/development.md) · [Подготовка релиза](docs/releasing.md).
 
 ## Участие в проекте
 
