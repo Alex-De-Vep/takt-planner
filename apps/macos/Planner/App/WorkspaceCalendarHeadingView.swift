@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class WorkspaceCalendarHeadingView: NSView {
     private let label = NSTextField(labelWithString: "")
+    var accessibilityTitle: NSView { label }
     private var width: NSLayoutConstraint!
     var holdsWidth = false {
         didSet { if !holdsWidth && oldValue { width.constant = preferredWidth } }

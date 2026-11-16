@@ -14,6 +14,9 @@ final class AppPreferences {
         get { rightPanel == .calendar }
         set { if newValue { rightPanel = .calendar } else if rightPanel == .calendar { rightPanel = nil } }
     }
+    var transcriptionModel: AssistantTranscriptionSelection? {
+        didSet { defaults.set(transcriptionModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "assistantTranscriptionModel") }
+    }
     var assistantWidth: Double { didSet { defaults.set(assistantWidth, forKey: "assistantWidth") } }
     var assistantDefaultFolder: String { didSet { defaults.set(assistantDefaultFolder, forKey: "assistantDefaultFolder") } }
     var assistantUseCurrentFolder: Bool { didSet { defaults.set(assistantUseCurrentFolder, forKey: "assistantUseCurrentFolder") } }
@@ -57,6 +60,8 @@ final class AppPreferences {
         reviewWeekdaysOnly = defaults.bool(forKey: "reviewWeekdaysOnly")
         language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .system
         rightPanel = defaults.string(forKey: "rightPanel").flatMap(RightPanel.init(rawValue:))
+        transcriptionModel = defaults.data(forKey: "assistantTranscriptionModel")
+            .flatMap { try? JSONDecoder().decode(AssistantTranscriptionSelection.self, from: $0) }
         assistantWidth = min(520, max(360, defaults.object(forKey: "assistantWidth") as? Double ?? 420))
         assistantDefaultFolder = defaults.string(forKey: "assistantDefaultFolder") ?? "inbox"
         assistantUseCurrentFolder = defaults.object(forKey: "assistantUseCurrentFolder") as? Bool ?? true

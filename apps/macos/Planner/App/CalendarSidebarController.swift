@@ -22,8 +22,8 @@ final class CalendarSidebarController: NSViewController {
         view = root
         addChild(contentHost)
         glass.style = .regular
-        // В накладном режиме воспроизводим отступ и внутренние углы панели папок; рамку рисует системное стекло.
-        glass.cornerRadius = 20
+        // Скругление повторяет видимый контур нативной панели папок при отступе 8 pt.
+        glass.cornerRadius = 18
         root.addSubview(glass)
         root.layoutContent = { [weak self] in self?.layoutContent() }
         configureChrome()
@@ -58,7 +58,14 @@ final class CalendarSidebarController: NSViewController {
     }
 }
 
-private final class CalendarSidebarSurface: NSView {
+final class CalendarSidebarSurface: NSView {
+    var overlayHeaderElements: [NSView] = []
+
+    override func accessibilityChildren() -> [Any]? {
+        let content = super.accessibilityChildren() ?? []
+        return overlayHeaderElements.isEmpty ? content : overlayHeaderElements + content
+    }
+
     var layoutContent: (() -> Void)?
     var drawsBackdrop = false { didSet { needsDisplay = true } }
     override var isOpaque: Bool { drawsBackdrop }

@@ -58,7 +58,7 @@ for name, product_type, extension in (
     products.append(product)
     settings = {
         "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.10", "CURRENT_PROJECT_VERSION": "94", "ARCHS": "arm64",
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.21", "CURRENT_PROJECT_VERSION": "105", "ARCHS": "arm64",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
@@ -69,6 +69,7 @@ for name, product_type, extension in (
                         ASSETCATALOG_COMPILER_APPICON_NAME="TasksIcon",
                         INFOPLIST_KEY_CFBundleDisplayName="Takt",
                         INFOPLIST_KEY_LSApplicationCategoryType="public.app-category.productivity",
+                        INFOPLIST_KEY_NSMicrophoneUsageDescription="Takt использует микрофон, чтобы записать голос для расшифровки в заметке.",
                         INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Takt нужен доступ к календарям для просмотра событий и планирования времени.",
                         INFOPLIST_KEY_NSHumanReadableCopyright="", INFOPLIST_KEY_CFBundleDevelopmentRegion="ru")
     elif name == "PlannerTests":

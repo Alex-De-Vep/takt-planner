@@ -4,7 +4,7 @@ import QuartzCore
 /// List в AppKit может применить новый набор строк сразу, даже внутри withAnimation.
 /// Анимируем только отображение готовой геометрии; данными и выделением по-прежнему владеет List.
 @MainActor
-final class TaskListTransitions {
+final class WorkspaceListTransitions {
     private struct Row {
         let frame: CGRect
         let image: CGImage?
@@ -16,7 +16,7 @@ final class TaskListTransitions {
     }
     private weak var table: NSTableView?
     private var ids: [UUID] = []
-    private var scope: AnyHashable?
+    private var scope: WorkspaceListScope?
     private var settled: [UUID: Row] = [:]
     private var pending: Change?
     private var scheduled = false
@@ -24,11 +24,11 @@ final class TaskListTransitions {
     private var ghosts: [CALayer] = []
     private var cover: CALayer?
 
-    static func prepare(in host: NSView) {
+    static func prepare(in host: NSView, scope: WorkspaceListScope) {
         var prepared = Set<ObjectIdentifier>()
         func visit(_ view: NSView) {
-            if let probe = view as? TaskRowSelectionSync.Probe, let transitions = probe.nativeFocus?.transitions,
-               prepared.insert(ObjectIdentifier(transitions)).inserted { transitions.prepare() }
+            if let probe = view as? WorkspaceRowSelectionSync.Probe, let transitions = probe.nativeFocus?.transitions,
+               transitions.scope == scope, prepared.insert(ObjectIdentifier(transitions)).inserted { transitions.prepare() }
             for child in view.subviews { visit(child) }
         }
         visit(host)
@@ -73,7 +73,7 @@ final class TaskListTransitions {
         schedule()
     }
 
-    func update(ids: [UUID], scope: AnyHashable, animated: Bool) {
+    func update(ids: [UUID], scope: WorkspaceListScope, animated: Bool) {
         if !animated { pending = nil; removeAnimations() }
         if self.ids != ids || self.scope != scope {
             pending = animated && self.scope == scope ? Change(previous: settled, ids: ids) : nil
@@ -98,15 +98,15 @@ final class TaskListTransitions {
     private func visibleRows() -> [UUID: NSTableRowView] {
         guard let table else { return [:] }
         var result: [UUID: NSTableRowView] = [:]
-        func taskID(in view: NSView) -> UUID? {
-            if let probe = view as? TaskRowSelectionSync.Probe { return probe.taskID }
-            for child in view.subviews { if let id = taskID(in: child) { return id } }
+        func rowID(in view: NSView) -> UUID? {
+            if let probe = view as? WorkspaceRowSelectionSync.Probe { return probe.rowID }
+            for child in view.subviews { if let id = rowID(in: child) { return id } }
             return nil
         }
         let range = table.rows(in: table.visibleRect)
         guard range.location != NSNotFound else { return [:] }
         for index in range.location..<min(table.numberOfRows, NSMaxRange(range)) {
-            if let row = table.rowView(atRow: index, makeIfNecessary: false), let id = taskID(in: row) {
+            if let row = table.rowView(atRow: index, makeIfNecessary: false), let id = rowID(in: row) {
                 result[id] = row
             }
         }

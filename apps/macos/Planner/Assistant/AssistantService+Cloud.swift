@@ -145,7 +145,7 @@ extension AssistantService {
 
     func sendCloud(_ input: String, context: AssistantContext, tasks: TaskService?,
                    calendar: CalendarService? = nil, visibleCalendarIDs: Set<String>? = nil,
-                   note: AssistantNoteContext? = nil) {
+                   notes: NoteStore? = nil) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !generating, !applying, !storageFailed,
               let i = currentIndex, current?.usesCloudModel == true, let settings = current?.cloud else { return }
@@ -166,9 +166,16 @@ extension AssistantService {
                 context.now = previous.now
                 context.timeZoneID = previous.timeZoneID
             }
-            var requestedTask = context.taskID.flatMap(UUID.init(uuidString:))
+            let note: AssistantAttachedNote?
+            if let id = archive.threads[i].attachedNoteID {
+                guard let notes, notes.flush(), let selected = notes.notes.first(where: { $0.id == id && $0.deletedAt == nil }) else {
+                    throw AssistantFailure(message: "Заметка недоступна.")
+                }
+                note = AssistantAttachedNote(selected)
+            } else { note = nil }
+            var requestedTask = note == nil ? context.taskID.flatMap(UUID.init(uuidString:)) : nil
             var modelInput = text
-            if tools, let tasks {
+            if note == nil, tools, let tasks {
                 if lastCloudMessageIsCurrent, let previous = archive.threads[i].messages.last,
                    let lookup = previous.taskLookup, let options = previous.questions.first?.options,
                    let index = options.firstIndex(of: text) ?? Int(text).flatMap({ $0 > 0 && $0 <= options.count ? $0 - 1 : nil }),
@@ -197,13 +204,13 @@ extension AssistantService {
             let numberedDraft = AssistantIntentPolicy.referencedDraftNumber(text).flatMap { number in
                 thread.numberedTaskDrafts.dropFirst(number - 1).first
             }
-            if tools, requestedTask == nil, let numberedDraft, [.pending, .failed].contains(numberedDraft.status),
+            if note == nil, tools, requestedTask == nil, let numberedDraft, [.pending, .failed].contains(numberedDraft.status),
                thread.cloud?.draftIDs?.contains(numberedDraft.id) ?? true {
                 thread.focusedDraftID = numberedDraft.id
                 thread.activeTextEditID = nil
             }
             let edit: AssistantTextEdit?
-            if !tools { edit = nil }
+            if !tools || note != nil { edit = nil }
             else if let id = requestedTask, let tasks {
                 if let pending = archive.threads[i].textEdits?.last(where: {
                     $0.target == .savedTask && $0.before.id == id && $0.status == .pending && $0.committed == nil
@@ -217,13 +224,16 @@ extension AssistantService {
                 edit = active
             } else { edit = nil }
 
+            let previousNoteProposal = thread.noteProposal.flatMap { proposal in
+                proposal.noteID == note?.id && !proposal.applied ? proposal.body : nil
+            }
             let request: AssistantCloudRequest
             if let profile, let model = gatewayModel {
                 request = try AssistantCloudRequest(thread: thread, text: modelInput, context: context, edit: edit,
-                                                    modelID: model.id, effort: cloudEffort, gateway: profile.gateway, supportsTools: tools, note: note)
+                                                    modelID: model.id, effort: cloudEffort, gateway: profile.gateway, supportsTools: tools, note: note?.context, previousNoteProposal: previousNoteProposal)
             } else if settings.gateway == nil, let model = cloudModel {
                 request = try AssistantCloudRequest(thread: thread, text: modelInput, context: context, edit: edit,
-                                                    model: model, effort: cloudEffort, note: note)
+                                                    model: model, effort: cloudEffort, note: note?.context, previousNoteProposal: previousNoteProposal)
             } else { return }
             let previous = archive
             archive.threads[i] = thread
@@ -265,7 +275,7 @@ extension AssistantService {
                             context: context, calendar: calendar, visibleIDs: visibleCalendarIDs, usage: completion.usage)
                     } else {
                         updated = try Self.cloudReply(completion.response, to: archive.threads[index], drafts: request.drafts,
-                                                          text: submittedText, context: localContext, edit: edit, usage: completion.usage)
+                                                          text: submittedText, context: localContext, edit: edit, usage: completion.usage, note: tools ? note : nil)
                     }
                     let previous = archive.threads[index]
                     archive.threads[index] = updated
@@ -283,11 +293,13 @@ extension AssistantService {
 
     /// Ответ меняет только историю и карточки. Сохранение в библиотеку остаётся отдельным действием пользователя.
     static func cloudReply(_ reply: AssistantResponse, to original: AssistantThread, drafts: [String: UUID],
-                           text: String, context: AssistantContext, edit: AssistantTextEdit?, usage: AssistantCloudUsage? = nil) throws -> AssistantThread {
+                           text: String, context: AssistantContext, edit: AssistantTextEdit?, usage: AssistantCloudUsage? = nil,
+                           note: AssistantAttachedNote? = nil) throws -> AssistantThread {
         var thread = original
         var message = reply.message
         var resultActionIDs: [UUID] = []
         var resultEditID: UUID?
+        var resultNoteProposalID: UUID?
         var questions = reply.questions ?? []
         if questions.isEmpty {
             let destination = AssistantIntentPolicy.destination(in: text,
@@ -325,6 +337,12 @@ extension AssistantService {
                 thread.focusedEventID = nil
                 thread.focusedDraftID = resultActionIDs.count == 1 ? resultActionIDs.first : nil
             }
+            if let note, let body = reply.noteEdit?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !body.isEmpty, body.utf8.count <= 120_000 {
+                let proposal = AssistantNoteProposal(noteID: note.id, title: note.title, version: note.version, body: body)
+                thread.noteProposal = proposal
+                resultNoteProposalID = proposal.id
+            }
             if let change = reply.textEdit {
                 if var edit {
                     try edit.propose(change)
@@ -353,7 +371,7 @@ extension AssistantService {
         }
         thread.messages.append(.init(role: .assistant, text: message, questions: questions, cloudUsage: usage,
                                      resultActionID: resultActionIDs.count == 1 && resultEditID == nil ? resultActionIDs.first : nil,
-                                     resultEditID: resultEditID))
+                                     resultEditID: resultEditID, resultNoteProposalID: resultNoteProposalID))
         return thread
     }
 }

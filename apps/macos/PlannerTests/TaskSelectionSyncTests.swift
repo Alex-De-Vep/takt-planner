@@ -13,7 +13,7 @@ struct TaskSelectionSyncTests {
         fixture.table.reloadData()
         #expect(fixture.table.numberOfRows == 0)
         #expect(fixture.window.makeFirstResponder(fixture.table))
-        let previous = TaskListNativeFocus.prepareForTaskCreation(in: fixture.window)
+        let previous = WorkspaceListNativeFocus.prepareForCreation(in: fixture.window)
         #expect(previous === fixture.table)
         #expect(fixture.window.firstResponder !== fixture.table)
         #expect(fixture.selectedID == nil)
@@ -27,7 +27,7 @@ struct TaskSelectionSyncTests {
         let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 40))
         fixture.window.contentView?.addSubview(editor)
         #expect(fixture.window.makeFirstResponder(editor))
-        #expect(TaskListNativeFocus.prepareForTaskCreation(in: fixture.window) == nil)
+        #expect(WorkspaceListNativeFocus.prepareForCreation(in: fixture.window) == nil)
         #expect(fixture.window.firstResponder === editor)
     }
 
@@ -35,7 +35,7 @@ struct TaskSelectionSyncTests {
         let fixture = SelectionFixture()
         defer { fixture.close() }
         fixture.selectedID = fixture.ids[0]
-        let focus = TaskListNativeFocus()
+        let focus = WorkspaceListNativeFocus()
         fixture.probes[1].nativeFocus = focus
         fixture.probes[1].reconcileSelection()
         fixture.probes[0].reconcileSelection()
@@ -108,7 +108,7 @@ struct TaskSelectionSyncTests {
 @MainActor
 private final class SelectionFixture: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     let ids = [UUID(), UUID()]
-    let probes = [TaskRowSelectionSync.Probe(), TaskRowSelectionSync.Probe()]
+    let probes = [WorkspaceRowSelectionSync.Probe(), WorkspaceRowSelectionSync.Probe()]
     let table = NSTableView(frame: NSRect(x: 0, y: 0, width: 400, height: 220))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 220),
                           styleMask: [.titled], backing: .buffered, defer: false)
@@ -128,7 +128,7 @@ private final class SelectionFixture: NSObject, NSTableViewDataSource, NSTableVi
         table.dataSource = self
         table.delegate = self
         for index in probes.indices {
-            probes[index].taskID = ids[index]
+            probes[index].rowID = ids[index]
             probes[index].selectedID = Binding(get: { self.selectedID }, set: { self.selectedID = $0 })
         }
         table.reloadData()

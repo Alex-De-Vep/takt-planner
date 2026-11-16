@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="@@LANG@@">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Takt</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px system-ui; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: Canvas; color: CanvasText; }
+    main { max-width: 34rem; margin: 2rem; }
+    h1 { font-size: 2rem; margin: 0 0 1rem; }
+    p { line-height: 1.5; }
+    button { border: 0; border-radius: .6rem; padding: .7rem 1rem; background: #6747c7; color: #fff; font: inherit; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: default; }
+    button:focus-visible { outline: 3px solid Highlight; outline-offset: 3px; }
+  </style>
+  <script defer src="capture.js"></script>
+</head>
+<body>
+  <main>
+    <h1 id="heading"></h1>
+    <p id="status" role="status"></p>
+    <button id="start"></button>
+    <button id="stop" hidden></button>
+  </main>
+</body>
+</html>

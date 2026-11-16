@@ -93,13 +93,10 @@ struct RightPanelToolbarTests {
                 #expect(ids.filter { $0 == outerID }.count == 1 && ids.filter { $0 == trailingID }.count == 1)
                 let outerIndex = try #require(ids.firstIndex(of: outerID)), trailingIndex = try #require(ids.firstIndex(of: trailingID))
                 #expect(outerIndex < trailingIndex)
-                if active != nil {
+                if active != nil && column {
                     let headingIndex = try #require(ids.firstIndex(of: headingID))
-                    #expect(outerIndex < headingIndex && headingIndex < trailingIndex)
-                    if column {
-                        let boundaryIndex = try #require(ids.firstIndex(of: boundaryID))
-                        #expect(outerIndex < boundaryIndex && boundaryIndex < headingIndex)
-                    } else { #expect(!ids.contains(boundaryID)) }
+                    let boundaryIndex = try #require(ids.firstIndex(of: boundaryID))
+                    #expect(outerIndex < boundaryIndex && boundaryIndex < headingIndex && headingIndex < trailingIndex)
                 } else { #expect(!ids.contains(headingID) && !ids.contains(boundaryID)) }
             }
         }
@@ -124,13 +121,13 @@ struct RightPanelToolbarTests {
         }
     }
 
-    @Test func transitionsDoNotRevealHeadingBeforeLayoutOrRenameClosingChat() throws {
+    @Test func columnTransitionsDoNotRevealHeadingBeforeLayoutOrRenameClosingChat() throws {
         let controller = WorkspaceSplitController()
         let heading = try #require(item(controller, "CalendarHeading").view)
         for active in [RightPanel.calendar, .assistant, .calendar, .assistant] {
             controller.beginCalendarHeaderTransition()
             update(controller, active: active)
-            controller.setCalendarToolbar(column: false, visible: true)
+            controller.setCalendarToolbar(column: true, visible: true)
             #expect(heading.alphaValue == 0)
             controller.finishCalendarHeaderTransition(afterLayout: false)
             #expect(heading.alphaValue == 1)

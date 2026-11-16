@@ -67,6 +67,9 @@ final class WorkspaceContainerController: NSViewController {
         // В оконном режиме геометрия подложки не заходит на стекло открытых панелей.
         root.addSubview(headerBackdrop)
         calendarHost.view.isHidden = true
+        calendarHost.view.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(overlayFrameChanged(_:)),
+            name: NSView.frameDidChangeNotification, object: calendarHost.view)
         divider.isHidden = true
         root.layoutContent = { [weak self] in self?.layoutColumns() }
         workspace.columnFramesChanged = { [weak self] in self?.updateBackgrounds() }
@@ -205,7 +208,7 @@ final class WorkspaceContainerController: NSViewController {
             calendarHost.view.isHidden = false
             if needsAttachment || placement != .column || abs(appliedWidth - width) >= 1
                 || appliedMinimumWidth != minimumPanelWidth || appliedMaximumWidth != maximumPanelWidth {
-                if placement != .column { workspace.moveHeldRightPanelToolbar(column: true, width: width) }
+                if placement != .column { workspace.moveHeldRightPanelToolbar(width: width) }
                 workspace.attachCalendarSidebar(calendarHost, width: width, animate: animate, minimumWidth: minimumPanelWidth, maximumWidth: maximumPanelWidth)
                 appliedWidth = width
                 appliedMinimumWidth = minimumPanelWidth; appliedMaximumWidth = maximumPanelWidth
@@ -219,9 +222,8 @@ final class WorkspaceContainerController: NSViewController {
             placement = .overlay
             if opening {
                 workspace.beginCalendarHeaderTransition()
-                workspace.moveHeldRightPanelToolbar(column: false, width: width)
             }
-            workspace.setCalendarToolbar(column: false, visible: true, overlayWidth: width)
+            workspace.setCalendarToolbar(column: false, visible: true)
             let frame = NSRect(x: bounds.width - width, y: 0, width: width, height: bounds.height)
             if opening {
                 calendarHost.view.frame = frame.offsetBy(dx: width, dy: 0)
@@ -245,8 +247,19 @@ final class WorkspaceContainerController: NSViewController {
         }
     }
 
+    @objc private func overlayFrameChanged(_ notification: Notification) {
+        updateOverlayHeader()
+    }
+
+    private func updateOverlayHeader() {
+        guard !isDismantled else { return }
+        let panelView = calendarHost.view as? CalendarSidebarSurface
+        workspace.setRightPanelOverlay(calendarHost.usesOverlayChrome && panelView?.isHidden == false ? panelView : nil)
+    }
+
     private func updateBackgrounds() {
         guard !isDismantled, let root = view as? WorkspaceContainerView else { return }
+        updateOverlayHeader()
         let column = workspace.documentColumnFrame(in: root)
         // Бумага задачи продолжается до края окна, включая подложку под стеклянным календарём.
         root.documentBackground = NSRect(x: column.minX, y: 0,
@@ -308,6 +321,7 @@ final class WorkspaceContainerController: NSViewController {
                 guard let self, generation == self.animationGeneration else { return }
                 self.animatingOverlay = false
                 if hide && !self.visible { self.calendarHost.view.isHidden = true }
+                self.updateOverlayHeader()
                 if !hide { self.workspace.releaseRightPanelToolbar() }
                 self.workspace.finishCalendarHeaderTransition(afterLayout: true)
                 if hide { self.finishPanelSwitch() }

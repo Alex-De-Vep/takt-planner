@@ -3,13 +3,13 @@ import SwiftUI
 
 /// Передаёт реальный фокус нативному списку, не меняя выбранную строку.
 @MainActor
-final class TaskListNativeFocus {
+final class WorkspaceListNativeFocus {
     weak var table: NSTableView?
-    let transitions = TaskListTransitions()
+    let transitions = WorkspaceListTransitions()
 
-    /// Создание открывает редактор. Пустой список не должен успеть показать первую строку
+    /// Создание открывает редактор. Список не должен успеть показать новую строку
     /// как клавиатурно активную до присоединения NSTextView к окну.
-    static func prepareForTaskCreation(in window: NSWindow?) -> NSTableView? {
+    static func prepareForCreation(in window: NSWindow?) -> NSTableView? {
         guard let window, let table = window.firstResponder as? NSTableView,
               window.makeFirstResponder(nil) else { return nil }
         return table
@@ -21,18 +21,18 @@ final class TaskListNativeFocus {
     }
 }
 
-/// Открытая задача остаётся выбранной и при уходе клавиатурного фокуса из списка.
+/// Открытый документ остаётся выбранным и при уходе клавиатурного фокуса из списка.
 /// Восстанавливаем штатный выбор NSTableView, а не рисуем независимую подсветку строки.
-struct TaskRowSelectionSync: NSViewRepresentable {
-    let taskID: UUID
+struct WorkspaceRowSelectionSync: NSViewRepresentable {
+    let rowID: UUID
     @Binding var selectedID: UUID?
     let revision: Int
     var isEligible: () -> Bool = { true }
-    var nativeFocus: TaskListNativeFocus? = nil
+    var nativeFocus: WorkspaceListNativeFocus? = nil
 
     func makeNSView(context: Context) -> Probe { Probe() }
     func updateNSView(_ view: Probe, context: Context) {
-        view.taskID = taskID
+        view.rowID = rowID
         view.selectedID = $selectedID
         view.isEligible = isEligible
         view.nativeFocus = nativeFocus
@@ -41,10 +41,10 @@ struct TaskRowSelectionSync: NSViewRepresentable {
     static func dismantleNSView(_ view: Probe, coordinator: ()) { view.detach() }
 
     final class Probe: NSView {
-        var taskID: UUID?
+        var rowID: UUID?
         var selectedID: Binding<UUID?> = .constant(nil)
         var isEligible: () -> Bool = { true }
-        var nativeFocus: TaskListNativeFocus?
+        var nativeFocus: WorkspaceListNativeFocus?
         private weak var table: NSTableView?
         private var observer: NSObjectProtocol?
         private var generation = 0
@@ -63,7 +63,7 @@ struct TaskRowSelectionSync: NSViewRepresentable {
             guard !isDetached else { return }
             generation += 1
             let generation = self.generation
-            // Даём завершиться текущему клику и обновлению SwiftUI: выбор другой задачи имеет приоритет.
+            // Даём завершиться текущему клику и обновлению SwiftUI: выбор другой строки имеет приоритет.
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.generation == generation else { return }
                 self.reconcileSelection()
@@ -84,7 +84,7 @@ struct TaskRowSelectionSync: NSViewRepresentable {
                 if !current.selectedRowIndexes.isEmpty { current.deselectAll(nil) }
                 return
             }
-            guard let taskID, selectedID.wrappedValue == taskID, isEligible() else { return }
+            guard let rowID, selectedID.wrappedValue == rowID, isEligible() else { return }
             let index = current.row(for: self)
             guard index >= 0, index < current.numberOfRows else { return }
             let expected = IndexSet(integer: index)
