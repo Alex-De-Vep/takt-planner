@@ -106,7 +106,7 @@ internal fun TaskEditor(
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, onClick = navigateBack) },
                 actions = {
                     if (task != null) {
-                        ActionIcon(R.drawable.ic_chat, R.string.open_context_chat, enabled = !draft.saving) {
+                        ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, enabled = !draft.saving) {
                             val go = { finish(); openChat(task.id) }
                             if (draft.dirty) model.saveTask(draft, go) else go()
                         }

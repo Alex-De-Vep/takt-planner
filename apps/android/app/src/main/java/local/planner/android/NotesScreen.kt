@@ -295,7 +295,7 @@ internal fun NoteEditor(
                             tint = if (draft.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             enabled = editing,
                         ) { draft.pinned = !draft.pinned }
-                        ActionIcon(R.drawable.ic_chat, R.string.open_context_chat, enabled = editing && !draft.transcribing) {
+                        ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, enabled = editing && !draft.transcribing) {
                             if (draft.dirty) model.saveNote(draft, openChat)
                             else {
                                 model.closeNote()
