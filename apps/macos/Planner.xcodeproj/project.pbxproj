@@ -130,8 +130,8 @@
 				"PRODUCT_NAME" = "Takt";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.9";
-				"CURRENT_PROJECT_VERSION" = "93";
+				"MARKETING_VERSION" = "0.3.10";
+				"CURRENT_PROJECT_VERSION" = "94";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"PRODUCT_MODULE_NAME" = "Planner";
@@ -156,8 +156,8 @@
 				"PRODUCT_NAME" = "Takt";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.9";
-				"CURRENT_PROJECT_VERSION" = "93";
+				"MARKETING_VERSION" = "0.3.10";
+				"CURRENT_PROJECT_VERSION" = "94";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"PRODUCT_MODULE_NAME" = "Planner";
@@ -243,8 +243,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.9";
-				"CURRENT_PROJECT_VERSION" = "93";
+				"MARKETING_VERSION" = "0.3.10";
+				"CURRENT_PROJECT_VERSION" = "94";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt";
@@ -258,8 +258,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.9";
-				"CURRENT_PROJECT_VERSION" = "93";
+				"MARKETING_VERSION" = "0.3.10";
+				"CURRENT_PROJECT_VERSION" = "94";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt";
@@ -334,8 +334,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.9";
-				"CURRENT_PROJECT_VERSION" = "93";
+				"MARKETING_VERSION" = "0.3.10";
+				"CURRENT_PROJECT_VERSION" = "94";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
@@ -348,8 +348,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.9";
-				"CURRENT_PROJECT_VERSION" = "93";
+				"MARKETING_VERSION" = "0.3.10";
+				"CURRENT_PROJECT_VERSION" = "94";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
