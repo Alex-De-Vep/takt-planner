@@ -20,6 +20,12 @@ struct PlannerNote: Codable, Identifiable, Sendable {
     var syncVersion: NoteSyncVersion?
 
     var displayTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var assistantContentVersion: String {
+        // Изменение папки и закрепления не отменяет предложение по тексту.
+        let data = document.isEmpty ? Data(text.utf8) : document
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     func attributedText() -> NSAttributedString {
         guard !document.isEmpty,
               let value = NSAttributedString(rtfd: document, documentAttributes: nil) else {
@@ -36,6 +42,7 @@ final class NoteStore {
     private(set) var unreadable = false
     var syncEnabled = false
     private var remoteEdits: [UUID: UUID] = [:]
+    @ObservationIgnored let voice = NoteVoiceRecording()
     @ObservationIgnored private let url: URL?
     @ObservationIgnored private var pending: [UUID: NSAttributedString] = [:]
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -120,6 +127,41 @@ final class NoteStore {
             self.error = error.localizedDescription
             return false
         }
+    }
+
+    // Сохраняем внешний текст одной записью. При ошибке повтор не добавит его второй раз.
+    func applyText(_ text: String, to id: UUID, append: Bool, expectedVersion: String? = nil) throws {
+        guard flush() else { throw AssistantFailure(message: "Не удалось сохранить текст заметки.") }
+        guard let index = notes.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else {
+            throw AssistantFailure(message: "Заметка недоступна.")
+        }
+        let note = notes[index]
+        if let expectedVersion, expectedVersion != note.assistantContentVersion {
+            throw AssistantFailure(message: "Заметка изменилась. Попросите помощника обновить предложение.")
+        }
+        let value = NSMutableAttributedString(string: "")
+        let old = note.attributedText()
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 16)]
+        if append {
+            value.append(old)
+            if old.length > 0 { value.append(NSAttributedString(string: "\n\n", attributes: attributes)) }
+        }
+        value.append(NSAttributedString(string: text, attributes: attributes))
+        if !append {
+            old.enumerateAttribute(.attachment, in: NSRange(location: 0, length: old.length)) { attachment, range, _ in
+                guard attachment != nil else { return }
+                value.append(NSAttributedString(string: "\n", attributes: attributes))
+                value.append(old.attributedSubstring(from: range))
+            }
+        }
+        var next = notes
+        next[index].document = try value.data(from: NSRange(location: 0, length: value.length),
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
+        next[index].text = value.string
+        next[index].updatedAt = .now
+        try save(next)
+        remoteEdits[id] = UUID()
+        syncQueued?()
     }
 
     func restore(_ notes: [PlannerNote]) throws {

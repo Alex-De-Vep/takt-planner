@@ -14,6 +14,11 @@ struct AssistantSettingsSection: View {
                 Label(strings["Подключения моделей…"], systemImage: "cpu")
             }
             .accessibilityIdentifier("assistant-settings-model-connections")
+            LabeledContent(strings["Модель для расшифровки"]) {
+                Button(preferences.transcriptionModel?.name ?? strings["Выбрать модель для расшифровки"]) {
+                    showModelConnections = true
+                }.buttonStyle(.borderless)
+            }
             Toggle(strings["Добавлять в текущую папку"], isOn: $preferences.assistantUseCurrentFolder)
             Picker(strings["Папка по умолчанию"], selection: $preferences.assistantDefaultFolder) {
                 ForEach(AssistantService.folders(folders, preferences: preferences)) { Text($0.name).tag($0.id) }
@@ -21,7 +26,8 @@ struct AssistantSettingsSection: View {
             Button(strings["Очистить историю…"], role: .destructive) { clearHistory = true }.disabled(assistant.generating || assistant.applying)
         } header: { Label(strings["Помощник"], systemImage: "sparkles") }
         .sheet(isPresented: $showModelConnections) {
-            AssistantModelConnections(service: assistant, russian: preferences.language.resolvedCode == "ru")
+            AssistantModelConnections(service: assistant, russian: preferences.language.resolvedCode == "ru",
+                                      transcriptionPreferences: preferences)
         }
         .alert(strings["Очистить историю помощника?"], isPresented: $clearHistory) {
             Button(strings["Очистить"], role: .destructive) { assistant.clearHistory() }

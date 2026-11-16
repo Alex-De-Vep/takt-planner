@@ -11,11 +11,11 @@ struct AssistantPanel: View {
     let folders: [TaskFolder]
     let selectedTask: PlannerTask?
     let selectedNote: PlannerNote?
+    private var notes: NoteStore { taskService.notes }
     let filter: TaskFilter
     let openEvent: (CalendarEvent) -> Void
     @State private var useFolder = true
     @State private var cloudTaskID: UUID?
-    @State private var cloudNoteID: UUID?
     @State private var editing: AssistantAction?
     @State private var showDrafts = false
     @State private var showClear = false
@@ -26,14 +26,6 @@ struct AssistantPanel: View {
     private var canSend: Bool { service.canSendCloud }
     private var canPropose: Bool { isCloud && service.supportsCloudProposals }
     private var taskIsAttached: Bool { canPropose && selectedTask?.id == cloudTaskID && cloudTaskID != nil }
-    private var availableNote: PlannerNote? {
-        guard let selectedNote, selectedNote.deletedAt == nil else { return nil }
-        return selectedNote
-    }
-    private var attachedNote: PlannerNote? {
-        guard canSend, let note = availableNote, note.id == cloudNoteID else { return nil }
-        return note
-    }
     private var draftActions: [AssistantAction] { service.current?.visibleActions ?? [] }
     private var actionsBusy: Bool { service.generating || service.applying || service.storageFailed || editing != nil }
     private var pendingEdits: [AssistantTextEdit] {
@@ -70,16 +62,13 @@ struct AssistantPanel: View {
         .onAppear(perform: prepareConversation)
         .onChange(of: preferences.rightPanel) { prepareConversation() }
         .onChange(of: service.archive.currentID) {
-            editing = nil; cloudTaskID = nil; cloudNoteID = nil; showDrafts = false
+            editing = nil; cloudTaskID = nil; showDrafts = false
             prepareConversation()
         }
         .onChange(of: selectedTask?.id) { cloudTaskID = nil }
-        .onChange(of: availableNote?.id) { cloudNoteID = nil }
-        .onChange(of: canSend) { if !canSend { cloudNoteID = nil } }
         .onChange(of: service.current?.focusedDraftID) { if service.current?.focusedDraftID != nil { cloudTaskID = nil } }
-        .onChange(of: isCloud) { cloudTaskID = nil; cloudNoteID = nil }
-        .onChange(of: service.current?.cloud?.gatewayProfileID) { cloudTaskID = nil; cloudNoteID = nil }
-        .onChange(of: service.chatGPTAccountID) { cloudNoteID = nil }
+        .onChange(of: isCloud) { cloudTaskID = nil }
+        .onChange(of: service.current?.cloud?.gatewayProfileID) { cloudTaskID = nil }
         .onChange(of: canPropose) { if !canPropose { cloudTaskID = nil } }
     }
     private func prepareConversation() {
@@ -158,6 +147,10 @@ struct AssistantPanel: View {
                                 if latest, message.calendarAccessRequired == true, calendar.access != .full { calendarAccessButton }
                             }
                             .padding(12).background(message.role == .user ? PlannerStyle.accent.opacity(0.10) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                            if !showDrafts, let suggestion = service.current?.noteProposal,
+                               message.resultNoteProposalID == suggestion.id {
+                                noteProposalCard(suggestion)
+                            }
                             if message.role == .assistant, message.id == service.current?.messages.last?.id, !showDrafts {
                                 if let id = message.resultActionID, let action = draftActions.first(where: { $0.id == id }) {
                                     actionCard(action)
@@ -276,7 +269,13 @@ struct AssistantPanel: View {
             if useFolder && preferences.assistantUseCurrentFolder && filter.isPrimaryFolder {
                 contextChip(strings["Папка"] + ": " + filter.title(in: folders, using: strings)) { useFolder = false }
             }
-            if taskIsAttached, let task = selectedTask {
+            if let noteID = service.current?.attachedNoteID {
+                let title = notes.notes.first { $0.id == noteID }?.displayTitle ?? ""
+                contextChip(title.isEmpty ? strings["Заметка"] : strings["Заметка"] + " · " + title) {
+                    service.attachNote(nil)
+                }
+                .disabled(service.generating || service.applying)
+            } else if taskIsAttached, let task = selectedTask {
                 contextChip(strings["Задача"] + ": " + task.displayTitle(using: strings)) {
                     setCurrentTaskAttached(false)
                 }
@@ -290,9 +289,6 @@ struct AssistantPanel: View {
             } else if canPropose, selectedTask != nil {
                 Button { setCurrentTaskAttached(true) } label: { Label(strings["Приложить открытую задачу"], systemImage: "paperclip") }
                     .buttonStyle(.borderless).font(.caption).disabled(service.generating || service.applying)
-            }
-            if let note = attachedNote {
-                contextChip(strings["Заметка"] + ": " + noteTitle(note)) { cloudNoteID = nil }
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ZStack(alignment: .topLeading) {
@@ -350,10 +346,11 @@ struct AssistantPanel: View {
                         ))
                         .disabled(selectedTask == nil || !canPropose || service.generating || service.applying)
                         Toggle(strings["Использовать заметку"], isOn: Binding(
-                            get: { attachedNote != nil },
-                            set: { cloudNoteID = $0 ? availableNote?.id : nil }
+                            get: { service.current?.attachedNoteID != nil },
+                            set: { enabled in service.attachNote(enabled ? selectedNote?.id : nil) }
                         ))
-                        .disabled(availableNote == nil || !canSend || service.generating || service.applying)
+                        .disabled((service.current?.attachedNoteID == nil && (selectedNote == nil || selectedNote?.deletedAt != nil || !canSend))
+                                  || service.generating || service.applying)
                     } label: { Image(systemName: "scope") }.menuStyle(.borderlessButton).fixedSize()
                         .help(strings["Контекст сообщения"])
                 }
@@ -373,10 +370,6 @@ struct AssistantPanel: View {
             }
             cloudTaskID = nil
         }
-    }
-
-    private func noteTitle(_ note: PlannerNote) -> String {
-        note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle
     }
 
     private func contextChip(_ title: String, remove: @escaping () -> Void) -> some View {
@@ -404,12 +397,36 @@ struct AssistantPanel: View {
             requestContext.taskID = selectedTask.id.uuidString
             requestContext.taskTitle = selectedTask.title
         }
-        let noteContext = attachedNote.map { note in
-            AssistantNoteContext(title: noteTitle(note), text: taskService.notes.content(note).string
-                .replacingOccurrences(of: "\u{fffc}", with: ""))
-        }
         service.sendCloud(text, context: requestContext, tasks: taskService,
-                          calendar: calendar, visibleCalendarIDs: preferences.visibleCalendarIDs, note: noteContext)
+                          calendar: calendar, visibleCalendarIDs: preferences.visibleCalendarIDs, notes: notes)
+    }
+
+    private func noteProposalCard(_ suggestion: AssistantNoteProposal) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(suggestion.title.isEmpty ? strings["Готовый текст заметки"] : suggestion.title, systemImage: "note.text")
+                .font(.headline)
+            Text(suggestion.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            if suggestion.applied {
+                Label(strings["Изменения сохранены"], systemImage: "checkmark").foregroundStyle(.secondary)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack { noteProposalActions(suggestion) }
+                    VStack(alignment: .leading) { noteProposalActions(suggestion) }
+                }
+                .disabled(actionsBusy)
+            }
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder private func noteProposalActions(_ suggestion: AssistantNoteProposal) -> some View {
+        Button(strings["Заменить текст заметки"]) {
+            service.applyNoteProposal(suggestion.id, notes: notes, append: false)
+        }
+        Button(strings["Добавить в конец"]) {
+            service.applyNoteProposal(suggestion.id, notes: notes, append: true)
+        }
     }
 
     private func actionCard(_ action: AssistantAction) -> some View {

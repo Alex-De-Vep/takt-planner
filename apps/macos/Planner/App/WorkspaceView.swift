@@ -192,7 +192,10 @@ struct WorkspaceView: View {
         } detail: {
             if showsNotes {
                 if let note = selectedNote {
-                    NoteDetailView(note: note, store: service.notes).id(note.id)
+                    NoteDetailView(note: note, store: service.notes, voice: service.notes.voice, assistant: assistant,
+                                   preferences: preferences, discuss: {
+                        if assistant.attachNote(note.id) { preferences.rightPanel = .assistant }
+                    }).id(note.id)
                 } else {
                     ContentUnavailableView(strings["Выберите заметку"], systemImage: "note.text",
                         description: Text(strings["Создайте заметку или откройте её из списка."]))

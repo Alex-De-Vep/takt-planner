@@ -99,7 +99,7 @@ struct AssistantCloudStream {
         let message = text.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         var result = proposal ?? AssistantResponse(message: message)
         if !message.isEmpty { result.message = message }
-        guard !result.message.isEmpty || result.actions?.isEmpty == false || result.textEdit != nil || result.calendarRequest != nil || result.questions?.isEmpty == false else {
+        guard !result.message.isEmpty || result.actions?.isEmpty == false || result.textEdit != nil || result.noteEdit != nil || result.calendarRequest != nil || result.questions?.isEmpty == false else {
             throw invalid
         }
         return result

@@ -222,6 +222,10 @@ struct NoteDetailView: View {
     @Environment(\.translations) private var strings
     let note: PlannerNote
     let store: NoteStore
+    let voice: NoteVoiceRecording
+    let assistant: AssistantService
+    let preferences: AppPreferences
+    let discuss: () -> Void
     @State private var control = NoteEditorControl()
 
     var body: some View {
@@ -244,12 +248,24 @@ struct NoteDetailView: View {
                 Button { control.insertLink() } label: { Image(systemName: "link") }.help(strings["Добавить ссылку"])
                 Button { control.insertImage() } label: { Image(systemName: "photo") }.help(strings["Добавить изображение"])
                 Spacer()
+                Button {
+                    Task { await voice.start(note.id) }
+                } label: { Image(systemName: "microphone") }
+                    .help(strings["Записать голос"])
+                    .accessibilityLabel(strings["Записать голос"])
+                    .accessibilityIdentifier("note-record-voice")
+                    .disabled(voice.recordingID != nil || voice.preparing || voice.drafts[note.id] != nil)
+                Button(action: discuss) { Image(systemName: "bubble.left") }
+                    .help(strings["Обсудить заметку"])
+                    .accessibilityLabel(strings["Обсудить заметку"])
+                    .disabled(assistant.generating || assistant.applying || assistant.storageFailed)
                 Button(action: export) { Image(systemName: "square.and.arrow.up") }.help(strings["Экспорт заметки"])
             }
             .buttonStyle(.borderless).foregroundStyle(.secondary)
             .padding(.horizontal, 32).padding(.vertical, 18)
             .disabled(note.deletedAt != nil || store.unreadable)
             Divider().padding(.horizontal, 28)
+            NoteVoiceControls(note: note, store: store, voice: voice, assistant: assistant, preferences: preferences)
             NoteRichTextEditor(note: note, store: store, control: control).id(note.id)
             if note.deletedAt != nil {
                 HStack {

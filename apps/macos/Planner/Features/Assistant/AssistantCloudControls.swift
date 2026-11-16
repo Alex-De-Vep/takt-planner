@@ -100,6 +100,7 @@ struct AssistantModelConnections: View {
     let russian: Bool
     var boundAccountID: String? = nil
     var selectModel: ((String) -> Void)? = nil
+    var transcriptionPreferences: AppPreferences?
 
     @State private var gateway: AssistantGateway?
     private var cloud: AssistantCloudConnection { service.cloud }
@@ -121,6 +122,10 @@ struct AssistantModelConnections: View {
             } else {
                 chatGPTSettings
             }
+            if let transcriptionPreferences {
+                Divider()
+                AssistantTranscriptionSettings(connections: service.gateways, preferences: transcriptionPreferences)
+            }
             HStack {
                 Spacer()
                 Button(strings["Готово"]) { dismiss() }.keyboardShortcut(.defaultAction)
@@ -129,7 +134,8 @@ struct AssistantModelConnections: View {
         .padding(20)
         .frame(width: 420)
         .onAppear {
-            gateway = service.current?.usesCloudModel == true ? service.current?.cloud?.gateway : nil
+            gateway = transcriptionPreferences.map { $0.transcriptionModel?.gateway ?? .openRouter }
+                ?? (service.current?.usesCloudModel == true ? service.current?.cloud?.gateway : nil)
             cloud.activate()
             service.gateways.activate()
         }

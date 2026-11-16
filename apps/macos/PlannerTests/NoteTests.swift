@@ -126,11 +126,15 @@ import Testing
         store.edit(id, content: text)
         store.flush()
         let note = try #require(store.notes.first)
+        let assistantURL = FileManager.default.temporaryDirectory.appending(path: "NotePreview-\(UUID()).json")
+        defer { try? FileManager.default.removeItem(at: assistantURL) }
+        let assistant = AssistantService(store: AssistantStore(url: assistantURL))
         let root = HStack(spacing: 0) {
             NoteListView(store: store, notes: store.notes, folders: [], selection: .constant(id), trash: false, create: {})
                 .frame(width: 280)
             Divider()
-            NoteDetailView(note: note, store: store).frame(width: 650)
+            NoteDetailView(note: note, store: store, voice: NoteVoiceRecording(), assistant: assistant,
+                           preferences: AppPreferences(), discuss: {}).frame(width: 650)
         }.frame(height: 600).background(Color(nsColor: .windowBackgroundColor)).tint(PlannerStyle.accent)
         let host = NSHostingView(rootView: root)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 931, height: 600), styleMask: [.titled], backing: .buffered, defer: false)

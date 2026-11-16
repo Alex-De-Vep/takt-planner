@@ -124,6 +124,68 @@ struct AssistantGatewayHTTP: Sendable {
         return try await get(Catalog.self, request: catalogRequest, gigaChat: gateway == .gigaChat).models(for: gateway)
     }
 
+    func transcriptionModels(_ profile: AssistantGatewayProfile) async throws -> [AssistantTranscriptionModel] {
+        guard profile.gateway.permits(profile.base) else { throw Self.invalid }
+        switch profile.gateway {
+        case .openRouter:
+            var address = URLComponents(url: profile.base.appending(path: "models"), resolvingAgainstBaseURL: false)!
+            address.queryItems = [.init(name: "output_modalities", value: "transcription")]
+            let catalog = try await get(Catalog.self, request: request(profile, url: address.url!))
+            return catalog.data.map { AssistantTranscriptionModel(id: $0.id, name: $0.name ?? $0.id) }
+        case .liteLLM:
+            let url = profile.base.deletingLastPathComponent().appending(path: "model/info")
+            let catalog = try await get(TranscriptionProxyCatalog.self, request: request(profile, url: url))
+            return catalog.data.compactMap { item in
+                guard item.model_info?.mode == "audio_transcription" else { return nil }
+                return AssistantTranscriptionModel(id: item.model_name, name: item.model_name)
+            }
+        default:
+            return []
+        }
+    }
+
+    func transcribe(_ file: URL, profile: AssistantGatewayProfile, modelID: String) async throws -> String {
+        guard profile.gateway == .openRouter || profile.gateway == .liteLLM,
+              profile.gateway.permits(profile.base), !modelID.isEmpty, modelID.utf8.count <= 512,
+              !modelID.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { throw Self.invalid }
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size > 0 else { throw AssistantFailure(message: "Запись пуста.") }
+        guard size <= 24_000_000 else { throw AssistantFailure(message: "Запись слишком большая для расшифровки.") }
+        let boundary = UUID().uuidString
+        var request = try await authorizedRequest(profile, "audio/transcriptions")
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var data = Data("""
+            --\(boundary)\r
+            Content-Disposition: form-data; name="model"\r
+            \r
+            \(modelID)\r
+            --\(boundary)\r
+            Content-Disposition: form-data; name="file"; filename="recording.m4a"\r
+            Content-Type: audio/mp4\r
+            \r
+
+            """.utf8)
+        data.append(try Data(contentsOf: file))
+        data.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        request.httpBody = data
+        let result = try await get(TranscriptionResult.self, request: request)
+        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw AssistantFailure(message: "Сервис вернул пустую расшифровку.") }
+        return text
+    }
+
+    private struct TranscriptionResult: Decodable { let text: String }
+
+    private struct TranscriptionProxyCatalog: Decodable {
+        struct Item: Decodable {
+            struct Info: Decodable { let mode: String? }
+            let model_name: String
+            let model_info: Info?
+        }
+        let data: [Item]
+    }
+
     func copilotAccount(_ profile: AssistantGatewayProfile) async throws -> String {
         let catalog = try await get(Catalog.self, request: request(profile, "models"))
         guard let account = catalog.account, Self.validKey(account), account.contains("|"),
