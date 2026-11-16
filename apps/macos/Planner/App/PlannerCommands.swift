@@ -29,10 +29,6 @@ struct PlannerCommands: Commands {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
-        CommandGroup(replacing: .appSettings) {
-            SettingsLink { Text(strings["Настройки…"]) }
-                .keyboardShortcut(",", modifiers: .command)
-        }
         CommandGroup(replacing: .newItem) {
             Button(strings[actions?.createsNote == true ? "Новая заметка" : "Новая задача"]) { actions?.newTask() }
                 .keyboardShortcut("n")

@@ -40,7 +40,7 @@ struct AssistantModelPicker: View {
                     Label(strings["Подключения моделей…"], systemImage: "person.crop.circle")
                 }
             } label: {
-                Label(isCloud ? service.cloudModelName : strings["Выбрать модель"], systemImage: "cloud")
+                Label(isCloud ? service.cloudModelName : strings["Выбрать модель чата"], systemImage: "cloud")
                     .lineLimit(1).frame(maxWidth: 154, alignment: .leading)
             }
             .menuStyle(.borderlessButton).fixedSize()
@@ -91,6 +91,56 @@ struct AssistantModelPicker: View {
     }
 }
 
+struct AssistantSettingsModelPicker: View {
+    @Environment(\.translations) private var strings
+    let models: [(id: String, name: String)]
+    let selectedID: String?
+    var emptyLabel = "Выбрать модель"
+    var refresh: (() -> Void)?
+    var refreshing = false
+    let select: (String) -> Void
+
+    var body: some View {
+        let title = models.first { $0.id == selectedID }?.name ?? strings[emptyLabel]
+        VStack(alignment: .leading, spacing: 8) {
+            LabeledContent(strings["Модель"]) {
+                Menu {
+                    ForEach(models, id: \.id) { model in
+                        Button {
+                            select(model.id)
+                        } label: {
+                            if model.id == selectedID { Label(model.name, systemImage: "checkmark") }
+                            else { Text(model.name) }
+                        }
+                    }
+                } label: {
+                    Text(title).lineLimit(1)
+                }
+                .menuStyle(.borderedButton)
+                .frame(width: 240, alignment: .leading)
+                .help(title)
+                .accessibilityLabel(strings["Модель"])
+                .accessibilityValue(title)
+                .accessibilityIdentifier("assistant-settings-model-picker")
+                .disabled(models.isEmpty || refreshing)
+            }
+            if let refresh {
+                HStack(spacing: 8) {
+                    Button(strings["Обновить список моделей"], action: refresh)
+                        .accessibilityIdentifier("assistant-refresh-models")
+                    if refreshing { ProgressView().controlSize(.small) }
+                }
+                .disabled(refreshing)
+            }
+        }
+    }
+}
+
+enum AssistantModelPurpose: String, Identifiable {
+    case chat, transcription
+    var id: Self { self }
+}
+
 /// Это окно открывается одинаково из чата и настроек.
 struct AssistantModelConnections: View {
     @Environment(\.translations) private var strings
@@ -99,26 +149,57 @@ struct AssistantModelConnections: View {
     let service: AssistantService
     let russian: Bool
     var boundAccountID: String? = nil
-    var selectModel: ((String) -> Void)? = nil
+    let preferences: AppPreferences
+    var purpose: AssistantModelPurpose = .chat
+    var dismissOnChatSelection = false
 
     @State private var gateway: AssistantGateway?
     private var cloud: AssistantCloudConnection { service.cloud }
     private var accountMismatch: Bool { boundAccountID.map { $0 != cloud.account?.id } ?? false }
-    private var locked: Bool { cloud.busy || service.generating || service.applying }
+    private var locked: Bool { cloud.busy || service.generating || service.applying || service.storageFailed }
+    private var isTranscription: Bool { purpose == .transcription }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(strings["Подключения моделей"]).font(.headline)
-            Picker(strings["Подключения моделей"], selection: $gateway) {
-                Text("ChatGPT").tag(nil as AssistantGateway?)
-                ForEach(AssistantGateway.allCases) { gateway in
-                    Text(gateway.name).tag(Optional(gateway))
+            Text(strings[isTranscription ? "Выберите модель для расшифровки" : "Модели для чата"]).font(.headline)
+            LabeledContent(strings["Подключение"]) {
+                Picker(strings["Подключение"], selection: $gateway) {
+                    if !isTranscription { Text("ChatGPT").tag(nil as AssistantGateway?) }
+                    ForEach(isTranscription ? AssistantGateway.transcriptionProviders
+                            : AssistantGateway.allCases.filter { $0 != .openAI }) { gateway in
+                        Text(gateway.name).tag(Optional(gateway))
+                    }
                 }
-            }.pickerStyle(.menu)
+                .labelsHidden().pickerStyle(.menu)
+                .frame(width: 240, alignment: .leading)
+                .accessibilityIdentifier("assistant-settings-provider-picker")
+            }
 
             if let gateway {
-                AssistantGatewaySettings(service: service, gateway: gateway, russian: russian).id(gateway)
-            } else {
+                if let profile = service.gateways.profiles[gateway] {
+                    if isTranscription {
+                        AssistantTranscriptionSettings(profile: profile, http: service.gateways.http, preferences: preferences)
+                            .id(profile.id)
+                    } else {
+                        let models = service.gateways.catalogs[gateway] ?? []
+                        let busy = service.gateways.busy.contains(gateway)
+                        modelPicker(models.map { ($0.id, $0.name) }, gateway: gateway,
+                                    selectedID: service.gatewayProfile?.gateway == gateway ? service.gatewayModel?.id : nil,
+                                    refresh: gateway.configuredCatalog ? nil : { service.gateways.refresh(gateway) },
+                                    refreshing: busy)
+                            .disabled(locked)
+                    }
+                    Divider()
+                }
+                gatewaySettings(gateway)
+            } else if !isTranscription {
+                if cloud.isConnected, !accountMismatch {
+                    modelPicker(cloud.models.map { ($0.id, $0.name) }, gateway: nil,
+                                selectedID: service.gatewayProfile == nil ? service.cloudModel?.id : nil,
+                                refresh: cloud.refreshModels, refreshing: cloud.busy)
+                        .disabled(locked)
+                    Divider()
+                }
                 chatGPTSettings
             }
             HStack {
@@ -129,16 +210,30 @@ struct AssistantModelConnections: View {
         .padding(20)
         .frame(width: 420)
         .onAppear {
-            gateway = service.current?.usesCloudModel == true ? service.current?.cloud?.gateway : nil
-            cloud.activate()
             service.gateways.activate()
+            if isTranscription {
+                gateway = preferences.transcriptionModel?.profile(in: service.gateways)?.gateway
+                    ?? AssistantGateway.transcriptionProviders.first { service.gateways.profiles[$0] != nil }
+                    ?? .gigaChat
+            } else {
+                gateway = service.current?.usesCloudModel == true ? service.current?.cloud?.gateway : nil
+                cloud.activate()
+            }
         }
+    }
+
+    private func gatewaySettings(_ gateway: AssistantGateway) -> some View {
+        AssistantGatewaySettings(service: service, gateway: gateway, russian: russian, isTranscription: isTranscription)
+            .id(gateway)
     }
 
     private var chatGPTSettings: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(cloud.account?.label ?? "ChatGPT", systemImage: "cloud").lineLimit(1)
+                let connected = cloud.isConnected && !accountMismatch
+                Label(cloud.account?.label ?? "ChatGPT", systemImage: connected ? "checkmark.circle" : "cloud")
+                    .foregroundStyle(connected ? Color.green : Color.primary)
+                    .lineLimit(1)
                 Spacer()
                 if cloud.isConnected { Link(strings["Лимиты"], destination: ChatGPTHTTP.usageURL) }
                 accountMenu
@@ -169,15 +264,8 @@ struct AssistantModelConnections: View {
                 }
                 .buttonStyle(.borderedProminent).tint(.black).disabled(locked)
                 .accessibilityIdentifier("assistant-connect-chatgpt")
-            } else if cloud.busy {
-                ProgressView().controlSize(.small)
             } else {
                 Text(strings["Используется план ChatGPT"]).foregroundStyle(.secondary)
-                if !cloud.models.isEmpty {
-                    modelList
-                } else {
-                    Button(strings["Обновить список моделей"], action: cloud.refreshModels).disabled(locked)
-                }
             }
             if cloud.isConnected, !welcomeSeen, !accountMismatch {
                 HStack(alignment: .top, spacing: 10) {
@@ -192,22 +280,15 @@ struct AssistantModelConnections: View {
         }
     }
 
-    private var modelList: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(cloud.models) { model in
-                    if let selectModel {
-                        Button(model.name) {
-                            selectModel(model.id)
-                            dismiss()
-                        }.disabled(locked)
-                    } else {
-                        Text(model.name)
-                    }
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading)
+    private func modelPicker(_ models: [(id: String, name: String)], gateway: AssistantGateway?, selectedID: String?,
+                             refresh: (() -> Void)?, refreshing: Bool) -> some View {
+        AssistantSettingsModelPicker(models: models, selectedID: selectedID,
+                                     emptyLabel: models.isEmpty ? "Нет доступных моделей" : "Выбрать модель",
+                                     refresh: refresh, refreshing: refreshing) { id in
+            if let gateway { service.selectGatewayModel(id, gateway: gateway) }
+            else { service.selectCloudModel(id) }
+            if dismissOnChatSelection { dismiss() }
         }
-        .frame(height: min(145, CGFloat(cloud.models.count) * 27))
     }
 
     private var accountMenu: some View {
@@ -223,7 +304,6 @@ struct AssistantModelConnections: View {
             if !cloud.vault.accounts.isEmpty { Divider() }
             Button(strings["Добавить аккаунт ChatGPT"]) { cloud.signIn(russian: russian) }
             if cloud.isConnected {
-                Button(strings["Обновить список моделей"], action: cloud.refreshModels)
                 Button(strings["Выйти из ChatGPT"], role: .destructive, action: cloud.signOut)
             }
         } label: { Image(systemName: "person.crop.circle") }

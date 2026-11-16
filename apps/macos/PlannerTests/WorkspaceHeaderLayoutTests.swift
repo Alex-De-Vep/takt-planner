@@ -161,10 +161,14 @@ struct WorkspaceHeaderLayoutTests {
             for column in [true, false] {
                 controller.setCalendarToolbar(column: column, visible: true)
                 let ids = controller.toolbarDefaultItemIdentifiers(toolbar)
-                let headingIndex = try #require(ids.firstIndex(of: headingID))
-                let buttonIndex = try #require(ids.firstIndex(of: calendarID))
-                #expect(headingIndex < buttonIndex && ids.filter { $0 == headingID }.count == 1)
-                if column { #expect(ids[headingIndex - 1] == .init("Planner.CalendarBoundary")) }
+                if column {
+                    let headingIndex = try #require(ids.firstIndex(of: headingID))
+                    let buttonIndex = try #require(ids.firstIndex(of: calendarID))
+                    #expect(headingIndex < buttonIndex && ids.filter { $0 == headingID }.count == 1)
+                    #expect(ids[headingIndex - 1] == .init("Planner.CalendarBoundary"))
+                } else {
+                    #expect(!ids.contains(headingID))
+                }
                 #expect(controller.toolbar(toolbar, itemForItemIdentifier: headingID, willBeInsertedIntoToolbar: true) === heading)
                 #expect(controller.toolbar(toolbar, itemForItemIdentifier: calendarID, willBeInsertedIntoToolbar: true) === button)
                 controller.setCalendarToolbar(column: false, visible: false)
@@ -227,7 +231,7 @@ struct WorkspaceHeaderLayoutTests {
             await withCheckedContinuation { continuation in
                 DispatchQueue.main.async { continuation.resume() }
             }
-            #expect(heading.alphaValue == 1)
+            #expect(heading.alphaValue == (column ? 1 : 0))
             // Нативная граница удерживает место секции на протяжении всего перехода.
             #expect(try !item("CalendarBoundary").isHidden)
             #expect(try item("CalendarHeading") === headingItem)

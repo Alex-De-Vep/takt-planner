@@ -139,7 +139,11 @@ final class PlannerTerminationDelegate: NSObject, NSApplicationDelegate {
     weak var runtime: AppRuntime?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard let runtime, !runtime.flushEditors() else { return .terminateNow }
+        guard let runtime else { return .terminateNow }
+        if runtime.flushEditors() {
+            runtime.service?.notes.voice.finishForTermination()
+            return .terminateNow
+        }
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = runtime.editorSaveError

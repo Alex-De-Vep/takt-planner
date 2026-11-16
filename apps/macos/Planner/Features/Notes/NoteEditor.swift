@@ -218,20 +218,106 @@ struct NoteRichTextEditor: NSViewRepresentable {
     }
 }
 
+private struct NoteTitleEditor: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let editable: Bool
+    let focusOnCreation: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> Field {
+        let field = Field(frame: .zero)
+        field.isBezeled = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.usesSingleLineMode = true
+        field.font = .systemFont(ofSize: 28, weight: .bold)
+        field.textColor = .labelColor
+        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.setAccessibilityIdentifier("note-title")
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ field: Field, context: Context) {
+        context.coordinator.changed = { text = $0 }
+        field.placeholderString = placeholder
+        field.setAccessibilityLabel(placeholder)
+        field.isEditable = editable
+        field.isSelectable = editable
+        field.isEnabled = editable
+        if field.stringValue != text, (field.currentEditor() as? NSTextView)?.hasMarkedText() != true {
+            field.stringValue = text
+        }
+        field.requestCreationFocus(focusOnCreation && editable)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: Field, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 300, height: field.intrinsicContentSize.height)
+    }
+
+    static func dismantleNSView(_ field: Field, coordinator: Coordinator) {
+        field.requestCreationFocus(false)
+        field.delegate = nil
+        coordinator.changed = nil
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var changed: ((String) -> Void)?
+
+        func controlTextDidChange(_ notification: Notification) {
+            if let field = notification.object as? NSTextField { changed?(field.stringValue) }
+        }
+    }
+
+    final class Field: NSTextField {
+        private var needsCreationFocus = false
+        private var didFocusForCreation = false
+        private var focusScheduled = false
+
+        func requestCreationFocus(_ requested: Bool) {
+            needsCreationFocus = requested
+            scheduleCreationFocus()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            scheduleCreationFocus()
+        }
+
+        private func scheduleCreationFocus() {
+            guard needsCreationFocus, !didFocusForCreation, !focusScheduled, window != nil else { return }
+            focusScheduled = true
+            // Окно сначала подключает новый редактор, затем AppKit назначает ему field editor.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.focusScheduled = false
+                guard self.needsCreationFocus, !self.isHiddenOrHasHiddenAncestor, let window = self.window else { return }
+                self.didFocusForCreation = window.makeFirstResponder(self)
+            }
+        }
+    }
+}
+
 struct NoteDetailView: View {
     @Environment(\.translations) private var strings
     let note: PlannerNote
     let store: NoteStore
+    let voice: NoteVoiceRecording
+    let assistant: AssistantService
+    let preferences: AppPreferences
+    var focusTitle = false
     @State private var control = NoteEditorControl()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TextField(strings["Название"], text: Binding(get: { note.title }, set: { title in store.update(note.id) { $0.title = title } }))
-                .font(.system(size: 28, weight: .bold))
-                .textFieldStyle(.plain)
+            NoteTitleEditor(text: Binding(get: { note.title }, set: { title in store.update(note.id) { $0.title = title } }),
+                            placeholder: strings["Название"], editable: note.deletedAt == nil && !store.unreadable,
+                            focusOnCreation: focusTitle)
                 .padding(.horizontal, 32).padding(.top, 28)
-                .accessibilityIdentifier("note-title")
-                .disabled(note.deletedAt != nil || store.unreadable)
             HStack(spacing: 14) {
                 Button { control.format("heading") } label: { Text("H").fontWeight(.bold) }.help(strings["Заголовок"])
                 Button { control.format("body") } label: { Text("Aa") }.help(strings["Обычный текст"])
@@ -243,13 +329,13 @@ struct NoteDetailView: View {
                 Button { control.format("check") } label: { Image(systemName: "checklist") }.help(strings["Чек-лист"])
                 Button { control.insertLink() } label: { Image(systemName: "link") }.help(strings["Добавить ссылку"])
                 Button { control.insertImage() } label: { Image(systemName: "photo") }.help(strings["Добавить изображение"])
-                Spacer()
-                Button(action: export) { Image(systemName: "square.and.arrow.up") }.help(strings["Экспорт заметки"])
+
             }
             .buttonStyle(.borderless).foregroundStyle(.secondary)
             .padding(.horizontal, 32).padding(.vertical, 18)
             .disabled(note.deletedAt != nil || store.unreadable)
             Divider().padding(.horizontal, 28)
+            NoteVoiceControls(note: note, store: store, voice: voice, assistant: assistant, preferences: preferences)
             NoteRichTextEditor(note: note, store: store, control: control).id(note.id)
             if note.deletedAt != nil {
                 HStack {
@@ -258,25 +344,7 @@ struct NoteDetailView: View {
                     Button(strings["Восстановить"]) { store.update(note.id) { $0.deletedAt = nil }; store.flush() }
                 }.padding()
             }
-        }.frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func export() {
-        guard store.flush(), let current = store.notes.first(where: { $0.id == note.id }) else { return }
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.rtfd]
-        panel.nameFieldStringValue = (current.displayTitle.isEmpty ? strings["Новая заметка"] : current.displayTitle) + ".rtfd"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            do {
-                let value = current.attributedText()
-                let wrapper = try value.fileWrapper(from: NSRange(location: 0, length: value.length),
-                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
-                try wrapper.write(to: url, options: .atomic, originalContentsURL: nil)
-            } catch {
-                let alert = NSAlert(error: error)
-                alert.runModal()
-            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

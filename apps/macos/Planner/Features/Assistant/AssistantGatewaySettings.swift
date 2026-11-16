@@ -11,10 +11,11 @@ struct AssistantGatewaySettings: View {
     @State private var gigaScope: GigaChatScope = .personal
     @State private var copied = false
     @State private var editedModelID: String?
-    @State private var editingConnection = false
     let service: AssistantService
     let gateway: AssistantGateway
+    @State private var savingConnection = false
     let russian: Bool
+    var isTranscription = false
 
     private var connections: AssistantGatewayConnections { service.gateways }
     private var profile: AssistantGatewayProfile? { connections.profiles[gateway] }
@@ -30,32 +31,17 @@ struct AssistantGatewaySettings: View {
         VStack(alignment: .leading, spacing: 12) {
             if let profile {
                 Label(profile.account?.split(separator: "|").last.map(String.init) ?? strings["Подключено"],
-                      systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                      systemImage: "checkmark.circle").foregroundStyle(.green)
                 if gateway == .liteLLM || gateway.bases.count > 1 {
                     Text(profile.base.absoluteString).font(.caption).textSelection(.enabled)
                 }
-                if connections.catalogs[gateway] != nil {
+                if gateway == .openAI {
+                    Text(strings["Для расшифровки через OpenAI используется отдельный API-ключ."])
+                        .font(.caption).foregroundStyle(.secondary)
+                } else if !isTranscription, connections.catalogs[gateway] != nil {
                     Text(models.isEmpty ? strings["В каталоге нет текстовых моделей."]
                          : strings.format("Доступные модели: %d", models.count))
                         .foregroundStyle(.secondary)
-                }
-                if !editingConnection {
-                    HStack {
-                        if !gateway.configuredCatalog {
-                            Button(strings["Обновить список моделей"]) { connections.refresh(gateway) }.disabled(locked)
-                        }
-                        if gateway != .openRouter {
-                            Button(strings["Изменить…"]) {
-                                resetForm(profile)
-                                editingConnection = true
-                            }.disabled(locked)
-                        }
-                        Spacer()
-                        Button(strings["Отключить"], role: .destructive) {
-                            connections.disconnect(gateway)
-                            resetForm(nil)
-                        }.disabled(locked)
-                    }
                 }
             }
 
@@ -65,10 +51,16 @@ struct AssistantGatewaySettings: View {
                 Button(strings["Войти через OpenRouter"]) {
                     connections.signInOpenRouter(russian: russian)
                 }.buttonStyle(.borderedProminent).disabled(locked)
-            } else if gateway != .openRouter, profile == nil || editingConnection {
+            } else if gateway != .openRouter {
                 keyForm
-            } else if let profile, !manualModels.isEmpty {
-                capabilities(profile)
+            }
+            if let profile {
+                if !isTranscription, !manualModels.isEmpty { capabilities(profile) }
+                Button(strings["Отключить"], role: .destructive) {
+                    connections.disconnect(gateway)
+                    resetForm(nil)
+                }
+                .disabled(locked)
             }
             if busy {
                 HStack {
@@ -76,7 +68,10 @@ struct AssistantGatewaySettings: View {
                     Text(strings[gateway == .openRouter && profile == nil
                         ? "Завершите вход в браузере" : "Проверяем подключение и каталог моделей…"])
                     Spacer()
-                    Button(strings["Отмена"]) { connections.cancel(gateway) }
+                    Button(strings["Отмена"]) {
+                        savingConnection = false
+                        connections.cancel(gateway)
+                    }
                 }
             }
             if let error = connections.errors[gateway] {
@@ -85,9 +80,10 @@ struct AssistantGatewaySettings: View {
         }
         .onAppear { resetForm(profile) }
         .onChange(of: busy) {
-            if !busy, profile != nil, connections.errors[gateway] == nil {
-                editingConnection = false
-                key = ""
+            guard !busy, savingConnection else { return }
+            savingConnection = false
+            if let profile, connections.errors[gateway] == nil {
+                resetForm(profile)
             }
         }
     }
@@ -127,17 +123,15 @@ struct AssistantGatewaySettings: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button(strings["Проверить и подключить"]) {
+                Button(strings[profile == nil ? "Проверить и подключить" : "Обновить подключение"]) {
                     if let selectedBase {
                         connections.connect(gateway, base: selectedBase, key: key, modelIDs: modelIDs,
                                             folder: folderID, gigaScope: gigaScope)
+                        savingConnection = busy
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(locked || selectedBase == nil || key.isEmpty || (gateway == .yandex ? folderID.isEmpty : gateway.configuredCatalog && modelIDs.isEmpty))
-                if editingConnection {
-                    Button(strings["Отмена"]) { editingConnection = false; key = "" }.disabled(busy)
-                }
                 Spacer()
                 if let page = gateway.keyPage { Link(strings["Получить ключ"], destination: page) }
                 if gateway == .gigaChat, let guide = URL(string: "https://developers.sber.ru/docs/ru/gigachat/api/reference/rest/gigachat-api") {

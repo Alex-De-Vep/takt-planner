@@ -31,6 +31,7 @@ struct WorkspaceView: View {
     @State private var showsNotes = false
     @State private var noteScope = NoteScope.folder
     @State private var selectedNoteID: UUID?
+    @State private var createdNoteID: UUID?
     @State private var noteSearch = ""
     @State private var showNoteFolderPicker = false
     @State private var createNoteAfterFolderCreation = false
@@ -46,7 +47,43 @@ struct WorkspaceView: View {
             return $0.updatedAt > $1.updatedAt
         }
     }
+    private var noteListScope: WorkspaceListScope {
+        .notes(noteScope, folder: noteScope == .folder ? filter : nil, search: noteSearch)
+    }
+    private var listAnimationKey: WorkspaceListAnimationKey {
+        if showsNotes {
+            return WorkspaceListAnimationKey(scope: noteListScope, active: visibleNotes.map(\.id), completed: [])
+        }
+        return WorkspaceListAnimationKey(scope: .tasks(filter, search: state.search),
+            active: taskList.activeTasks.map(\.id), completed: taskList.completedTasks.map(\.id))
+    }
     private var selectedNote: PlannerNote? { visibleNotes.first { $0.id == selectedNoteID } }
+    private var editableNote: PlannerNote? {
+        guard showsNotes, let note = selectedNote, note.deletedAt == nil, !service.notes.unreadable else { return nil }
+        return note
+    }
+
+    private var assistantContextFolder: TaskFilter? {
+        if let note = editableNote {
+            if let folder = folders.first(where: { !$0.isDeleted && TaskFilter.folder($0.id).id == note.folder }) {
+                return .folder(folder.id)
+            }
+            return TaskFilter.systemFolders.first { $0.id == note.folder }
+        }
+        if showsNotes && noteScope != .folder { return nil }
+        return filter.isPrimaryFolder ? filter : nil
+    }
+
+    private var noteRecordingActions: WorkspaceNoteRecordingActions? {
+        guard let note = editableNote else { return nil }
+        let voice = service.notes.voice
+        return WorkspaceNoteRecordingActions(
+            canStart: !voice.isBusy && voice.drafts[note.id] == nil,
+            startVoice: { Task { await voice.start(note.id) } },
+            startCall: { voice.startCall(note.id, russian: preferences.language.resolvedCode == "ru") }
+        )
+    }
+
     private var noteHeading: String {
         if noteScope == .trash { return strings["Недавно удалённые"] }
         if noteScope == .all { return strings["Все заметки"] }
@@ -57,11 +94,14 @@ struct WorkspaceView: View {
             service.flushEditorText()
             service.notes.flush()
             showsNotes = value && (noteScope != .folder || filter.acceptsNotes)
+            if !showsNotes { createdNoteID = nil }
         })
     }
     private var noteSelection: Binding<UUID?> {
         Binding(get: { selectedNoteID }, set: { value in
+            guard value != selectedNoteID else { return }
             service.notes.flush()
+            createdNoteID = nil
             selectedNoteID = value
         })
     }
@@ -70,9 +110,20 @@ struct WorkspaceView: View {
             showNoteFolderPicker = true
             return
         }
-        noteScope = .folder
-        noteSearch = ""
-        selectedNoteID = service.notes.create(folder: filter.id)
+        let window = NSApp.keyWindow
+        let previousList = WorkspaceListNativeFocus.prepareForCreation(in: window)
+        let id = withAnimation(PlannerMotion.animation(.listChange, reduceMotion: reduceMotion)) {
+            service.notes.create(folder: filter.id)
+        }
+        if let id {
+            withImmediateNavigationUpdate {
+                noteSearch = ""
+                selectedNoteID = id
+                createdNoteID = id
+            }
+        } else if let window, let previousList, window.firstResponder === window {
+            window.makeFirstResponder(previousList)
+        }
     }
 
 
@@ -169,8 +220,8 @@ struct WorkspaceView: View {
             taskActionsTitle: strings["Действия с задачей"],
             deadlineTitle: strings["Срок задачи"],
             hasSelectedTask: selectedTask != nil,
-            taskListKey: TaskListAnimationKey(filter: filter, search: state.search,
-                active: taskList.activeTasks.map(\.id), completed: taskList.completedTasks.map(\.id)),
+            noteRecording: noteRecordingActions,
+            listAnimationKey: listAnimationKey,
             newFolder: newFolder,
             newTask: showsNotes ? createNote : newTask,
             newChecklistItem: { addChecklistItem(after: nil) }
@@ -192,7 +243,8 @@ struct WorkspaceView: View {
         } detail: {
             if showsNotes {
                 if let note = selectedNote {
-                    NoteDetailView(note: note, store: service.notes).id(note.id)
+                    NoteDetailView(note: note, store: service.notes, voice: service.notes.voice, assistant: assistant,
+                                   preferences: preferences, focusTitle: note.id == createdNoteID).id(note.id)
                 } else {
                     ContentUnavailableView(strings["Выберите заметку"], systemImage: "note.text",
                         description: Text(strings["Создайте заметку или откройте её из списка."]))
@@ -225,7 +277,7 @@ struct WorkspaceView: View {
                     .allowsHitTesting(preferences.rightPanel == .calendar)
                     .accessibilityHidden(preferences.rightPanel != .calendar)
                 AssistantPanel(service: assistant, preferences: preferences, taskService: service, calendar: calendar,
-                    folders: folders, selectedTask: selectedTask, selectedNote: showsNotes ? selectedNote : nil, filter: filter,
+                    folders: folders, selectedTask: selectedTask, openNote: editableNote, workspaceFolder: assistantContextFolder,
                     openEvent: { event in preferences.rightPanel = .calendar; calendarState.show(event) })
                     .opacity(preferences.rightPanel == .assistant ? 1 : 0)
                     .allowsHitTesting(preferences.rightPanel == .assistant)
@@ -281,7 +333,8 @@ struct WorkspaceView: View {
 
     private var notesPage: some View {
         NoteListView(store: service.notes, notes: visibleNotes, folders: folders,
-                     selection: noteSelection, trash: noteScope == .trash, create: createNote)
+                     selection: noteSelection, trash: noteScope == .trash,
+                     createdNoteID: noteScope == .folder ? createdNoteID : nil, scope: noteListScope, create: createNote)
             .background(PlannerStyle.listBackground)
     }
 
@@ -369,7 +422,7 @@ struct WorkspaceView: View {
 
     private func newTask() {
         let window = NSApp.keyWindow
-        let previousList = TaskListNativeFocus.prepareForTaskCreation(in: window)
+        let previousList = WorkspaceListNativeFocus.prepareForCreation(in: window)
         let task = withAnimation(PlannerMotion.animation(.listChange, reduceMotion: reduceMotion)) {
             service.createTask(in: filter, folders: folders)
         }
@@ -385,6 +438,7 @@ struct WorkspaceView: View {
         noteScope = .folder
         noteSearch = ""
         selectedNoteID = nil
+        createdNoteID = nil
         if !filter.acceptsNotes { showsNotes = false }
         state.selectFilter(filter)
     }

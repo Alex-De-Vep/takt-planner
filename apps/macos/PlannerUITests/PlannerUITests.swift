@@ -58,12 +58,17 @@ final class PlannerUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment["PLANNER_UI_TEST_LIBRARY"] = UUID().uuidString
+        app.launchEnvironment["PLANNER_UI_TEST_CALENDAR"] = "1"
         app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
         app.launch()
+        app.activate()
+        XCTAssertTrue(app.staticTexts["Входящие"].firstMatch.waitForExistence(timeout: 10))
         let appMenu = app.menuBars.menuBarItems["Takt"]
         XCTAssertTrue(appMenu.waitForExistence(timeout: 10))
         appMenu.click()
-        app.menuItems.matching(identifier: "Настройки…").firstMatch.click()
+        let settingsItems = app.menuItems.matching(NSPredicate(format: "title == %@", "Настройки…"))
+        XCTAssertEqual(settingsItems.count, 1)
+        settingsItems.firstMatch.click()
         let picker = app.popUpButtons["language-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         picker.click()
@@ -73,6 +78,5 @@ final class PlannerUITests: XCTestCase {
         app.terminate()
         app.launch()
         XCTAssertTrue(app.staticTexts["Inbox"].firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["My Folders"].firstMatch.exists)
     }
 }

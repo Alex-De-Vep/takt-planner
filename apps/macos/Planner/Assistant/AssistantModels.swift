@@ -64,6 +64,7 @@ struct AssistantResponse: Codable, Sendable {
     var actions: [AssistantProposal]?
     var textEdit: AssistantTextChange? = nil
     var calendarRequest: AssistantCalendarRequest? = nil
+    var noteEdit: String? = nil
 }
 enum AssistantActionStatus: String, Codable { case pending, applying, created, failed, needsReview }
 struct AssistantAction: Codable, Identifiable {
@@ -93,6 +94,7 @@ struct AssistantMessage: Codable, Identifiable {
     var cloudUsage: AssistantCloudUsage? = nil
     var resultActionID: UUID? = nil
     var resultEditID: UUID? = nil
+    var resultNoteProposalID: UUID? = nil
     var taskLookup: AssistantTaskLookup? = nil
     var calendarAgenda: [AssistantCalendarItem]? = nil
     var calendarSelection: AssistantCalendarSelection? = nil
@@ -113,6 +115,8 @@ struct AssistantThread: Codable, Identifiable {
     var actions: [AssistantAction] = []
     var createdAt = Date()
     var textEdits: [AssistantTextEdit]? = nil
+    var attachedNoteID: UUID? = nil
+    var noteProposal: AssistantNoteProposal? = nil
     var activeTextEditID: UUID? = nil
     var focusedDraftID: UUID? = nil
     var focusedEventID: UUID? = nil
@@ -148,6 +152,7 @@ struct AssistantThread: Codable, Identifiable {
             || (id != nil && (cloud?.gateway != gateway || cloud?.gatewayProfileID != profileID
                 || (gateway == nil && accountID != nil && cloud?.accountID != nil && cloud?.accountID != accountID)))
         if switchingProvider {
+            if usesCloudModel { attachedNoteID = nil }
             activeTextEditID = nil
             focusedDraftID = nil
             focusedEventID = nil

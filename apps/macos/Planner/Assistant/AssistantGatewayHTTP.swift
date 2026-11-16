@@ -46,8 +46,7 @@ struct AssistantGatewayHTTP: Sendable {
     private let gigaChatDelegate: AssistantGatewaySessionDelegate
     private let gigaTokens = GigaChatTokenCache()
 
-    init() {
-        let config = URLSessionConfiguration.ephemeral
+    init(configuration config: URLSessionConfiguration = .ephemeral) {
         config.httpShouldSetCookies = false
         config.urlCredentialStorage = nil
         config.urlCache = nil
@@ -90,31 +89,17 @@ struct AssistantGatewayHTTP: Sendable {
 
     func models(_ profile: AssistantGatewayProfile) async throws -> [AssistantGatewayModel] {
         let gateway = profile.gateway
+        if gateway == .openAI {
+            _ = try await transcriptionModels(profile)
+            return []
+        }
         if gateway.configuredCatalog {
             return (profile.configuredModelIDs ?? []).map {
                 .init(id: $0, name: gateway == .yandex ? gateway.name : $0, reportedTools: gateway.documentedTools($0),
                       efforts: gateway.isMiniMax && $0 == "MiniMax-M3.1-Flash" ? ["low", "medium", "high", "xhigh", "max"] : [])
             }
         }
-        if gateway == .gemini {
-            let base = profile.base.deletingLastPathComponent()
-            var components = URLComponents(url: base.appending(path: "models"), resolvingAgainstBaseURL: false)!
-            var result: [AssistantGatewayModel] = []
-            var next: String?
-            var pages = Set<String>()
-            repeat {
-                components.queryItems = [.init(name: "pageSize", value: "1000")]
-                if let next { components.queryItems?.append(.init(name: "pageToken", value: next)) }
-                guard let url = components.url else { throw Self.invalid }
-                var request = URLRequest(url: url)
-                request.setValue(profile.key, forHTTPHeaderField: "x-goog-api-key")
-                let page = try await get(GeminiCatalog.self, request: request)
-                result += page.chatModels
-                next = page.nextPageToken
-            } while next.map({ pages.count < 15 && pages.insert($0).inserted }) == true
-            var seen = Set<String>()
-            return result.filter { seen.insert($0.id).inserted }
-        }
+        if gateway == .gemini { return try await geminiModels(profile) }
         let endpoint = gateway == .grok ? "language-models" : "models"
         var catalogRequest = try await authorizedRequest(profile, endpoint)
         if gateway == .claude, var url = URLComponents(url: catalogRequest.url!, resolvingAgainstBaseURL: false) {
@@ -122,6 +107,246 @@ struct AssistantGatewayHTTP: Sendable {
             catalogRequest.url = url.url
         }
         return try await get(Catalog.self, request: catalogRequest, gigaChat: gateway == .gigaChat).models(for: gateway)
+    }
+
+    private func geminiModels(_ profile: AssistantGatewayProfile) async throws -> [AssistantGatewayModel] {
+        let base = profile.base.deletingLastPathComponent()
+        var components = URLComponents(url: base.appending(path: "models"), resolvingAgainstBaseURL: false)!
+        var result: [AssistantGatewayModel] = []
+        var next: String?
+        var pages = Set<String>()
+        repeat {
+            components.queryItems = [.init(name: "pageSize", value: "1000")]
+            if let next { components.queryItems?.append(.init(name: "pageToken", value: next)) }
+            guard let url = components.url else { throw Self.invalid }
+            var request = URLRequest(url: url)
+            request.setValue(profile.key, forHTTPHeaderField: "x-goog-api-key")
+            let page = try await get(GeminiCatalog.self, request: request)
+            result += page.chatModels
+            next = page.nextPageToken
+        } while next.map({ pages.count < 15 && pages.insert($0).inserted }) == true
+        var seen = Set<String>()
+        return result.filter { seen.insert($0.id).inserted }
+    }
+
+    func transcriptionModels(_ profile: AssistantGatewayProfile) async throws -> [AssistantTranscriptionModel] {
+        guard profile.gateway.permits(profile.base) else { throw Self.invalid }
+        switch profile.gateway {
+        case .openRouter:
+            var address = URLComponents(url: profile.base.appending(path: "models"), resolvingAgainstBaseURL: false)!
+            address.queryItems = [.init(name: "output_modalities", value: "transcription")]
+            let catalog = try await get(Catalog.self, request: request(profile, url: address.url!))
+            return catalog.data.map { AssistantTranscriptionModel(id: $0.id, name: $0.name ?? $0.id) }
+        case .liteLLM:
+            let url = profile.base.deletingLastPathComponent().appending(path: "model/info")
+            let catalog = try await get(TranscriptionProxyCatalog.self, request: request(profile, url: url))
+            return catalog.data.compactMap { item in
+                guard item.model_info?.mode == "audio_transcription" else { return nil }
+                return AssistantTranscriptionModel(id: item.model_name, name: item.model_name)
+            }
+        case .gigaChat, .openAI:
+            let request = try await authorizedRequest(profile, "models")
+            let catalog = try await get(Catalog.self, request: request, gigaChat: profile.gateway == .gigaChat)
+            return catalog.data.compactMap { item in
+                let accepted = profile.gateway == .openAI
+                    ? Self.openAISpeechModels.contains(item.id)
+                    : (item.input_modalities ?? item.architecture?.input_modalities)?.contains("audio")
+                        ?? Self.gigaAudioModels.contains(item.id.lowercased())
+                guard accepted else { return nil }
+                return .init(id: item.id, name: item.display_name ?? item.name ?? item.id)
+            }
+        case .gemini:
+            return try await geminiModels(profile).filter { Self.geminiAudioModels.contains($0.id) }
+                .map { .init(id: $0.id, name: $0.name) }
+        case .mistral:
+            return [.init(id: "voxtral-mini-transcribe-3", name: "Voxtral Mini Transcribe 3"),
+                    .init(id: "voxtral-small-transcribe-3", name: "Voxtral Small Transcribe 3")]
+        case .grok:
+            return [.init(id: "grok-voice-transcribe-2.0", name: "Grok Voice Transcribe 2.0")]
+        default:
+            return []
+        }
+    }
+
+    private static let openAISpeechModels: Set<String> = [
+        "gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "gpt-4o-mini-transcribe-2025-12-15",
+        "gpt-4o-transcribe-diarize", "whisper-1"
+    ]
+    private static let gigaAudioModels: Set<String> = [
+        "gigachat", "gigachat-pro", "gigachat-max", "gigachat-2", "gigachat-2-lite", "gigachat-2-pro",
+        "gigachat-2-max", "gigachat-3-ultra"
+    ]
+    private static let geminiAudioModels: Set<String> = [
+        "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro", "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash",
+        "gemini-3.5-transcribe"
+    ]
+    private static let transcriptPrompt = """
+        Transcribe the spoken words faithfully in their original languages. Return only the transcript.
+        Preserve the order of speech. Do not summarize, translate, or invent unclear words.
+        If there is no intelligible speech, return exactly [NO_SPEECH].
+        """
+
+    struct AudioTranscript: Sendable {
+        let text: String
+        var remoteCleanupFailed = false
+    }
+
+    func transcribe(_ file: URL, profile: AssistantGatewayProfile, modelID: String, allowEmpty: Bool = false) async throws -> AudioTranscript {
+        guard profile.gateway.supportsTranscription, profile.gateway.permits(profile.base),
+              !modelID.isEmpty, modelID.utf8.count <= 512,
+              !modelID.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { throw Self.invalid }
+        let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size > 0 else { throw AssistantFailure(message: "Запись пуста.") }
+        guard size <= (profile.gateway == .gemini ? 14_000_000 : 24_000_000) else {
+            throw AssistantFailure(message: "Запись слишком большая для расшифровки.")
+        }
+        try Task.checkCancellation()
+        let result: AudioTranscript
+        switch profile.gateway {
+        case .gigaChat:
+            result = try await transcribeWithGigaChat(file, profile: profile, modelID: modelID)
+        case .gemini:
+            result = .init(text: try await transcribeWithGemini(file, profile: profile, modelID: modelID))
+        default:
+            var request = try await authorizedRequest(profile, profile.gateway == .grok ? "stt" : "audio/transcriptions")
+            var fields = [("model", modelID)]
+            if profile.gateway == .openAI && modelID == "gpt-4o-transcribe-diarize" {
+                fields.append(("chunking_strategy", "auto"))
+            }
+            if profile.gateway == .mistral {
+                let wav = try await Task.detached(priority: .utility) { try NoteCallAudio.transcriptionWAV(file) }.value
+                defer { try? FileManager.default.removeItem(at: wav) }
+                request = try Self.audioUpload(request, file: wav, fields: fields)
+            } else {
+                request = try Self.audioUpload(request, file: file, fields: fields)
+            }
+            let response = try await get(TranscriptionResult.self, request: request)
+            result = .init(text: response.text)
+        }
+        let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = trimmed == "[NO_SPEECH]" ? "" : trimmed
+        if text.isEmpty && !allowEmpty {
+            throw AssistantFailure(message: result.remoteCleanupFailed
+                ? "Не удалось удалить загруженный файл из GigaChat."
+                : "Сервис вернул пустую расшифровку.")
+        }
+        return .init(text: text, remoteCleanupFailed: result.remoteCleanupFailed)
+    }
+
+    private func transcribeWithGigaChat(_ file: URL, profile: AssistantGatewayProfile, modelID: String) async throws -> AudioTranscript {
+        let upload = try await authorizedRequest(profile, "files")
+        let request = try Self.audioUpload(upload, file: file, fields: [("purpose", "general")], mimeType: "audio/x-m4a")
+        let uploaded = try await get(GigaUploadedFile.self, request: request, gigaChat: true)
+        guard uploaded.id.range(of: #"^[A-Za-z0-9_-]{1,160}$"#, options: .regularExpression) != nil else { throw Self.invalid }
+
+        // Удаляем только файл, созданный этим запросом. Отмена расшифровки не отменяет очистку.
+        let response: Result<String, Error>
+        do {
+            var request = try await authorizedRequest(profile, "chat/completions")
+            try Self.setJSON(&request, [
+                "model": modelID, "stream": false,
+                "messages": [["role": "user", "content": Self.transcriptPrompt, "attachments": [uploaded.id]]]
+            ])
+            let reply = try await get(GigaTranscript.self, request: request, gigaChat: true)
+            guard let choice = reply.choices.first, let text = choice.message.content,
+                  choice.finish_reason == nil || choice.finish_reason == "stop" else { throw Self.invalid }
+            response = .success(text)
+        } catch { response = .failure(error) }
+
+        let deleted = await Task.detached(priority: .utility) {
+            do {
+                var request = try await authorizedRequest(profile, "files/\(uploaded.id)/delete")
+                request.httpMethod = "POST"
+                request.timeoutInterval = 15
+                let (_, response) = try await responseBytes(for: request, gigaChat: true)
+                try Self.check(response)
+                return true
+            } catch { return false }
+        }.value
+        switch response {
+        case .success(let text): return .init(text: text, remoteCleanupFailed: !deleted)
+        case .failure(let error):
+            if !deleted { throw AssistantFailure(message: "Не удалось удалить загруженный файл из GigaChat.") }
+            throw error
+        }
+    }
+
+    private func transcribeWithGemini(_ file: URL, profile: AssistantGatewayProfile, modelID: String) async throws -> String {
+        guard Self.geminiAudioModels.contains(modelID) else { throw Self.invalid }
+        let base = profile.base.deletingLastPathComponent()
+        var request = URLRequest(url: base.appending(path: "models").appending(path: modelID + ":generateContent"))
+        request.setValue(profile.key, forHTTPHeaderField: "x-goog-api-key")
+        let audio = try Data(contentsOf: file).base64EncodedString()
+        let audioPart = ["inlineData": ["mimeType": "audio/m4a", "data": audio]]
+        let parts: [[String: Any]] = modelID == "gemini-3.5-transcribe"
+            ? [audioPart] : [["text": Self.transcriptPrompt], audioPart]
+        try Self.setJSON(&request, ["contents": [["parts": parts]]])
+        let response = try await get(GeminiTranscript.self, request: request)
+        guard let candidate = response.candidates?.first, let content = candidate.content,
+              candidate.finishReason == nil || candidate.finishReason == "STOP" else { throw Self.invalid }
+        return content.parts.filter { $0.thought != true }.compactMap(\.text).joined(separator: "\n")
+    }
+
+    private static func audioUpload(_ request: URLRequest, file: URL, fields: [(String, String)],
+                                    mimeType: String? = nil) throws -> URLRequest {
+        var request = request
+        let boundary = UUID().uuidString
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        let contentType = mimeType ?? (file.pathExtension == "wav" ? "audio/wav" : "audio/mp4")
+        var body = Data()
+        for (name, value) in fields {
+            body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
+        }
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"recording.\(file.pathExtension)\"\r\nContent-Type: \(contentType)\r\n\r\n".utf8))
+        body.append(try Data(contentsOf: file))
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        request.httpBody = body
+        return request
+    }
+
+    private static func setJSON(_ request: inout URLRequest, _ body: [String: Any]) throws {
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+    }
+
+    private struct TranscriptionResult: Decodable { let text: String }
+    private struct GigaUploadedFile: Decodable, Sendable { let id: String }
+    private struct GigaTranscript: Decodable {
+        struct Choice: Decodable {
+            struct Message: Decodable { let content: String? }
+            let message: Message
+            let finish_reason: String?
+        }
+        let choices: [Choice]
+    }
+
+    private struct GeminiTranscript: Decodable {
+        struct Candidate: Decodable {
+            struct Content: Decodable {
+                struct Part: Decodable {
+                    let text: String?
+                    let thought: Bool?
+                }
+                let parts: [Part]
+            }
+            let content: Content?
+            let finishReason: String?
+        }
+        let candidates: [Candidate]?
+    }
+
+    private struct TranscriptionProxyCatalog: Decodable {
+        struct Item: Decodable {
+            struct Info: Decodable { let mode: String? }
+            let model_name: String
+            let model_info: Info?
+        }
+        let data: [Item]
     }
 
     func copilotAccount(_ profile: AssistantGatewayProfile) async throws -> String {

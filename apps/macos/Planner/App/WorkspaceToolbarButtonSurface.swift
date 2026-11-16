@@ -1,13 +1,32 @@
 import AppKit
 
+/// Перекрытая кнопка сохраняет место в AppKit, но не видна и не принимает нажатия.
+@MainActor
+class WorkspaceToolbarContentView: NSView {
+    var isCoveredByRightPanel = false {
+        didSet {
+            guard oldValue != isCoveredByRightPanel else { return }
+            alphaValue = isCoveredByRightPanel ? 0 : 1
+            setAccessibilityHidden(isCoveredByRightPanel)
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        isCoveredByRightPanel ? nil : super.hitTest(point)
+    }
+}
+
 /// Постоянная круглая кнопка или значок на панели с подсветкой только при наведении.
 @MainActor
-final class WorkspaceToolbarButtonSurface: NSView {
+final class WorkspaceToolbarButtonSurface: WorkspaceToolbarContentView {
     static let diameter: CGFloat = 36
     private static let sidebarButtonSize = NSSize(width: 34, height: 26)
     enum Presentation { case circle, sidebar }
     let contentView: NSView
     private let glass = NSGlassEffectView()
+    override var isCoveredByRightPanel: Bool {
+        didSet { contentView.setAccessibilityHidden(isCoveredByRightPanel) }
+    }
     private var contentConstraints: [NSLayoutConstraint] = []
     private var widthConstraint: NSLayoutConstraint!
     private var glassLeading: NSLayoutConstraint!

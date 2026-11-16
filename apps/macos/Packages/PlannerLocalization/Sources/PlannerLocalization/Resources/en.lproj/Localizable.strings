@@ -684,7 +684,6 @@
 
 "Заметка в корзине" = "This note is in Trash";
 
-"Экспорт заметки" = "Export note";
 
 "Добавить изображение" = "Add image";
 
@@ -716,3 +715,68 @@
 "Задачи останутся во «Входящих», а заметки — в разделе «Все заметки»." = "Tasks will remain in Inbox, and notes in All Notes.";
 
 "Задач: %d, заметок: %d" = "Tasks: %d, notes: %d";
+
+"Записать голос" = "Record Voice";
+"Запись в другой заметке" = "Recording in another note";
+"Расшифровка…" = "Transcribing…";
+"Удалить запись" = "Delete Recording";
+"Сохранить текст" = "Save Text";
+"Расшифровать" = "Transcribe";
+"Показать в Finder" = "Show in Finder";
+"Запись" = "Recording";
+"Удалить временную запись?" = "Delete temporary recording?";
+"Расшифровать запись?" = "Transcribe recording?";
+"Аудио будет отправлено в %@ для расшифровки. Когда текст сохранится в заметке, Takt удалит временную запись с Mac." = "Audio will be sent to %@ for transcription. Takt will delete the temporary recording from this Mac once the text is saved in the note.";
+"Копия сохранена" = "Copy Saved";
+"Сохранить копию…" = "Save a Copy…";
+"Разрешите доступ к микрофону в системных настройках." = "Allow microphone access in System Settings.";
+"Не удалось начать запись." = "Could not start recording.";
+"Не удалось сохранить копию записи." = "Could not save a copy of the recording.";
+"Не удалось удалить временную запись." = "Could not delete the temporary recording.";
+"Не удалось расшифровать запись." = "Could not transcribe the recording.";
+"Не удалось сохранить текст заметки." = "Could not save the note text.";
+"Заметка недоступна." = "This note is unavailable.";
+"Заметка изменилась. Попросите помощника обновить предложение." = "The note changed. Ask the assistant to update its proposal.";
+"Запись пуста." = "The recording is empty.";
+"Запись слишком большая для расшифровки." = "The recording is too large to transcribe.";
+"Сервис вернул пустую расшифровку." = "The service returned an empty transcript.";
+"Готовый текст заметки" = "Proposed Note Text";
+"Изменения сохранены" = "Changes Saved";
+"Заменить текст заметки" = "Replace Note Text";
+"Добавить в конец" = "Append to Note";
+"Модель для расшифровки" = "Transcription Model";
+"Подключите OpenRouter или LiteLLM для расшифровки записей." = "Connect OpenRouter or LiteLLM to transcribe recordings.";
+"Выбрать модель для расшифровки" = "Choose a Transcription Model";
+"Идентификатор модели расшифровки в LiteLLM" = "LiteLLM Transcription Model ID";
+"Укажите модель распознавания, настроенную на вашем сервере LiteLLM." = "Enter a transcription model configured on your LiteLLM server.";
+"Не удалось загрузить модели для расшифровки." = "Could not load transcription models.";
+
+"Записать звонок" = "Record Call";
+"Микрофон" = "Microphone";
+"Выберите вкладку звонка в Chrome." = "Choose the call tab in Chrome.";
+"Сохранение записи…" = "Saving Recording…";
+"Пауза" = "Pause";
+"Установите Google Chrome для записи звонка." = "Install Google Chrome to record calls.";
+"Не удалось открыть страницу записи в Chrome." = "Could not open the recording page in Chrome.";
+"Соединение с Chrome прервалось." = "The connection to Chrome was interrupted.";
+"Время выбора вкладки истекло." = "The time to choose a tab has expired.";
+"Не удалось начать запись звонка." = "Could not start the call recording.";
+"Не удалось сохранить звук звонка." = "Could not save the call audio.";
+"Не удалось подготовить запись к расшифровке." = "Could not prepare the recording for transcription.";
+"Голосовая запись" = "Voice recording";
+"Запись звонка" = "Call recording";
+"Завершить запись" = "Finish recording";
+"Не удалось сохранить запись." = "Could not save the recording.";
+"Не удалось продолжить запись." = "Could not resume recording.";
+"Модели для чата" = "Chat models";
+"Модель чата" = "Chat model";
+"Выберите модель чата" = "Choose a chat model";
+"Выбрать модель чата" = "Choose a chat model";
+"Выберите модель для расшифровки" = "Choose a transcription model";
+"Подключение" = "Connection";
+"Для расшифровки через OpenAI используется отдельный API-ключ." = "OpenAI transcription uses a separate API key.";
+"Не удалось удалить загруженный файл из GigaChat." = "Could not delete the uploaded audio file from GigaChat.";
+"Указать модель вручную" = "Enter model manually";
+"Загружаем модели…" = "Loading models…";
+"Нет доступных моделей" = "No models available";
+"Обновить подключение" = "Update connection";

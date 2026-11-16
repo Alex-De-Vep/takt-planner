@@ -2,7 +2,7 @@ import AppKit
 
 /// Общая стеклянная капсула toolbar; значки не входят в область текстового редактора.
 @MainActor
-final class WorkspaceToolbarSearchView: NSView, NSTextFieldDelegate {
+final class WorkspaceToolbarSearchView: WorkspaceToolbarContentView, NSTextFieldDelegate {
     let searchField = NSTextField(string: "")
     let searchIcon = NSImageView()
     let clearButton = NSButton()
