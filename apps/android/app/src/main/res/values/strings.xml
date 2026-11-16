@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Tasks</string>
+    <string name="app_name">Takt</string>
     <string name="settings">Settings</string>
     <string name="new_task">New task</string>
     <string name="inbox">Inbox</string>
@@ -89,6 +89,9 @@
     <string name="email_not_verified">Confirm your email before signing in.</string>
     <string name="incompatible_protocol">This server uses an unsupported sync protocol.</string>
     <string name="cloud_rate_limited">The server is busy. Try again shortly.</string>
+    <string name="account_retry_in">Try again in %1$s</string>
+    <string name="account_resend_in">Request a new code in %1$s</string>
+    <string name="sign_in_attempts_left">Sign-in attempts left: %1$d</string>
     <string name="cloud_error">Could not sync with the server.</string>
     <string name="deadline_notifications">Deadline reminders</string>
     <string name="notification_hint">Date-only reminders use the deadline’s time zone. Android may delay delivery.</string>
@@ -119,7 +122,7 @@
     <string name="invalid_email_code">The code is incorrect or has expired.</string>
     <string name="invalid_account_input">Check your email address and password.</string>
     <string name="first_sync">Sync your library</string>
-    <string name="first_sync_hint">Planner will open your tasks after the first sync.</string>
+    <string name="first_sync_hint">Takt will open your tasks after the first sync.</string>
     <string name="empty_library_hint">Create an empty cloud library here, or import your tasks on your Mac and try again.</string>
     <string name="create_cloud_library">Create cloud library</string>
     <string name="retry">Try again</string>

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Задачи</string>
+    <string name="app_name">Takt</string>
     <string name="settings">Настройки</string>
     <string name="new_task">Новая задача</string>
     <string name="inbox">Входящие</string>
@@ -89,6 +89,9 @@
     <string name="email_not_verified">Подтвердите почту перед входом.</string>
     <string name="incompatible_protocol">Сервер использует неподдерживаемый протокол синхронизации.</string>
     <string name="cloud_rate_limited">Сервер занят. Повторите попытку чуть позже.</string>
+    <string name="account_retry_in">Повторить через %1$s</string>
+    <string name="account_resend_in">Новый код через %1$s</string>
+    <string name="sign_in_attempts_left">Осталось попыток входа: %1$d</string>
     <string name="cloud_error">Не удалось синхронизироваться с сервером.</string>
     <string name="deadline_notifications">Напоминания о сроках</string>
     <string name="notification_hint">Напоминания о сроках без времени учитывают часовой пояс срока. Android может задержать доставку.</string>

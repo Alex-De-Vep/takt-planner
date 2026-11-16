@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PlannerAndroid"
+rootProject.name = "Takt"
 include(":app")
