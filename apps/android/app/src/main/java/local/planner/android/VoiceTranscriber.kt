@@ -7,7 +7,6 @@ import java.io.File
 internal val transcriptionModels = linkedMapOf(
     GatewayProvider.LiteLLM to "whisper-1",
     GatewayProvider.OpenRouter to "openai/whisper-1",
-    GatewayProvider.Mistral to "voxtral-mini-latest",
 )
 
 internal fun validTranscriptionModel(model: String): Boolean =

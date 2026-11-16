@@ -270,8 +270,11 @@
     <string name="voice_transcribing">Расшифровка…</string>
     <string name="voice_transcript">Расшифровка</string>
     <string name="voice_transcript_error">Не удалось расшифровать. Проверьте модель и повторите попытку.</string>
-    <string name="voice_transcribe_connect">Подключите LiteLLM, OpenRouter или Mistral в «Чате», чтобы расшифровывать записи.</string>
+    <string name="voice_transcribe_connect">Подключите LiteLLM или OpenRouter в «Чате», чтобы расшифровывать записи.</string>
     <string name="voice_transcribe_send">Отправить эту запись в %1$s для расшифровки?</string>
     <string name="voice_model">Модель для расшифровки</string>
     <string name="voice_insert">Вставить в заметку</string>
+    <string name="note_edit_text">Редактировать текст</string>
+    <string name="note_edit_text_hint">Создать редактируемую текстовую копию? Оригинал сохранит форматирование и изображения.</string>
+    <string name="note_create_text_copy">Создать текстовую копию</string>
 </resources>

@@ -243,6 +243,23 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    fun copyNoteAsText(source: NoteDraft) {
+        if (noteDraft !== source || source.saving || source.transcribing || noteVoice.startedAt != null) return
+        val openCopy = {
+            val current = library.value
+            if (current.profile != null && current.workspace == source.workspace) {
+                val folder = source.folder.takeIf { selected -> current.folders.any { noteFolder(it.id) == selected } }
+                val copy = NoteDraft(current.workspace, null, folder).apply {
+                    title = source.title
+                    text = source.text.replace("\uFFFC", "")
+                }
+                noteVoice.bind(copy.workspace, copy.id)
+                noteDraft = copy
+            }
+        }
+        if (source.dirty) saveNote(source) { openCopy() } else openCopy()
+    }
+
     fun closeNote() {
         noteVoice.close(discard = noteDraft?.original == null)
         noteDraft = null

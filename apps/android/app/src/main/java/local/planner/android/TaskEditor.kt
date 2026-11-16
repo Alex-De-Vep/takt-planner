@@ -150,12 +150,6 @@ internal fun TaskEditor(
                     placeholder = R.string.task_title, singleLine = true, enabled = !draft.saving,
                     textStyle = MaterialTheme.typography.headlineSmall,
                 )
-                if (showDescription) {
-                    EditorDetailField(
-                        draft.description, { draft.description = it }, R.string.description,
-                        enabled = !draft.saving, focusOnEntry = addingDescription,
-                    )
-                }
                 val accent = MaterialTheme.colorScheme.primary
                 val inactive = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -176,6 +170,12 @@ internal fun TaskEditor(
                             addingDescription = true
                         }
                     }
+                }
+                if (showDescription) {
+                    EditorDetailField(
+                        draft.description, { draft.description = it }, R.string.description,
+                        enabled = !draft.saving, focusOnEntry = addingDescription,
+                    )
                 }
                 if (deadline != null) {
                     val date = deadline.agendaDate()

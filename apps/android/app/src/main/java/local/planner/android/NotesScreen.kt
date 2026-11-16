@@ -213,6 +213,7 @@ internal fun NoteEditor(
     }
     var folders by remember { mutableStateOf(false) }
     var confirmTrash by rememberSaveable { mutableStateOf(false) }
+    var confirmTextCopy by rememberSaveable { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     val currentFolder = library.folders.firstOrNull { noteFolder(it.id) == draft.folder }
     val finish = {
@@ -232,31 +233,6 @@ internal fun NoteEditor(
             TopAppBar(
                 title = { Text(stringResource(if (original == null) R.string.new_note else R.string.note)) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, enabled = !draft.saving, onClick = finish) },
-                actions = {
-                    if (!removed && voice.clip == null) {
-                        ActionIcon(R.drawable.ic_waveform, R.string.voice_start, enabled = editing) {
-                            focus.clearFocus()
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                                PackageManager.PERMISSION_GRANTED) voice.start()
-                            else permission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    }
-                    if (original != null && !removed) {
-                        ActionIcon(
-                            R.drawable.ic_pin, if (draft.pinned) R.string.note_unpin else R.string.note_pin,
-                            tint = if (draft.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            enabled = editing,
-                        ) { draft.pinned = !draft.pinned }
-                        ActionIcon(R.drawable.ic_chat, R.string.open_context_chat, enabled = editing && !draft.transcribing) {
-                            if (draft.dirty) model.saveNote(draft, openChat)
-                            else {
-                                model.closeNote()
-                                openChat(original.id)
-                            }
-                        }
-                        ActionIcon(R.drawable.ic_delete, R.string.note_move_to_trash, enabled = editing) { confirmTrash = true }
-                    }
-                },
             )
         },
         bottomBar = {
@@ -302,8 +278,38 @@ internal fun NoteEditor(
                 }
                 PlannerTextField(draft.title, { draft.title = it },
                     Modifier.fillMaxWidth().focusOnEntry(original == null), placeholder = R.string.note_title,
-                    singleLine = true, enabled = !draft.saving, readOnly = !editing || formatted,
+                    singleLine = true, enabled = !draft.saving, readOnly = !editing,
                     textStyle = MaterialTheme.typography.headlineSmall)
+                if (!removed) Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (voice.clip == null) {
+                        ActionIcon(R.drawable.ic_waveform, R.string.voice_start, enabled = editing) {
+                            focus.clearFocus()
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                PackageManager.PERMISSION_GRANTED) voice.start()
+                            else permission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                    if (original != null) {
+                        ActionIcon(
+                            R.drawable.ic_pin, if (draft.pinned) R.string.note_unpin else R.string.note_pin,
+                            tint = if (draft.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            enabled = editing,
+                        ) { draft.pinned = !draft.pinned }
+                        ActionIcon(R.drawable.ic_chat, R.string.open_context_chat, enabled = editing && !draft.transcribing) {
+                            if (draft.dirty) model.saveNote(draft, openChat)
+                            else {
+                                model.closeNote()
+                                openChat(original.id)
+                            }
+                        }
+                        if (formatted) {
+                            ActionIcon(R.drawable.ic_edit, R.string.note_edit_text, enabled = editing && !draft.transcribing) {
+                                confirmTextCopy = true
+                            }
+                        }
+                        ActionIcon(R.drawable.ic_delete, R.string.note_move_to_trash, enabled = editing) { confirmTrash = true }
+                    }
+                }
                 if (formatted) {
                     Text(stringResource(R.string.note_formatted_preview), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
@@ -326,6 +332,13 @@ internal fun NoteEditor(
             confirmTrash = false
             draft.trashed = true
             model.saveNote(draft)
+        }
+    }
+    if (confirmTextCopy) {
+        Confirm(R.string.note_edit_text, R.string.note_edit_text_hint, R.string.note_create_text_copy,
+            { confirmTextCopy = false }) {
+            confirmTextCopy = false
+            model.copyNoteAsText(draft)
         }
     }
     if (confirmDiscard) {

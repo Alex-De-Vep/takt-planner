@@ -270,8 +270,11 @@
     <string name="voice_transcribing">Transcribing…</string>
     <string name="voice_transcript">Transcript</string>
     <string name="voice_transcript_error">Could not transcribe. Check the model and try again.</string>
-    <string name="voice_transcribe_connect">Connect LiteLLM, OpenRouter or Mistral in Chat to transcribe recordings.</string>
+    <string name="voice_transcribe_connect">Connect LiteLLM or OpenRouter in Chat to transcribe recordings.</string>
     <string name="voice_transcribe_send">Send this audio to %1$s for transcription?</string>
     <string name="voice_model">Transcription model</string>
     <string name="voice_insert">Insert into note</string>
+    <string name="note_edit_text">Edit text</string>
+    <string name="note_edit_text_hint">Create an editable text copy. The original note will keep its formatting and images.</string>
+    <string name="note_create_text_copy">Create text copy</string>
 </resources>

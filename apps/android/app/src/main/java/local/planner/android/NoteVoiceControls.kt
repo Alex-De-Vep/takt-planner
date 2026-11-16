@@ -96,7 +96,7 @@ internal fun NoteVoiceControls(draft: NoteDraft, model: PlannerModel, editable: 
             },
             confirmButton = {
                 if (editable) TextButton(onClick = {
-                    draft.text = if (draft.text.isBlank()) text else draft.text.trimEnd() + "\n\n" + text
+                    draft.text = if (draft.text.isBlank()) text else draft.text + "\n\n" + text
                     draft.transcript = null
                 }) { Text(stringResource(R.string.voice_insert)) }
             },

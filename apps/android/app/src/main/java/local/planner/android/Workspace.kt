@@ -45,6 +45,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -108,10 +109,12 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     val noteDraft = model.noteDraft?.takeIf { it.workspace == library.workspace }
     val eventRoute = eventJson
     if (noteDraft != null) {
-        NoteEditor(noteDraft, library, noteState.limit != null, model, snackbar) { id ->
-            chatTaskId = null
-            chatNoteId = id
-            tab = Tab.Chat
+        key(noteDraft.id) {
+            NoteEditor(noteDraft, library, noteState.limit != null, model, snackbar) { id ->
+                chatTaskId = null
+                chatNoteId = id
+                tab = Tab.Chat
+            }
         }
     } else if (eventRoute != null) {
         val request = remember(eventRoute) { json.fromJson(eventRoute, EventRequest::class.java) }
