@@ -27,8 +27,8 @@ def verify(app):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
     assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == DISPLAY_NAME
-    assert metadata['CFBundleShortVersionString'] == '0.3.9'
-    assert metadata['CFBundleVersion'] == '93'
+    assert metadata['CFBundleShortVersionString'] == '0.3.21'
+    assert metadata['CFBundleVersion'] == '105'
     assert metadata['LSMinimumSystemVersion'] == '26.0'
     for language in ('ru', 'en'):
         localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
