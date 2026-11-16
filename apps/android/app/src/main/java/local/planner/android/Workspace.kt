@@ -36,9 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -74,6 +71,7 @@ import java.time.ZoneId
 
 private enum class Tab(val label: Int, val icon: Int) {
     Tasks(R.string.tasks, R.drawable.ic_list),
+    Notes(R.string.notes, R.drawable.ic_note),
     Events(R.string.events, R.drawable.ic_calendar),
     Chat(R.string.chat, R.drawable.ic_chat),
     Settings(R.string.settings, R.drawable.ic_settings),
@@ -85,7 +83,6 @@ private const val NEW_TASK = "new"
 internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel, snackbar: SnackbarHostState) {
     var tab by rememberSaveable { mutableStateOf(Tab.Tasks) }
     var selectedSection by rememberSaveable { mutableStateOf("inbox") }
-    var showsNotes by rememberSaveable { mutableStateOf(false) }
     var selectedNoteFolder by rememberSaveable { mutableStateOf<String?>(null) }
     var noteTrash by rememberSaveable { mutableStateOf(false) }
     val notes by model.notes.collectAsState()
@@ -126,7 +123,17 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                 NavigationBar {
                     Tab.entries.forEach { entry ->
                         NavigationBarItem(
-                            selected = tab == entry, onClick = { tab = entry },
+                            selected = tab == entry,
+                            onClick = {
+                                if (tab == Tab.Tasks && entry == Tab.Notes && section !in Sections) {
+                                    selectedNoteFolder = section
+                                    noteTrash = false
+                                }
+                                if (tab == Tab.Notes && entry == Tab.Tasks && !noteTrash && noteFolder != null) {
+                                    selectedSection = noteFolder
+                                }
+                                tab = entry
+                            },
                             icon = { Glyph(entry.icon) }, label = { Text(stringResource(entry.label)) },
                         )
                     }
@@ -134,12 +141,11 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
             },
             floatingActionButton = {
                 when (tab) {
-                    Tab.Tasks -> if (!showsNotes) {
-                        ExtendedFloatingActionButton(
-                            onClick = { route = NEW_TASK }, icon = { Glyph(R.drawable.ic_add) },
-                            text = { Text(stringResource(R.string.new_task)) },
-                        )
-                    } else if (!noteTrash && noteState.limit != null) {
+                    Tab.Tasks -> ExtendedFloatingActionButton(
+                        onClick = { route = NEW_TASK }, icon = { Glyph(R.drawable.ic_add) },
+                        text = { Text(stringResource(R.string.new_task)) },
+                    )
+                    Tab.Notes -> if (!noteTrash && noteState.limit != null) {
                         ExtendedFloatingActionButton(
                             onClick = {
                                 if (library.folders.isEmpty()) managing = true else model.openNote(null, noteFolder)
@@ -164,28 +170,17 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()) {
                     tabStates.SaveableStateProvider(tab.name) {
                         when (tab) {
-                            Tab.Tasks -> {
-                                LibraryMode(showsNotes) { next ->
-                                    if (next && library.folders.any { it.id == section }) {
-                                        selectedNoteFolder = section
-                                        noteTrash = false
-                                    }
-                                    if (!next && !noteTrash && noteFolder != null) selectedSection = noteFolder
-                                    showsNotes = next
-                                }
-                                if (showsNotes) {
-                                    NotesScreen(
-                                        library, noteState, cloud, noteFolder, noteTrash,
-                                        select = { selectedNoteFolder = it }, toggleTrash = {
-                                            if (noteTrash) selectedNoteFolder = null
-                                            noteTrash = !noteTrash
-                                        },
-                                        manage = { managing = true }, model = model,
-                                    )
-                                } else {
-                                    TaskList(library, section, { selectedSection = it }, { managing = true }, { route = it }, model)
-                                }
-                            }
+                            Tab.Tasks -> TaskList(
+                                library, section, { selectedSection = it }, { managing = true }, { route = it }, model,
+                            )
+                            Tab.Notes -> NotesScreen(
+                                library, noteState, cloud, noteFolder, noteTrash,
+                                select = { selectedNoteFolder = it }, toggleTrash = {
+                                    if (noteTrash) selectedNoteFolder = null
+                                    noteTrash = !noteTrash
+                                },
+                                manage = { managing = true }, model = model,
+                            )
                             Tab.Events -> CalendarScreen(calendar, calendarDate, { calendarDateText = it.toString() },
                                 openEvent, { calendarSettings = true }, calendarRefresh)
                             Tab.Chat -> ChatScreen(library, model) { chatSettings = true }
@@ -200,18 +195,6 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     }
     if (calendarSettings) CalendarChooser(calendar) { calendarSettings = false; calendarRefresh++ }
     if (chatSettings) ChatConnectionDialog(model.chat) { chatSettings = false }
-}
-
-@Composable
-private fun LibraryMode(notes: Boolean, select: (Boolean) -> Unit) {
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-        listOf(R.string.tasks, R.string.notes).forEachIndexed { index, label ->
-            SegmentedButton(
-                selected = notes == (index == 1), onClick = { select(index == 1) },
-                shape = SegmentedButtonDefaults.itemShape(index, 2),
-            ) { Text(stringResource(label)) }
-        }
-    }
 }
 
 private val Sections = linkedMapOf(
