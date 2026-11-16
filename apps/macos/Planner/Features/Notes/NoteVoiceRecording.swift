@@ -11,63 +11,123 @@ final class NoteVoiceRecording {
         var isCall = false
         var pieces: [URL]?
         var pieceTranscripts: [String?] = []
+        var transcriptionSource: String?
+        var remoteCleanupFailed = false
         var saved = false
+
+        var id: UUID? { UUID(uuidString: file.deletingPathExtension().pathExtension) }
     }
 
     private(set) var drafts: [UUID: Draft] = [:]
     private(set) var recordingID: UUID?
     private(set) var startedAt: Date?
+    private(set) var pausedDuration: TimeInterval = 0
+    private(set) var isPaused = false
     private(set) var preparing = false
     private(set) var browserCall: NoteBrowserCall?
 
     var isBusy: Bool { preparing || recordingID != nil || browserCall != nil }
     private(set) var transcribing: Set<UUID> = []
     private(set) var errors: [UUID: String] = [:]
-    @ObservationIgnored private var recorder: AVAudioRecorder?
-    @ObservationIgnored private let files = RecordingFiles()
+    @ObservationIgnored private var recorder: (any NoteMicrophoneInput)?
+    @ObservationIgnored private var recorderDelegate: MicrophoneDelegate?
+    @ObservationIgnored private let directory: URL
+    @ObservationIgnored private let scratch = ScratchFiles()
+
+    init(directory: URL? = nil) {
+        self.directory = directory ?? FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-" + UUID().uuidString)
+    }
+
+    func restoreDrafts(for notes: [PlannerNote]) {
+        guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else { return }
+        let notesByID = Dictionary(uniqueKeysWithValues: notes.map { ($0.id, $0) })
+        for file in files where file.pathExtension == "m4a" {
+            let components = file.deletingPathExtension().lastPathComponent.split(separator: ".")
+            guard components.count == 3, let noteID = UUID(uuidString: String(components[0])),
+                  let note = notesByID[noteID], drafts[noteID] == nil,
+                  components[1] == "voice" || components[1] == "call",
+                  let audio = try? AVAudioFile(forReading: file), audio.length > 0 else { continue }
+            var draft = Draft(file: file, isCall: components[1] == "call")
+            draft.saved = draft.id != nil && draft.id == note.lastVoiceTranscriptID
+            drafts[noteID] = draft
+        }
+    }
 
     func start(_ noteID: UUID) async {
         guard !isBusy, drafts[noteID] == nil else { return }
         preparing = true
         errors[noteID] = nil
         defer { preparing = false }
-        guard await AVCaptureDevice.requestAccess(for: .audio) else {
-            errors[noteID] = "Разрешите доступ к микрофону в системных настройках."
-            return
-        }
-        let file = files.newRecording()
+        let file = newRecording(noteID, kind: "voice")
         do {
-            try FileManager.default.createDirectory(at: files.directory, withIntermediateDirectories: true,
-                                                    attributes: [.posixPermissions: 0o700])
-            let recorder = try AVAudioRecorder(url: file, settings: [
+            #if DEBUG
+            if Self.usesTestAudio {
+                try prepareDirectory()
+                let input = try TestMicrophoneInput(file: file)
+                try begin(input, noteID: noteID, file: file)
+                return
+            }
+            #endif
+            guard await AVCaptureDevice.requestAccess(for: .audio) else {
+                errors[noteID] = "Разрешите доступ к микрофону в системных настройках."
+                return
+            }
+            try prepareDirectory()
+            let input = try AVAudioRecorder(url: file, settings: [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: 24_000,
                 AVNumberOfChannelsKey: 1,
                 AVEncoderBitRateKey: 64_000
             ])
-            // Ограничение держит размер файла ниже лимита загрузки первой версии.
-            guard recorder.record(forDuration: 30 * 60) else { throw AssistantFailure(message: "Не удалось начать запись.") }
-            self.recorder = recorder
-            recordingID = noteID
-            startedAt = .now
-            drafts[noteID] = Draft(file: file)
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(30 * 60))
-                if self?.drafts[noteID]?.file == file, self?.recordingID == noteID { self?.stop() }
+            let delegate = MicrophoneDelegate { [weak self] successful in
+                Task { @MainActor [weak self] in
+                    guard let self, recordingID == noteID, drafts[noteID]?.file == file else { return }
+                    finishMicrophone()
+                    if !successful { errors[noteID] = "Не удалось сохранить запись." }
+                }
             }
+            input.delegate = delegate
+            try begin(input, noteID: noteID, file: file)
+            recorderDelegate = delegate
         } catch {
             try? FileManager.default.removeItem(at: file)
             errors[noteID] = "Не удалось начать запись."
         }
     }
 
+    private func begin(_ input: any NoteMicrophoneInput, noteID: UUID, file: URL) throws {
+        guard input.record() else { throw AssistantFailure(message: "Не удалось начать запись.") }
+        recorder = input
+        recordingID = noteID
+        startedAt = .now
+        pausedDuration = 0
+        isPaused = false
+        drafts[noteID] = Draft(file: file)
+    }
+
+    func togglePause() {
+        guard let recorder, let recordingID else { return }
+        if isPaused {
+            guard recorder.record() else {
+                errors[recordingID] = "Не удалось продолжить запись."
+                return
+            }
+            startedAt = Date.now.addingTimeInterval(-pausedDuration)
+            isPaused = false
+            errors[recordingID] = nil
+        } else {
+            pausedDuration = recorder.currentTime
+            recorder.pause()
+            isPaused = true
+        }
+    }
+
     func startCall(_ noteID: UUID, russian: Bool) {
         guard !isBusy, drafts[noteID] == nil else { return }
         errors[noteID] = nil
-        let file = files.newRecording()
+        let file = newRecording(noteID, kind: "call")
         do {
-            try FileManager.default.createDirectory(at: files.directory, withIntermediateDirectories: true,
-                                                    attributes: [.posixPermissions: 0o700])
+            try prepareDirectory()
             let call = NoteBrowserCall(noteID: noteID, file: file, russian: russian) { [weak self] hasAudio, error in
                 guard let self else { return }
                 browserCall = nil
@@ -78,6 +138,13 @@ final class NoteVoiceRecording {
                 }
                 errors[noteID] = error
             }
+            #if DEBUG
+            if Self.usesTestAudio {
+                try call.startTestCapture()
+                browserCall = call
+                return
+            }
+            #endif
             try call.openChrome()
             browserCall = call
         } catch {
@@ -86,10 +153,45 @@ final class NoteVoiceRecording {
     }
 
     func stop() {
-        recorder?.stop()
+        guard let recorder else { return }
+        recorder.stop()
+        finishMicrophone()
+    }
+
+    func finishForTermination() {
+        stop()
+        browserCall?.finishForTermination()
+    }
+
+    private func finishMicrophone() {
+        guard let noteID = recordingID, let file = drafts[noteID]?.file else { return }
         recorder = nil
+        recorderDelegate = nil
         recordingID = nil
         startedAt = nil
+        isPaused = false
+        guard let audio = try? AVAudioFile(forReading: file), audio.length > 0 else {
+            drafts[noteID] = nil
+            try? FileManager.default.removeItem(at: file)
+            errors[noteID] = "Не удалось сохранить запись."
+            return
+        }
+    }
+
+    #if DEBUG
+    private static var usesTestAudio: Bool {
+        PlannerPersistence.testID != nil && ProcessInfo.processInfo.environment["PLANNER_UI_TEST_VOICE"] == "1"
+    }
+    #endif
+
+    private func prepareDirectory() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
+    }
+
+    private func newRecording(_ noteID: UUID, kind: String) -> URL {
+        // Имя сохраняет связь с заметкой даже после завершения процесса.
+        directory.appending(path: "\(noteID.uuidString).\(kind).\(UUID().uuidString).m4a")
     }
 
     func showFile(_ noteID: UUID) {
@@ -132,18 +234,13 @@ final class NoteVoiceRecording {
 
     func transcribe(_ noteID: UUID, store: NoteStore, profile: AssistantGatewayProfile, modelID: String,
                     transport: AssistantGatewayHTTP) async {
-        guard var draft = drafts[noteID], recordingID != noteID, !transcribing.contains(noteID) else { return }
+        guard let draft = drafts[noteID], !draft.saved, recordingID != noteID, !transcribing.contains(noteID) else { return }
         transcribing.insert(noteID)
         errors[noteID] = nil
         defer { transcribing.remove(noteID) }
         do {
             if draft.transcript == nil {
-                if draft.isCall {
-                    try await transcribeCall(noteID, profile: profile, modelID: modelID, transport: transport)
-                } else {
-                    draft.transcript = try await transport.transcribe(draft.file, profile: profile, modelID: modelID)
-                    drafts[noteID] = draft
-                }
+                try await transcribeRecording(noteID, profile: profile, modelID: modelID, transport: transport)
             }
             try saveTranscript(noteID, store: store)
         } catch {
@@ -151,21 +248,30 @@ final class NoteVoiceRecording {
         }
     }
 
-    private func transcribeCall(_ noteID: UUID, profile: AssistantGatewayProfile, modelID: String,
+    private func transcribeRecording(_ noteID: UUID, profile: AssistantGatewayProfile, modelID: String,
                                 transport: AssistantGatewayHTTP) async throws {
         guard var draft = drafts[noteID] else { return }
         if draft.pieces == nil {
             let source = draft.file
-            let pieces = try await Task.detached(priority: .utility) { try NoteCallAudio.transcriptionPieces(source) }.value
-            files.track(pieces)
+            let workingDirectory = scratch.directory
+            let pieces = try await Task.detached(priority: .utility) {
+                try NoteCallAudio.transcriptionPieces(source, outputDirectory: workingDirectory)
+            }.value
             draft.pieces = pieces
             draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
             drafts[noteID] = draft
         }
         guard let pieces = draft.pieces else { return }
+        let sourceID = profile.id.uuidString + ":" + modelID
+        if draft.transcriptionSource != sourceID {
+            draft.transcriptionSource = sourceID
+            draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
+            drafts[noteID] = draft
+        }
         for (index, piece) in pieces.enumerated() where draft.pieceTranscripts[index] == nil {
-            let text = try await transport.transcribe(piece, profile: profile, modelID: modelID, allowEmpty: pieces.count > 1)
-            draft.pieceTranscripts[index] = text
+            let result = try await transport.transcribe(piece, profile: profile, modelID: modelID, allowEmpty: pieces.count > 1)
+            draft.pieceTranscripts[index] = result.text
+            draft.remoteCleanupFailed = draft.remoteCleanupFailed || result.remoteCleanupFailed
             drafts[noteID] = draft
         }
         let text = draft.pieceTranscripts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -187,34 +293,81 @@ final class NoteVoiceRecording {
     private func saveTranscript(_ noteID: UUID, store: NoteStore) throws {
         guard var draft = drafts[noteID], let transcript = draft.transcript else { return }
         if !draft.saved {
-            try store.applyText(transcript, to: noteID, append: true)
+            try store.applyText(transcript, to: noteID, append: true, voiceTranscriptID: draft.id)
             draft.saved = true
             drafts[noteID] = draft
         }
         removeFile(noteID)
+        if draft.remoteCleanupFailed, errors[noteID] == nil {
+            errors[noteID] = "Не удалось удалить загруженный файл из GigaChat."
+        }
     }
 
-    private final class RecordingFiles {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-" + UUID().uuidString)
-        private var recordings: Set<URL> = []
+    // Части для загрузки можно пересоздать из локального оригинала.
+    private final class ScratchFiles {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-Parts-" + UUID().uuidString)
 
-        func track(_ urls: [URL]) { recordings.formUnion(urls) }
+        deinit { try? FileManager.default.removeItem(at: directory) }
+    }
 
-        func newRecording() -> URL {
-            let file = directory.appending(path: UUID().uuidString).appendingPathExtension("m4a")
-            recordings.insert(file)
-            return file
-        }
+    private final class MicrophoneDelegate: NSObject, AVAudioRecorderDelegate {
+        let finished: @Sendable (Bool) -> Void
 
-        deinit {
-            let manager = FileManager.default
-            for file in recordings { try? manager.removeItem(at: file) }
-            if (try? manager.contentsOfDirectory(atPath: directory.path).isEmpty) == true {
-                try? manager.removeItem(at: directory)
-            }
-        }
+        init(finished: @escaping @Sendable (Bool) -> Void) { self.finished = finished }
+
+        func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) { finished(flag) }
+        func audioRecorderEncodeErrorDidOccur(_ recorder: AVAudioRecorder, error: Error?) { finished(false) }
     }
 }
+
+private protocol NoteMicrophoneInput: AnyObject {
+    var currentTime: TimeInterval { get }
+    func record() -> Bool
+    func pause()
+    func stop()
+}
+
+extension AVAudioRecorder: NoteMicrophoneInput {}
+
+#if DEBUG
+/// Тест клика создаёт аудиофайл с тоном, не открывая физический микрофон.
+private final class TestMicrophoneInput: NoteMicrophoneInput {
+    private var startedAt: Date?
+    private var duration: TimeInterval = 0
+
+    init(file: URL) throws {
+        let writer = try NoteCallAudio(url: file)
+        _ = try writer.append(NoteRecordingTestAudio.tone())
+        writer.close()
+    }
+
+    var currentTime: TimeInterval { duration + (startedAt.map { Date.now.timeIntervalSince($0) } ?? 0) }
+
+    func record() -> Bool {
+        startedAt = .now
+        return true
+    }
+
+    func pause() {
+        duration = currentTime
+        startedAt = nil
+    }
+
+    func stop() { pause() }
+}
+enum NoteRecordingTestAudio {
+    static func tone() -> Data {
+        var tone = Data()
+        for index in 0..<NoteCallAudio.sampleRate {
+            let sample = Int16(8_000 * sin(Double(index) * 440 * 2 * .pi / Double(NoteCallAudio.sampleRate)))
+            let bytes = [UInt8(truncatingIfNeeded: sample), UInt8(truncatingIfNeeded: sample >> 8)]
+            tone.append(contentsOf: bytes + bytes)
+        }
+        return tone
+    }
+}
+
+#endif
 
 struct NoteVoiceControls: View {
     @Environment(\.translations) private var strings
@@ -228,45 +381,46 @@ struct NoteVoiceControls: View {
     @State private var showDiscard = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if let call = voice.browserCall {
-                callControls(call)
-            }
+        if voice.browserCall != nil || voice.recordingID != nil || voice.drafts[note.id] != nil || voice.errors[note.id] != nil {
+            card
+                .padding(.horizontal, 28)
+                .padding(.vertical, 12)
+        }
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let call = voice.browserCall { callControls(call) }
             if let recording = voice.recordingID, let startedAt = voice.startedAt {
-                HStack {
-                    if recording != note.id { Text(strings["Запись в другой заметке"]) }
-                    Text(startedAt, style: .timer).monospacedDigit()
-                    Button(strings["Остановить"], systemImage: "stop.circle.fill") { voice.stop() }
+                activeRecording(title: recording == note.id ? "Голосовая запись" : "Запись в другой заметке",
+                                paused: voice.isPaused, pause: voice.togglePause, finish: voice.stop) {
+                    if voice.isPaused {
+                        Text(formattedDuration(voice.pausedDuration))
+                    } else {
+                        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+                            Text(formattedDuration(context.date.timeIntervalSince(startedAt)))
+                        }
+                    }
                 }
             }
             if voice.recordingID != note.id, let draft = voice.drafts[note.id] {
-                HStack {
-                    if voice.transcribing.contains(note.id) {
-                        ProgressView().controlSize(.small)
-                        Text(strings["Расшифровка…"])
-                    } else if draft.saved {
-                        Button(strings["Удалить запись"]) { voice.discard(note.id) }
-                    } else if draft.transcript != nil {
-                        Button(strings["Сохранить текст"]) { voice.retrySaving(note.id, store: store) }
-                    } else if note.deletedAt == nil, !store.unreadable {
-                        Button(strings["Расшифровать"], action: beginTranscription)
-                            .accessibilityIdentifier("note-transcribe")
-                    }
-                    Button(strings["Показать в Finder"]) { voice.showFile(note.id) }
-                    if !voice.transcribing.contains(note.id), !draft.saved {
-                        Button(strings["Удалить запись"], role: .destructive) { showDiscard = true }
-                    }
+                Label(strings[draft.isCall ? "Запись звонка" : "Голосовая запись"], systemImage: "waveform")
+                    .font(.headline)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { draftActions(draft) }
+                    VStack(alignment: .leading, spacing: 10) { draftActions(draft) }
                 }
             }
             if let error = voice.errors[note.id] {
                 Text(strings[error]).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
-        .padding(.horizontal, 32)
-        .padding(.vertical, voice.recordingID != nil || voice.browserCall != nil || voice.drafts[note.id] != nil || voice.errors[note.id] != nil ? 10 : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
         .sheet(isPresented: $choosingModel, onDismiss: openConfirmationIfReady) {
             AssistantModelConnections(service: assistant, russian: preferences.language.resolvedCode == "ru",
-                                      transcriptionPreferences: preferences)
+                                      preferences: preferences, purpose: .transcription)
         }
         .sheet(item: $confirmation) { selection in
             NoteVoiceConfirmation(provider: selection.gateway.name, saveCopy: {
@@ -288,36 +442,84 @@ struct NoteVoiceControls: View {
         }
     }
 
-    private func callControls(_ call: NoteBrowserCall) -> some View {
+    @ViewBuilder
+    private func draftActions(_ draft: NoteVoiceRecording.Draft) -> some View {
+        if voice.transcribing.contains(note.id) {
+            ProgressView().controlSize(.small)
+            Text(strings["Расшифровка…"])
+        } else if draft.saved {
+            Button(strings["Удалить запись"]) { voice.discard(note.id) }
+        } else if draft.transcript != nil {
+            Button(strings["Сохранить текст"]) { voice.retrySaving(note.id, store: store) }
+        } else if note.deletedAt == nil, !store.unreadable {
+            Button(strings["Расшифровать"], action: beginTranscription)
+                .accessibilityIdentifier("note-transcribe")
+        }
+        Button(strings["Показать в Finder"]) { voice.showFile(note.id) }
+            .accessibilityIdentifier("note-show-recording")
+        if !voice.transcribing.contains(note.id), !draft.saved {
+            Button(strings["Удалить запись"], role: .destructive) { showDiscard = true }
+                .accessibilityIdentifier("note-discard-recording")
+        }
+    }
+
+    private func activeRecording<TimerLabel: View>(
+        title: String, paused: Bool, pause: @escaping () -> Void, finish: @escaping () -> Void,
+        @ViewBuilder timer: () -> TimerLabel
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if call.noteID != note.id { Text(strings["Запись в другой заметке"]) }
-                switch call.phase {
-                case .waiting:
-                    Text(strings["Выберите вкладку звонка в Chrome."])
-                    Button(strings["Отмена"]) { call.stop() }
-                case .recording, .paused:
-                    Image(systemName: call.phase == .paused ? "pause.circle" : "record.circle")
-                        .foregroundStyle(call.phase == .recording ? Color.red : Color.secondary)
-                        .accessibilityHidden(true)
-                    let seconds = Int(call.duration)
-                    Text(String(format: "%02d:%02d", seconds / 60, seconds % 60)).monospacedDigit()
-                    Button(strings[call.phase == .paused ? "Продолжить" : "Пауза"]) { call.togglePause() }
-                    Button(strings["Остановить"], systemImage: "stop.circle.fill") { call.stop() }
-                case .stopping:
-                    ProgressView().controlSize(.small)
-                    Text(strings["Сохранение записи…"])
-                }
+            Label(strings[title], systemImage: "waveform").font(.headline)
+            HStack(spacing: 10) {
+                Image(systemName: paused ? "pause.circle" : "record.circle")
+                    .foregroundStyle(paused ? Color.secondary : Color.red)
+                    .accessibilityHidden(true)
+                timer().font(.title3.monospacedDigit()).accessibilityIdentifier("note-recording-timer")
+                Spacer(minLength: 0)
+                let toggleTitle = strings[paused ? "Продолжить" : "Пауза"]
+                Button(toggleTitle, systemImage: paused ? "play.fill" : "pause.fill", action: pause)
+                    .labelStyle(.iconOnly)
+                    .help(toggleTitle)
+                    .accessibilityIdentifier("note-toggle-recording")
+                Button(strings["Завершить запись"], systemImage: "stop.fill", action: finish)
+                    .labelStyle(.iconOnly)
+                    .tint(.red)
+                    .help(strings["Завершить запись"])
+                    .accessibilityIdentifier("note-finish-recording")
             }
-            if call.phase == .recording || call.phase == .paused {
-                HStack(spacing: 16) {
-                    ProgressView(value: Double(call.microphone.squareRoot())) { Text(strings["Микрофон"]) }
-                    ProgressView(value: Double(call.tab.squareRoot())) { Text(strings["Звук вкладки"]) }
-                }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
+    }
+
+    @ViewBuilder
+    private func callControls(_ call: NoteBrowserCall) -> some View {
+        switch call.phase {
+        case .waiting:
+            HStack {
+                Text(strings["Выберите вкладку звонка в Chrome."])
+                Spacer()
+                Button(strings["Отмена"]) { call.stop() }
+            }
+        case .recording, .paused:
+            activeRecording(title: call.noteID == note.id ? "Запись звонка" : "Запись в другой заметке",
+                            paused: call.phase == .paused, pause: call.togglePause, finish: call.stop) {
+                Text(formattedDuration(call.duration))
+            }
+            ProgressView(value: Double(call.microphone.squareRoot())) { Text(strings["Микрофон"]) }
                 .font(.caption)
                 .frame(maxWidth: 325)
+        case .stopping:
+            HStack {
+                ProgressView().controlSize(.small)
+                Text(strings["Сохранение записи…"])
             }
         }
+    }
+
+    private func formattedDuration(_ duration: TimeInterval) -> String {
+        let seconds = Int(max(0, duration))
+        if seconds >= 3600 { return String(format: "%d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60) }
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     private func beginTranscription() {

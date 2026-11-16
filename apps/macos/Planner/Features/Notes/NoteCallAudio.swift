@@ -43,20 +43,24 @@ final class NoteCallAudio {
 
     func close() { writer = nil }
 
-    /// Отдельные короткие запросы позволяют повторить сбойный отрезок длинного звонка.
-    static func transcriptionPieces(_ source: URL, framesPerPiece: AVAudioFramePosition = framesPerPiece) throws -> [URL] {
+    /// Отдельные короткие запросы позволяют повторить сбойный отрезок длинной записи.
+    static func transcriptionPieces(_ source: URL, outputDirectory: URL? = nil,
+                                    framesPerPiece: AVAudioFramePosition = framesPerPiece) throws -> [URL] {
         let reader = try AVAudioFile(forReading: source)
-        if reader.length <= framesPerPiece { return [source] }
         guard framesPerPiece > 0, let buffer = AVAudioPCMBuffer(pcmFormat: reader.processingFormat, frameCapacity: 8192) else {
             throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
         }
+        if reader.length <= framesPerPiece { return [source] }
+        let directory = outputDirectory ?? source.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o700])
         var files: [URL] = []
         do {
             while reader.framePosition < reader.length {
                 try Task.checkCancellation()
-                let url = source.deletingLastPathComponent().appending(path: UUID().uuidString + ".m4a")
+                let url = directory.appending(path: UUID().uuidString + ".m4a")
                 files.append(url)
-                let writer = try AVAudioFile(forWriting: url, settings: settings(channels: 2))
+                let writer = try AVAudioFile(forWriting: url, settings: settings(channels: Int(reader.processingFormat.channelCount)))
                 let end = min(reader.length, reader.framePosition + framesPerPiece)
                 while reader.framePosition < end {
                     try reader.read(into: buffer, frameCount: AVAudioFrameCount(min(8192, end - reader.framePosition)))
@@ -73,12 +77,40 @@ final class NoteCallAudio {
         }
     }
 
+    static func transcriptionWAV(_ source: URL) throws -> URL {
+        let reader = try AVAudioFile(forReading: source)
+        let format = reader.processingFormat
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8192) else {
+            throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+        }
+        let destination = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".wav")
+        do {
+            let writer = try AVAudioFile(forWriting: destination, settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: format.sampleRate, AVNumberOfChannelsKey: format.channelCount,
+                AVLinearPCMBitDepthKey: 16
+            ])
+            while reader.framePosition < reader.length {
+                try Task.checkCancellation()
+                try reader.read(into: buffer)
+                guard buffer.frameLength > 0 else {
+                    throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+                }
+                try writer.write(from: buffer)
+            }
+            return destination
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
+    }
+
     private static func settings(channels: Int) -> [String: Any] {
         [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: sampleRate,
             AVNumberOfChannelsKey: channels,
-            AVEncoderBitRateKey: 96_000
+            AVEncoderBitRateKey: channels == 1 ? 64_000 : 96_000
         ]
     }
 }

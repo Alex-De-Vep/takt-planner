@@ -754,7 +754,6 @@
 
 "Записать звонок" = "Record Call";
 "Микрофон" = "Microphone";
-"Звук вкладки" = "Tab Audio";
 "Выберите вкладку звонка в Chrome." = "Choose the call tab in Chrome.";
 "Сохранение записи…" = "Saving Recording…";
 "Пауза" = "Pause";
@@ -765,3 +764,20 @@
 "Не удалось начать запись звонка." = "Could not start the call recording.";
 "Не удалось сохранить звук звонка." = "Could not save the call audio.";
 "Не удалось подготовить запись к расшифровке." = "Could not prepare the recording for transcription.";
+"Голосовая запись" = "Voice recording";
+"Запись звонка" = "Call recording";
+"Завершить запись" = "Finish recording";
+"Не удалось сохранить запись." = "Could not save the recording.";
+"Не удалось продолжить запись." = "Could not resume recording.";
+"Модели для чата" = "Chat models";
+"Модель чата" = "Chat model";
+"Выберите модель чата" = "Choose a chat model";
+"Выбрать модель чата" = "Choose a chat model";
+"Выберите модель для расшифровки" = "Choose a transcription model";
+"Подключение" = "Connection";
+"Для расшифровки через OpenAI используется отдельный API-ключ." = "OpenAI transcription uses a separate API key.";
+"Не удалось удалить загруженный файл из GigaChat." = "Could not delete the uploaded audio file from GigaChat.";
+"Указать модель вручную" = "Enter model manually";
+"Загружаем модели…" = "Loading models…";
+"Нет доступных моделей" = "No models available";
+"Обновить подключение" = "Update connection";

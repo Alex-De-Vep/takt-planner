@@ -50,7 +50,7 @@ struct AssistantPanel: View {
         .background(Color.clear)
         .sheet(isPresented: $showModelConnections) {
             AssistantModelConnections(service: service, russian: preferences.language.resolvedCode == "ru",
-                boundAccountID: service.chatGPTAccountID, selectModel: service.selectCloudModel)
+                boundAccountID: service.chatGPTAccountID, preferences: preferences, dismissOnChatSelection: true)
         }
         .sheet(item: $editing) { action in
             AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,

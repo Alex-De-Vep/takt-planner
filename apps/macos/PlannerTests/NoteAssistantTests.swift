@@ -58,6 +58,29 @@ import Testing
         #expect(!body.contains(note.id.uuidString))
     }
 
+    @Test func speechCatalogAndUploadsUseTheirOwnProviders() async throws {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NoteSpeechFixture.self]
+        let http = AssistantGatewayHTTP(configuration: configuration)
+        let gigaChat = AssistantGatewayProfile(id: UUID(), gateway: .gigaChat,
+            base: try #require(AssistantGateway.gigaChat.bases.first), key: "fixture")
+        let openAI = AssistantGatewayProfile(id: UUID(), gateway: .openAI,
+            base: try #require(AssistantGateway.openAI.bases.first), key: "fixture")
+
+        #expect(try await http.transcriptionModels(gigaChat).map(\.id) == ["GigaChat-2-Max"])
+        #expect(try await http.transcriptionModels(openAI).map(\.id) == ["gpt-transcribe"])
+        #expect(try await http.models(openAI).isEmpty)
+
+        let audio = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".m4a")
+        defer { try? FileManager.default.removeItem(at: audio) }
+        try Data("fixture audio".utf8).write(to: audio)
+        let gigaResult = try await http.transcribe(audio, profile: gigaChat, modelID: "GigaChat-2-Max")
+        #expect(gigaResult.text == "Текст GigaChat")
+        #expect(!gigaResult.remoteCleanupFailed)
+        #expect(try await http.transcribe(audio, profile: openAI, modelID: "gpt-transcribe").text == "OpenAI transcript")
+        #expect(FileManager.default.fileExists(atPath: audio.path))
+    }
+
     @Test func transcriptionSelectionSurvivesNewPreferencesInstance() throws {
         let suite = "note.transcription.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -65,6 +88,41 @@ import Testing
         let choice = AssistantTranscriptionSelection(gateway: .openRouter, profileID: UUID(), modelID: "example/audio", name: "Speech")
         let preferences = AppPreferences(defaults: defaults)
         preferences.transcriptionModel = choice
-        #expect(AppPreferences(defaults: defaults).transcriptionModel == choice)
+        let reloaded = AppPreferences(defaults: defaults)
+        #expect(reloaded.transcriptionModel == choice)
     }
+}
+
+
+private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url else { return }
+        let authorization = request.value(forHTTPHeaderField: "Authorization")
+        let payload: String?
+        switch (url.host(), url.path, request.httpMethod, authorization) {
+        case ("ngw.devices.sberbank.ru", "/api/v2/oauth", "POST", "Basic fixture"):
+            payload = #"{"access_token":"test-token","expires_at":4102444800}"#
+        case ("api.giga.chat", "/v1/models", "GET", "Bearer test-token"):
+            payload = #"{"data":[{"id":"GigaChat-2-Max"},{"id":"GigaChat-Embeddings"}]}"#
+        case ("api.giga.chat", "/v1/files", "POST", "Bearer test-token"):
+            payload = #"{"id":"uploaded-fixture"}"#
+        case ("api.giga.chat", "/v1/chat/completions", "POST", "Bearer test-token"):
+            payload = #"{"choices":[{"message":{"content":"Текст GigaChat"},"finish_reason":"stop"}]}"#
+        case ("api.giga.chat", "/v1/files/uploaded-fixture/delete", "POST", "Bearer test-token"):
+            payload = ""
+        case ("api.openai.com", "/v1/models", "GET", "Bearer fixture"):
+            payload = #"{"data":[{"id":"gpt-transcribe"},{"id":"gpt-4o"}]}"#
+        case ("api.openai.com", "/v1/audio/transcriptions", "POST", "Bearer fixture"):
+            payload = #"{"text":"OpenAI transcript"}"#
+        default: payload = nil
+        }
+        let response = HTTPURLResponse(url: url, statusCode: payload == nil ? 400 : 200,
+                                      httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if let payload, !payload.isEmpty { client?.urlProtocol(self, didLoad: Data(payload.utf8)) }
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

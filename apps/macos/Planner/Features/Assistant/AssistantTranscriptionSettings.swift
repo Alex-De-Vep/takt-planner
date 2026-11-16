@@ -9,7 +9,7 @@ struct AssistantTranscriptionSelection: Codable, Hashable, Identifiable {
     var id: String { "\(profileID):\(modelID)" }
 
     @MainActor func profile(in connections: AssistantGatewayConnections) -> AssistantGatewayProfile? {
-        guard gateway == .openRouter || gateway == .liteLLM,
+        guard gateway.supportsTranscription,
               let profile = connections.profiles[gateway], profile.id == profileID else { return nil }
         return profile
     }
@@ -22,74 +22,78 @@ struct AssistantTranscriptionModel {
 
 struct AssistantTranscriptionSettings: View {
     @Environment(\.translations) private var strings
-    let connections: AssistantGatewayConnections
+    let profile: AssistantGatewayProfile
+    let http: AssistantGatewayHTTP
     @Bindable var preferences: AppPreferences
     @State private var choices: [AssistantTranscriptionSelection] = []
-    @State private var errors: [AssistantGateway: String] = [:]
-    @State private var loading = false
+    @State private var loadFailed = false
+    @State private var loading = true
+    @State private var refreshID = 0
     @State private var proxyModel = ""
 
-    private var profiles: [AssistantGatewayProfile] {
-        [.openRouter, .liteLLM].compactMap { connections.profiles[$0] }
+    private var selected: AssistantTranscriptionSelection? {
+        guard let selection = preferences.transcriptionModel,
+              selection.gateway == profile.gateway, selection.profileID == profile.id else { return nil }
+        return selection
+    }
+
+    private var models: [AssistantTranscriptionSelection] {
+        // Показываем сохранённую модель при загрузке каталога и при ручном вводе в LiteLLM.
+        if let selected, !choices.contains(where: { $0.id == selected.id }) {
+            return [selected] + choices
+        }
+        return choices
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(strings["Модель для расшифровки"]).font(.headline)
-            if profiles.isEmpty {
-                Text(strings["Подключите OpenRouter или LiteLLM для расшифровки записей."]).foregroundStyle(.secondary)
-            } else {
-                Menu {
-                    ForEach(choices) { option in
-                        Button("\(option.gateway.name) · \(option.name)") { preferences.transcriptionModel = option }
-                    }
-                } label: {
-                    if let selected = preferences.transcriptionModel, selected.profile(in: connections) != nil {
-                        Text("\(selected.gateway.name) · \(selected.name)").lineLimit(1)
-                    } else {
-                        Text(strings["Выбрать модель для расшифровки"])
-                    }
+            AssistantSettingsModelPicker(models: models.map { ($0.modelID, $0.name) }, selectedID: selected?.modelID,
+                                         emptyLabel: pickerLabel, refresh: { refreshID += 1 }, refreshing: loading) { id in
+                if let model = models.first(where: { $0.modelID == id }) {
+                    preferences.transcriptionModel = model
                 }
-                .disabled(choices.isEmpty)
-                if loading { ProgressView().controlSize(.small) }
-                ForEach(profiles, id: \.id) { profile in
-                    if let error = errors[profile.gateway] { Text(strings[error]).font(.caption).foregroundStyle(.secondary) }
-                }
-                if let proxy = connections.profiles[.liteLLM] {
+            }
+            if loadFailed {
+                Text(strings["Не удалось загрузить модели для расшифровки."]).font(.caption).foregroundStyle(.secondary)
+            }
+            if profile.gateway == .liteLLM {
+                DisclosureGroup(strings["Указать модель вручную"]) {
                     HStack {
                         TextField(strings["Идентификатор модели расшифровки в LiteLLM"], text: $proxyModel)
                         Button(strings["Выбрать"]) {
                             let id = proxyModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                            preferences.transcriptionModel = .init(gateway: .liteLLM, profileID: proxy.id, modelID: id, name: id)
+                            preferences.transcriptionModel = .init(gateway: profile.gateway, profileID: profile.id,
+                                                                   modelID: id, name: id)
                             proxyModel = ""
                         }
-                        .disabled(proxyModel.isEmpty || proxyModel.utf8.count > 512 ||
-                                  proxyModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                                  proxyModel.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) })
+                        .disabled(proxyModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  || proxyModel.utf8.count > 512
+                                  || proxyModel.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) })
                         .help(strings["Укажите модель распознавания, настроенную на вашем сервере LiteLLM."])
                     }
                 }
             }
         }
-        .task(id: profiles.map(\.id)) {
-            let current = profiles
-            choices = []
-            errors = [:]
+        .task(id: refreshID) {
             loading = true
+            loadFailed = false
             defer { if !Task.isCancelled { loading = false } }
-            for profile in current {
-                do {
-                    let catalog = try await connections.http.transcriptionModels(profile)
-                    try Task.checkCancellation()
-                    var ids = Set<String>()
-                    choices += catalog.filter { !$0.id.isEmpty && ids.insert($0.id).inserted }.map {
-                        .init(gateway: profile.gateway, profileID: profile.id, modelID: $0.id, name: $0.name)
-                    }
-                } catch {
-                    if Task.isCancelled { return }
-                    errors[profile.gateway] = "Не удалось загрузить модели для расшифровки."
+            do {
+                let catalog = try await http.transcriptionModels(profile)
+                try Task.checkCancellation()
+                var ids = Set<String>()
+                choices = catalog.filter { !$0.id.isEmpty && ids.insert($0.id).inserted }.map {
+                    .init(gateway: profile.gateway, profileID: profile.id, modelID: $0.id, name: $0.name)
                 }
+            } catch {
+                if !Task.isCancelled { loadFailed = true }
             }
         }
+    }
+
+    private var pickerLabel: String {
+        if loading { return "Загружаем модели…" }
+        if models.isEmpty { return "Нет доступных моделей" }
+        return "Выбрать модель"
     }
 }

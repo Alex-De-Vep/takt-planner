@@ -11,7 +11,6 @@ final class NoteBrowserCall {
     let file: URL
     private(set) var phase = Phase.waiting
     private(set) var microphone: Float = 0
-    private(set) var tab: Float = 0
     private(set) var duration: TimeInterval = 0
 
     @ObservationIgnored private let token = UUID().uuidString
@@ -64,7 +63,6 @@ final class NoteBrowserCall {
         case .recording:
             phase = .paused
             microphone = 0
-            tab = 0
         case .paused: phase = .recording
         default: break
         }
@@ -77,9 +75,12 @@ final class NoteBrowserCall {
             keepTail = phase == .recording
             phase = .stopping
             deadline = .now + .seconds(5)
+            if bridge == nil { finish() }
         case .stopping: break
         }
     }
+
+    func finishForTermination() { finish() }
 
     private func checkConnection() {
         switch phase {
@@ -110,8 +111,7 @@ final class NoteBrowserCall {
         do {
             switch route {
             case "begin" where phase == .waiting && request.body.isEmpty:
-                audio = try NoteCallAudio(url: file)
-                phase = .recording
+                try beginAudio()
             case "chunk" where phase != .waiting:
                 guard let sequence = request.headers["x-takt-chunk"].flatMap(Int.init), sequence >= 0,
                       !request.body.isEmpty, request.body.count.isMultiple(of: 4) else {
@@ -120,14 +120,7 @@ final class NoteBrowserCall {
                 if sequence < nextChunk { return stateResponse() }
                 guard sequence == nextChunk else { return .init(status: "409 Conflict") }
                 nextChunk += 1
-                if (phase == .recording || (phase == .stopping && keepTail)), let audio {
-                    let result = try audio.append(request.body)
-                    microphone = result.microphone
-                    tab = result.tab
-                    writtenFrames += result.frames
-                    duration = Double(writtenFrames) / Double(NoteCallAudio.sampleRate)
-                    if duration >= 2 * 60 * 60 { stop() }
-                }
+                try appendAudio(request.body)
             case "finish" where phase != .waiting && request.body.isEmpty:
                 finish()
                 return .init(body: Data("finished".utf8))
@@ -142,6 +135,28 @@ final class NoteBrowserCall {
             return .init(status: "500 Internal Server Error")
         }
     }
+
+    private func beginAudio() throws {
+        audio = try NoteCallAudio(url: file)
+        phase = .recording
+    }
+
+    private func appendAudio(_ data: Data) throws {
+        guard phase == .recording || (phase == .stopping && keepTail), let audio else { return }
+        let result = try audio.append(data)
+        microphone = result.microphone
+        writtenFrames += result.frames
+        duration = Double(writtenFrames) / Double(NoteCallAudio.sampleRate)
+        if duration >= 2 * 60 * 60 { stop() }
+    }
+
+    #if DEBUG
+    /// UI-тест использует тот же файл и состояния, что и Chrome, с сигналом вместо вкладки.
+    func startTestCapture() throws {
+        try beginAudio()
+        try appendAudio(NoteRecordingTestAudio.tone())
+    }
+    #endif
 
     private func stateResponse() -> NoteCallBridge.Response { .init(body: Data(phase.rawValue.utf8)) }
 

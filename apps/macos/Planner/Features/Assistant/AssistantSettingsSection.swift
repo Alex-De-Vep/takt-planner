@@ -6,18 +6,26 @@ struct AssistantSettingsSection: View {
     @Bindable var assistant: AssistantService
     @Bindable var preferences: AppPreferences
     @Query(sort: \TaskFolder.sortOrder) private var folders: [TaskFolder]
-    @State private var showModelConnections = false
+    @State private var modelPurpose: AssistantModelPurpose?
     @State private var clearHistory = false
     var body: some View {
         Section {
-            Button { showModelConnections = true } label: {
-                Label(strings["Подключения моделей…"], systemImage: "cpu")
+            LabeledContent(strings["Модель чата"]) {
+                Button {
+                    modelPurpose = .chat
+                } label: {
+                    Label(assistant.current?.usesCloudModel == true ? assistant.cloudModelName : strings["Выберите модель чата"],
+                          systemImage: "chevron.up.chevron.down")
+                }
+                .accessibilityIdentifier("assistant-settings-model-connections")
             }
-            .accessibilityIdentifier("assistant-settings-model-connections")
             LabeledContent(strings["Модель для расшифровки"]) {
-                Button(preferences.transcriptionModel?.name ?? strings["Выбрать модель для расшифровки"]) {
-                    showModelConnections = true
-                }.buttonStyle(.borderless)
+                Button {
+                    modelPurpose = .transcription
+                } label: {
+                    Label(preferences.transcriptionModel?.name ?? strings["Выберите модель для расшифровки"],
+                          systemImage: "chevron.up.chevron.down")
+                }
             }
             Toggle(strings["Добавлять в текущую папку"], isOn: $preferences.assistantUseCurrentFolder)
             Picker(strings["Папка по умолчанию"], selection: $preferences.assistantDefaultFolder) {
@@ -25,9 +33,9 @@ struct AssistantSettingsSection: View {
             }
             Button(strings["Очистить историю…"], role: .destructive) { clearHistory = true }.disabled(assistant.generating || assistant.applying)
         } header: { Label(strings["Помощник"], systemImage: "sparkles") }
-        .sheet(isPresented: $showModelConnections) {
+        .sheet(item: $modelPurpose) { purpose in
             AssistantModelConnections(service: assistant, russian: preferences.language.resolvedCode == "ru",
-                                      transcriptionPreferences: preferences)
+                                      preferences: preferences, purpose: purpose)
         }
         .alert(strings["Очистить историю помощника?"], isPresented: $clearHistory) {
             Button(strings["Очистить"], role: .destructive) { assistant.clearHistory() }

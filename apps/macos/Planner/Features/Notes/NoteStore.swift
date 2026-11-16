@@ -18,6 +18,7 @@ struct PlannerNote: Codable, Identifiable, Sendable {
     var updatedAt = Date()
     var deletedAt: Date?
     var syncVersion: NoteSyncVersion?
+    var lastVoiceTranscriptID: UUID?
 
     var displayTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     var assistantContentVersion: String {
@@ -26,12 +27,22 @@ struct PlannerNote: Codable, Identifiable, Sendable {
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    fileprivate static var bodyAttributes: [NSAttributedString.Key: Any] {
+        [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: NSColor.labelColor]
+    }
+
     func attributedText() -> NSAttributedString {
         guard !document.isEmpty,
               let value = NSAttributedString(rtfd: document, documentAttributes: nil) else {
-            return NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 16)])
+            return NSAttributedString(string: text, attributes: Self.bodyAttributes)
         }
-        return value
+
+        // В старых заметках некоторые фрагменты RTFD не содержат цвета. AppKit рисует их чёрным.
+        let result = NSMutableAttributedString(attributedString: value)
+        value.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: value.length)) { color, range, _ in
+            if color == nil { result.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range) }
+        }
+        return result
     }
 }
 
@@ -42,7 +53,7 @@ final class NoteStore {
     private(set) var unreadable = false
     var syncEnabled = false
     private var remoteEdits: [UUID: UUID] = [:]
-    @ObservationIgnored let voice = NoteVoiceRecording()
+    @ObservationIgnored let voice: NoteVoiceRecording
     @ObservationIgnored private let url: URL?
     @ObservationIgnored private var pending: [UUID: NSAttributedString] = [:]
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -51,10 +62,12 @@ final class NoteStore {
 
     init(url: URL? = nil) {
         self.url = url
+        voice = NoteVoiceRecording(directory: url?.deletingLastPathComponent().appending(path: "NoteRecordings", directoryHint: .isDirectory))
         guard let url, FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             notes = try JSONDecoder().decode([PlannerNote].self, from: Data(contentsOf: url))
             try Self.validate(notes)
+            voice.restoreDrafts(for: notes)
         } catch {
             self.error = error.localizedDescription
             unreadable = true
@@ -130,18 +143,19 @@ final class NoteStore {
     }
 
     // Сохраняем внешний текст одной записью. При ошибке повтор не добавит его второй раз.
-    func applyText(_ text: String, to id: UUID, append: Bool, expectedVersion: String? = nil) throws {
+    func applyText(_ text: String, to id: UUID, append: Bool, expectedVersion: String? = nil, voiceTranscriptID: UUID? = nil) throws {
         guard flush() else { throw AssistantFailure(message: "Не удалось сохранить текст заметки.") }
         guard let index = notes.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else {
             throw AssistantFailure(message: "Заметка недоступна.")
         }
         let note = notes[index]
+        if let voiceTranscriptID, note.lastVoiceTranscriptID == voiceTranscriptID { return }
         if let expectedVersion, expectedVersion != note.assistantContentVersion {
             throw AssistantFailure(message: "Заметка изменилась. Попросите помощника обновить предложение.")
         }
         let value = NSMutableAttributedString(string: "")
         let old = note.attributedText()
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 16)]
+        let attributes = PlannerNote.bodyAttributes
         if append {
             value.append(old)
             if old.length > 0 { value.append(NSAttributedString(string: "\n\n", attributes: attributes)) }
@@ -159,6 +173,7 @@ final class NoteStore {
             documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
         next[index].text = value.string
         next[index].updatedAt = .now
+        if let voiceTranscriptID { next[index].lastVoiceTranscriptID = voiceTranscriptID }
         try save(next)
         remoteEdits[id] = UUID()
         syncQueued?()
@@ -176,6 +191,7 @@ final class NoteStore {
         let additions = source.filter { !ids.contains($0.id) }.map { note in
             var copy = note
             copy.syncVersion = nil
+            copy.lastVoiceTranscriptID = nil
             return copy
         }
         if !additions.isEmpty { try save(notes + additions) }
@@ -186,15 +202,17 @@ final class NoteStore {
         try Self.validate([note])
         var next = notes
         var incoming = note
+        let previous = notes.first(where: { $0.id == note.id })
+        incoming.lastVoiceTranscriptID = previous?.lastVoiceTranscriptID
         let digest = try Self.digest(Self.wireData(note))
         incoming.syncVersion = NoteSyncVersion(revision: revision, localDigest: digest)
-        let previous = notes.first(where: { $0.id == note.id })
         if let index = notes.firstIndex(where: { $0.id == note.id }) {
             var local = notes[index]
             let localDigest = try Self.digest(Self.wireData(local))
             if digest != localDigest && localDigest != local.syncVersion?.localDigest {
                 local.id = UUID()
                 local.syncVersion = nil
+                local.lastVoiceTranscriptID = nil
                 next.append(local)
             }
             next[index] = incoming
@@ -218,6 +236,7 @@ final class NoteStore {
     static func wireData(_ note: PlannerNote) throws -> Data {
         var copy = note
         copy.syncVersion = nil
+        copy.lastVoiceTranscriptID = nil
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(copy)

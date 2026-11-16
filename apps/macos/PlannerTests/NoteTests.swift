@@ -63,6 +63,54 @@ import Testing
         #expect(NoteStore(url: url).notes.first?.text == content.string)
     }
 
+    @Test func legacyTextAndTranscriptionFollowAppearanceWithoutChangingExplicitColors() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "TaktNotes-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "Notes.json")
+        let store = NoteStore(url: url)
+        let id = try #require(store.create(folder: "inbox"))
+
+        let styledFont = NSFont.boldSystemFont(ofSize: 18)
+        let explicitColor = NSColor.systemRed
+        let legacy = NSMutableAttributedString(string: "Старый текст ", attributes: [.font: styledFont])
+        let coloredIndex = legacy.length
+        legacy.append(NSAttributedString(string: "цвет", attributes: [.foregroundColor: explicitColor]))
+        let legacyDocument = try legacy.data(from: NSRange(location: 0, length: legacy.length),
+                                              documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
+        store.update(id) { note in
+            note.document = legacyDocument
+            note.text = legacy.string
+        }
+        let original = try #require(store.notes.first)
+        let adapted = original.attributedText()
+        let adaptiveColor = try #require(adapted.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor)
+        #expect(adaptiveColor == .labelColor)
+        let adaptedFont = try #require(adapted.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        #expect(adaptedFont.pointSize == styledFont.pointSize)
+        #expect(NSFontManager.shared.traits(of: adaptedFont).contains(.boldFontMask))
+        #expect(adapted.attribute(.foregroundColor, at: coloredIndex, effectiveRange: nil) as? NSColor == explicitColor)
+        #expect(store.notes.first?.document == legacyDocument)
+
+        let light = try #require(NSAppearance(named: .aqua))
+        let dark = try #require(NSAppearance(named: .darkAqua))
+        var lightWhite: CGFloat?
+        var darkWhite: CGFloat?
+        light.performAsCurrentDrawingAppearance { lightWhite = adaptiveColor.usingColorSpace(.genericGray)?.whiteComponent }
+        dark.performAsCurrentDrawingAppearance { darkWhite = adaptiveColor.usingColorSpace(.genericGray)?.whiteComponent }
+        #expect(try #require(lightWhite) < 0.3)
+        #expect(try #require(darkWhite) > 0.7)
+
+        let transcript = "Новая расшифровка."
+        try store.applyText(transcript, to: id, append: true, voiceTranscriptID: UUID())
+        let reopened = NoteStore(url: url)
+        let note = try #require(reopened.notes.first)
+        let decoded = try #require(NSAttributedString(rtfd: note.document, documentAttributes: nil))
+        let index = (decoded.string as NSString).range(of: transcript).location
+        try #require(index != NSNotFound)
+        #expect(decoded.attribute(.foregroundColor, at: index, effectiveRange: nil) as? NSColor == .labelColor)
+        #expect(decoded.attribute(.foregroundColor, at: coloredIndex, effectiveRange: nil) as? NSColor == explicitColor)
+    }
+
     @Test func failedWriteKeepsDraftAndRetrySavesIt() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: "TaktNotes-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -1,7 +1,7 @@
 import Foundation
 
 enum AssistantGateway: String, Codable, CaseIterable, Identifiable, Sendable {
-    case openRouter, liteLLM, copilot, miniMaxPlan, miniMax, claude, gemini, deepSeek, mistral, glm, grok, qwen, kimi, yandex, gigaChat
+    case openRouter, liteLLM, copilot, miniMaxPlan, miniMax, claude, gemini, deepSeek, mistral, glm, grok, qwen, kimi, yandex, gigaChat, openAI
 
     enum Wire: Equatable { case chat, responses, messages }
 
@@ -23,6 +23,7 @@ enum AssistantGateway: String, Codable, CaseIterable, Identifiable, Sendable {
         case .kimi: "Kimi"
         case .yandex: "YandexGPT Pro"
         case .gigaChat: "GigaChat"
+        case .openAI: "OpenAI API"
         }
     }
 
@@ -61,6 +62,7 @@ enum AssistantGateway: String, Codable, CaseIterable, Identifiable, Sendable {
             }
         case .kimi: addresses = ["https://api.moonshot.ai/v1", "https://api.moonshot.cn/v1"]
         case .yandex: addresses = ["https://ai.api.cloud.yandex.net/v1"]
+        case .openAI: addresses = ["https://api.openai.com/v1"]
         case .gigaChat: addresses = [GigaChatTrust.apiBase.absoluteString]
         }
         return addresses.compactMap { URL(string: $0) }
@@ -84,6 +86,10 @@ enum AssistantGateway: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var isMiniMax: Bool { self == .miniMax || self == .miniMaxPlan }
 
+    static let transcriptionProviders: [Self] = [.gigaChat, .openAI, .gemini, .mistral, .grok, .openRouter, .liteLLM]
+
+    var supportsTranscription: Bool { Self.transcriptionProviders.contains(self) }
+
     var supportsKeyBudget: Bool { self == .openRouter || self == .liteLLM }
     var keyPage: URL? {
         let address: String?
@@ -100,6 +106,7 @@ enum AssistantGateway: String, Codable, CaseIterable, Identifiable, Sendable {
         case .kimi: address = "https://platform.moonshot.ai/console/api-keys"
         case .yandex: address = "https://console.yandex.cloud/"
         case .gigaChat: address = "https://developers.sber.ru/studio/"
+        case .openAI: address = "https://platform.openai.com/api-keys"
         default: address = nil
         }
         return address.flatMap { URL(string: $0) }
