@@ -92,6 +92,11 @@ internal class HttpsTransport : Transport {
         address: String, headers: Map<String, String>, body: String? = null,
         contentType: String = "application/json; charset=utf-8", limit: Int = Int.MAX_VALUE,
         readTimeoutMillis: Int = 25_000, method: String = if (body == null) "GET" else "POST",
+    ): String = exchangeBytes(address, headers, body?.toByteArray(), contentType, limit, readTimeoutMillis, method)
+
+    fun exchangeBytes(
+        address: String, headers: Map<String, String>, body: ByteArray?, contentType: String,
+        limit: Int, readTimeoutMillis: Int, method: String,
     ): String {
         val connection = URL(address).openConnection() as HttpsURLConnection
         try {
@@ -102,11 +107,10 @@ internal class HttpsTransport : Transport {
             headers.forEach(connection::setRequestProperty)
             connection.requestMethod = method
             if (body != null) {
-                val bytes = body.toByteArray()
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", contentType)
-                connection.setFixedLengthStreamingMode(bytes.size)
-                connection.outputStream.use { it.write(bytes) }
+                connection.setFixedLengthStreamingMode(body.size)
+                connection.outputStream.use { it.write(body) }
             }
             val status = connection.responseCode
             if (status in 200..299) {

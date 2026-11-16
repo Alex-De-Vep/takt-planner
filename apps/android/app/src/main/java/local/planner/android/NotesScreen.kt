@@ -1,6 +1,10 @@
 package local.planner.android
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -37,9 +42,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.ZoneId
 import kotlinx.coroutines.delay
 
@@ -133,7 +144,6 @@ internal fun NotesScreen(
                     when {
                         search.isNotBlank() -> R.string.no_results_hint
                         trash -> R.string.notes_trash_hint
-                        library.folders.isEmpty() -> R.string.notes_need_folder
                         else -> R.string.no_notes_hint
                     },
                 )
@@ -174,22 +184,42 @@ private fun NoteRow(note: NoteSummary, library: Library, model: PlannerModel) {
 @Composable
 internal fun NoteEditor(
     draft: NoteDraft, library: Library, writable: Boolean, model: PlannerModel, snackbar: SnackbarHostState,
+    openChat: (String) -> Unit,
 ) {
     val original = draft.original?.document
     val removed = original?.deletedAt != null
     val formatted = original?.document?.isNotEmpty() == true
-    val enabled = writable && !draft.saving
+    val voice = model.noteVoice
+    val recording = voice.startedAt != null
+    val enabled = writable && !draft.saving && !recording
     val editing = enabled && !removed
-    val hasText = draft.title.isNotBlank() || draft.text.isNotBlank()
+    val hasContent = draft.title.isNotBlank() || draft.text.isNotBlank() || voice.clip != null
+    val defaultVoiceTitle = stringResource(R.string.voice_note_title)
+    val context = LocalContext.current
+    val focus = LocalFocusManager.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) voice.start() else voice.permissionDenied()
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, voice) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) voice.suspendMedia()
+        }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            voice.suspendMedia()
+        }
+    }
     var folders by remember { mutableStateOf(false) }
-    var menu by remember { mutableStateOf(false) }
     var confirmTrash by rememberSaveable { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     val currentFolder = library.folders.firstOrNull { noteFolder(it.id) == draft.folder }
     val finish = {
         if (!draft.saving) {
             when {
-                !draft.dirty -> model.closeNote()
+                recording -> voice.stop()
+                !draft.dirty && (original != null || voice.clip == null) -> model.closeNote()
                 original == null || !writable -> confirmDiscard = true
                 else -> model.saveNote(draft)
             }
@@ -203,16 +233,28 @@ internal fun NoteEditor(
                 title = { Text(stringResource(if (original == null) R.string.new_note else R.string.note)) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, enabled = !draft.saving, onClick = finish) },
                 actions = {
+                    if (!removed && voice.clip == null) {
+                        ActionIcon(R.drawable.ic_waveform, R.string.voice_start, enabled = editing) {
+                            focus.clearFocus()
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                PackageManager.PERMISSION_GRANTED) voice.start()
+                            else permission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
                     if (original != null && !removed) {
-                        Box {
-                            ActionIcon(R.drawable.ic_more, R.string.note_actions, enabled = editing) { menu = true }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                DropdownMenuItem(text = { Text(stringResource(if (draft.pinned) R.string.note_unpin else R.string.note_pin)) },
-                                    onClick = { draft.pinned = !draft.pinned; menu = false })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.note_move_to_trash)) },
-                                    onClick = { menu = false; confirmTrash = true })
+                        ActionIcon(
+                            R.drawable.ic_pin, if (draft.pinned) R.string.note_unpin else R.string.note_pin,
+                            tint = if (draft.pinned) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            enabled = editing,
+                        ) { draft.pinned = !draft.pinned }
+                        ActionIcon(R.drawable.ic_chat, R.string.open_context_chat, enabled = editing && !draft.transcribing) {
+                            if (draft.dirty) model.saveNote(draft, openChat)
+                            else {
+                                model.closeNote()
+                                openChat(original.id)
                             }
                         }
+                        ActionIcon(R.drawable.ic_delete, R.string.note_move_to_trash, enabled = editing) { confirmTrash = true }
                     }
                 },
             )
@@ -224,7 +266,10 @@ internal fun NoteEditor(
                     model.saveNote(draft)
                 }
             } else if (!formatted || draft.dirty) {
-                EditorBottomAction(R.string.save, editing && draft.folder != null && (original != null || hasText)) {
+                EditorBottomAction(R.string.save, editing && !draft.transcribing && (original != null || hasContent)) {
+                    if (original == null && voice.clip != null && draft.title.isBlank() && draft.text.isBlank()) {
+                        draft.title = defaultVoiceTitle
+                    }
                     model.saveNote(draft)
                 }
             }
@@ -239,11 +284,14 @@ internal fun NoteEditor(
                 Box {
                     TextButton(onClick = { folders = true }, enabled = editing && library.folders.isNotEmpty()) {
                         Glyph(R.drawable.ic_folder)
-                        Text(currentFolder?.text("name") ?: stringResource(
-                            if (draft.folder == null) R.string.note_choose_folder else R.string.note_missing_folder,
-                        ), Modifier.padding(start = 8.dp))
+                        Text(currentFolder?.text("name") ?: stringResource(R.string.note_missing_folder),
+                            Modifier.padding(start = 8.dp))
                     }
                     DropdownMenu(expanded = folders, onDismissRequest = { folders = false }) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.note_missing_folder)) }, onClick = {
+                            draft.folder = NOTE_WITHOUT_FOLDER
+                            folders = false
+                        })
                         library.folders.forEach { folder ->
                             DropdownMenuItem(text = { Text(folder.text("name").orEmpty()) }, onClick = {
                                 draft.folder = noteFolder(folder.id)
@@ -268,6 +316,7 @@ internal fun NoteEditor(
                     PlannerTextField(draft.text, { draft.text = it }, Modifier.fillMaxWidth(), placeholder = R.string.note_text,
                         minLines = 4, enabled = !draft.saving, readOnly = !editing)
                 }
+                if (!removed) NoteVoiceControls(draft, model, editable = editing && !formatted)
             }
         }
     }

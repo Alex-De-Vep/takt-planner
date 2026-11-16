@@ -99,6 +99,8 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     var eventJson by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarSettings by rememberSaveable { mutableStateOf(false) }
     var chatSettings by rememberSaveable { mutableStateOf(false) }
+    var chatTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    var chatNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     val openEvent: (EventRequest) -> Unit = { eventJson = json.toJson(it) }
     val section = selectedSection.takeIf { it in Sections || library.folders.any { folder -> folder.id == it } } ?: "inbox"
     val task = library.tasks.firstOrNull { it.id == route }
@@ -106,13 +108,21 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     val noteDraft = model.noteDraft?.takeIf { it.workspace == library.workspace }
     val eventRoute = eventJson
     if (noteDraft != null) {
-        NoteEditor(noteDraft, library, noteState.limit != null, model, snackbar)
+        NoteEditor(noteDraft, library, noteState.limit != null, model, snackbar) { id ->
+            chatTaskId = null
+            chatNoteId = id
+            tab = Tab.Chat
+        }
     } else if (eventRoute != null) {
         val request = remember(eventRoute) { json.fromJson(eventRoute, EventRequest::class.java) }
         EventEditor(request, calendar, { eventJson = null }) { eventJson = null; calendarRefresh++ }
     } else if (route != null) {
         if (route == NEW_TASK || task != null) {
-            TaskEditor(library, task, section, model, snackbar) { route = null }
+            TaskEditor(library, task, section, model, snackbar, openChat = { id ->
+                chatNoteId = null
+                chatTaskId = id
+                tab = Tab.Chat
+            }) { route = null }
         } else {
             MissingTask(snackbar) { model.closeDraft(); route = null }
         }
@@ -147,9 +157,7 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                     )
                     Tab.Notes -> if (!noteTrash && noteState.limit != null) {
                         ExtendedFloatingActionButton(
-                            onClick = {
-                                if (library.folders.isEmpty()) managing = true else model.openNote(null, noteFolder)
-                            },
+                            onClick = { model.openNote(null, noteFolder) },
                             icon = { Glyph(R.drawable.ic_add) },
                             text = { Text(stringResource(R.string.new_note)) },
                         )
@@ -183,7 +191,11 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                             )
                             Tab.Events -> CalendarScreen(calendar, calendarDate, { calendarDateText = it.toString() },
                                 openEvent, { calendarSettings = true }, calendarRefresh)
-                            Tab.Chat -> ChatScreen(library, model) { chatSettings = true }
+                            Tab.Chat -> ChatScreen(
+                                library, model, chatTaskId, chatNoteId,
+                                selectTaskId = { chatTaskId = it; chatNoteId = null },
+                                clearNote = { chatNoteId = null },
+                            ) { chatSettings = true }
                             Tab.Settings -> Settings(library, cloud, model, calendar, calendarRefresh,
                                 { calendarSettings = true }, { chatSettings = true })
                         }

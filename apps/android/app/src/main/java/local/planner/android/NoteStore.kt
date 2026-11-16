@@ -90,19 +90,20 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
     }
 
     @Synchronized
-    fun save(workspace: String, original: StoredNote?, note: NoteDocument) {
+    fun save(workspace: String, original: StoredNote?, note: NoteDocument): String {
         val limit = _state.value.takeIf { it.workspace == workspace }?.limit ?: error("Notes unavailable")
-        val copied = writableDatabase.transaction {
+        val savedId = writableDatabase.transaction {
             val current = version(workspace, note.id)
             val conflict = current?.digest != original?.digest
             val next = if (conflict) note.copy(id = newId()) else note
             val bytes = next.wireBytes()
             if (bytes.size > limit) throw NoteTooLarge()
             write(workspace, next, bytes, if (conflict) null else current?.revision, noteDigest(bytes))
-            conflict
+            next.id
         }
-        if (copied) _state.value = _state.value.copy(conflicts = _state.value.conflicts + 1)
+        if (savedId != note.id) _state.value = _state.value.copy(conflicts = _state.value.conflicts + 1)
         publish()
+        return savedId
     }
 
     @Synchronized

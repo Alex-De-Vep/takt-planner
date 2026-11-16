@@ -47,6 +47,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     val library = store.library
     val notes = noteStore.state
+    val noteVoice = NoteVoice(application)
     var noteDraft by mutableStateOf<NoteDraft?>(null)
         private set
     private var openingNote = false
@@ -70,7 +71,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                     chat.bind(it.workspace)
                     if (it.profile == null) {
                         draft = null
-                        if (library.value.profile == null) noteDraft = null
+                        if (library.value.profile == null && noteDraft != null) closeNote()
                     }
                     withContext(Dispatchers.IO) { DeadlineReminders.update(getApplication(), it) }
                 }
@@ -229,7 +230,9 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 if (id != null && original == null) {
                     _error.value = R.string.note_unavailable
                 } else {
-                    noteDraft = NoteDraft(current.workspace, original, folderId?.let(::noteFolder))
+                    val draft = NoteDraft(current.workspace, original, folderId?.let(::noteFolder))
+                    noteVoice.bind(draft.workspace, draft.id)
+                    noteDraft = draft
                 }
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
@@ -240,7 +243,41 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun closeNote() { noteDraft = null }
+    fun closeNote() {
+        noteVoice.close(discard = noteDraft?.original == null)
+        noteDraft = null
+    }
+
+    override fun onCleared() {
+        noteVoice.suspendMedia()
+        super.onCleared()
+    }
+
+    suspend fun noteChatContext(workspace: String, id: String): NoteChatContext? = withContext(Dispatchers.IO) {
+        if (library.value.workspace != workspace) return@withContext null
+        runCatching { noteStore.read(workspace, id)?.document }.getOrNull()
+            ?.takeIf { it.deletedAt == null }
+            ?.let { NoteChatContext(it.title.take(500), it.text.take(12_000).replace("\uFFFC", "")) }
+    }
+
+    fun transcribeNote(draft: NoteDraft, provider: GatewayProvider, model: String) {
+        val clip = noteVoice.clip ?: return
+        if (noteDraft !== draft || draft.transcribing || draft.workspace != library.value.workspace) return
+        draft.transcribing = true
+        draft.transcript = null
+        draft.transcriptionError = null
+        viewModelScope.launch {
+            try {
+                val result = chat.transcribeVoice(draft.workspace, provider, model.trim(), clip)
+                if (noteDraft === draft) draft.transcript = result
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                if (noteDraft === draft) draft.transcriptionError = R.string.voice_transcript_error
+            } finally {
+                draft.transcribing = false
+            }
+        }
+    }
 
     suspend fun searchNotes(workspace: String, text: String): Set<String> = try {
         withContext(Dispatchers.IO) { noteStore.search(workspace, text) }
@@ -250,17 +287,18 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         emptySet()
     }
 
-    fun saveNote(draft: NoteDraft) {
+    fun saveNote(draft: NoteDraft, done: (String) -> Unit = {}) {
         val current = library.value
-        if (draft.saving || current.workspace != draft.workspace || current.profile == null) return
+        if (noteDraft !== draft || draft.saving || noteVoice.startedAt != null ||
+            current.workspace != draft.workspace || current.profile == null) return
         val original = draft.original?.document
-        val folder = draft.folder ?: return
-        if (folder != original?.folder && current.folders.none { noteFolder(it.id) == folder }) {
+        val folder = draft.folder
+        if (folder != NOTE_WITHOUT_FOLDER && folder != original?.folder && current.folders.none { noteFolder(it.id) == folder }) {
             draft.error = R.string.note_choose_folder
             return
         }
         val now = noteTime()
-        val note = (original ?: NoteDocument(newId(), folder, createdAt = now)).copy(
+        val note = (original ?: NoteDocument(draft.id, folder, createdAt = now)).copy(
             folder = folder, title = draft.title.trim(), text = draft.text, pinned = draft.pinned,
             updatedAt = now, deletedAt = if (draft.trashed) original?.deletedAt ?: now else null,
         )
@@ -268,8 +306,12 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         draft.error = null
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { noteStore.save(current.workspace, draft.original, note) }
-                if (noteDraft === draft) closeNote()
+                val savedId = withContext(Dispatchers.IO) { noteStore.save(current.workspace, draft.original, note) }
+                if (noteDraft === draft) {
+                    noteVoice.close()
+                    noteDraft = null
+                    done(savedId)
+                }
                 refresh()
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure

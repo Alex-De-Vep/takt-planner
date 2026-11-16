@@ -66,7 +66,8 @@ import java.time.format.FormatStyle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TaskEditor(
-    library: Library, task: Entity?, section: String, model: PlannerModel, snackbar: SnackbarHostState, close: () -> Unit,
+    library: Library, task: Entity?, section: String, model: PlannerModel, snackbar: SnackbarHostState,
+    openChat: (String) -> Unit, close: () -> Unit,
 ) {
     val draft = remember { model.openDraft(library, task, section) }
     val deadline = draft.deadline
@@ -104,7 +105,13 @@ internal fun TaskEditor(
                 title = { Text(stringResource(if (task == null) R.string.new_task else R.string.task_details)) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, onClick = navigateBack) },
                 actions = {
-                    if (task != null && !draft.saving) ActionIcon(R.drawable.ic_delete, R.string.delete_task) { action = "delete" }
+                    if (task != null) {
+                        ActionIcon(R.drawable.ic_chat, R.string.open_context_chat, enabled = !draft.saving) {
+                            val go = { finish(); openChat(task.id) }
+                            if (draft.dirty) model.saveTask(draft, go) else go()
+                        }
+                        ActionIcon(R.drawable.ic_delete, R.string.delete_task, enabled = !draft.saving) { action = "delete" }
+                    }
                 },
             )
         },

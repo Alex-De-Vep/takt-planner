@@ -240,7 +240,6 @@
     <string name="note_conflict_copy">Заметка изменилась на другом устройстве. Обе версии сохранены.</string>
     <string name="no_notes">Заметок пока нет</string>
     <string name="no_notes_hint">Нажмите «Новая заметка», чтобы сделать запись.</string>
-    <string name="notes_need_folder">Создайте папку, чтобы добавить заметку.</string>
     <string name="note_choose_folder">Выбрать папку</string>
     <string name="note_missing_folder">Без папки</string>
     <string name="note_pin">Закрепить</string>
@@ -252,4 +251,27 @@
     <string name="note_folder_date">%1$s · %2$s</string>
     <string name="note_formatted_preview">Предпросмотр текста. Форматирование и изображения можно редактировать на Mac.</string>
     <string name="welcome_notes_hint">Храните идеи и списки в тех же папках, что и задачи.</string>
+    <string name="open_context_chat">Открыть в чате</string>
+    <string name="chat_remove_note">Убрать заметку из контекста</string>
+    <string name="voice_start">Записать голос</string>
+    <string name="voice_stop">Остановить</string>
+    <string name="voice_timer">Запись · %1$s</string>
+    <string name="voice_clip">Голосовая запись · %1$s</string>
+    <string name="voice_note_title">Голосовая заметка</string>
+    <string name="voice_permission">Разрешите доступ к микрофону в настройках Android.</string>
+    <string name="voice_start_error">Не удалось начать запись.</string>
+    <string name="voice_save_error">Не удалось сохранить запись.</string>
+    <string name="voice_playback_error">Не удалось воспроизвести запись.</string>
+    <string name="voice_delete_error">Не удалось удалить запись.</string>
+    <string name="voice_delete">Удалить запись</string>
+    <string name="voice_delete_hint">Аудиофайл будет удалён с телефона.</string>
+    <string name="voice_listen">Прослушать</string>
+    <string name="voice_transcribe">Расшифровать</string>
+    <string name="voice_transcribing">Расшифровка…</string>
+    <string name="voice_transcript">Расшифровка</string>
+    <string name="voice_transcript_error">Не удалось расшифровать. Проверьте модель и повторите попытку.</string>
+    <string name="voice_transcribe_connect">Подключите LiteLLM, OpenRouter или Mistral в «Чате», чтобы расшифровывать записи.</string>
+    <string name="voice_transcribe_send">Отправить эту запись в %1$s для расшифровки?</string>
+    <string name="voice_model">Модель для расшифровки</string>
+    <string name="voice_insert">Вставить в заметку</string>
 </resources>

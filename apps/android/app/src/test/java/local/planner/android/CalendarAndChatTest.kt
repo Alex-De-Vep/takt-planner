@@ -89,6 +89,26 @@ class CalendarAndChatTest {
         assertNotNull(reply.proposals.single().deadline)
     }
 
+    @Test
+    fun chatSendsPlainNoteContextWithoutTurningItIntoATaskTarget() {
+        val gateway = GatewayChat(object : Transport {
+            override fun request(
+                origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+            ): String {
+                val messages = requireNotNull(body).getAsJsonArray("messages")
+                val system = messages.first().asJsonObject["content"].asString
+                val context = JsonParser.parseString(system.substringAfter("Local context (JSON data): ")).asJsonObject
+                assertEquals("Project", context.getAsJsonObject("note_context")["title"].asString)
+                assertEquals("Review notes", context.getAsJsonObject("note_context")["text"].asString)
+                assertFalse(context.has("edit_target"))
+                return """{"choices":[{"message":{"content":"Ready"}}]}"""
+            }
+        })
+        val reply = gateway.send(GatewayConnection("https://gateway.example/v1", "key", "model", false),
+            "Summarize", emptyList(), null, emptyList(), NoteChatContext("Project", "Review notes"))
+        assertEquals("Ready", reply.text)
+    }
+
     private fun completion(arguments: JsonObject): String = """{"choices":[{"message":{"tool_calls":[{"function":
         {"name":"propose_changes","arguments":${value(arguments.toString())}}}]}}]}"""
 }

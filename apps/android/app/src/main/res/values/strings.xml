@@ -240,7 +240,6 @@
     <string name="note_conflict_copy">A note changed on another device. Both versions were saved.</string>
     <string name="no_notes">No notes yet</string>
     <string name="no_notes_hint">Tap New note to write something down.</string>
-    <string name="notes_need_folder">Create a folder before adding a note.</string>
     <string name="note_choose_folder">Choose a folder</string>
     <string name="note_missing_folder">No folder</string>
     <string name="note_pin">Pin</string>
@@ -252,4 +251,27 @@
     <string name="note_folder_date">%1$s · %2$s</string>
     <string name="note_formatted_preview">Text preview. Formatting and images can be edited on Mac.</string>
     <string name="welcome_notes_hint">Keep ideas and lists in the same folders as your tasks.</string>
+    <string name="open_context_chat">Open in chat</string>
+    <string name="chat_remove_note">Remove note from context</string>
+    <string name="voice_start">Record voice</string>
+    <string name="voice_stop">Stop</string>
+    <string name="voice_timer">Recording · %1$s</string>
+    <string name="voice_clip">Voice recording · %1$s</string>
+    <string name="voice_note_title">Voice note</string>
+    <string name="voice_permission">Allow microphone access in Android settings to record.</string>
+    <string name="voice_start_error">Could not start recording.</string>
+    <string name="voice_save_error">Could not save the recording.</string>
+    <string name="voice_playback_error">Could not play the recording.</string>
+    <string name="voice_delete_error">Could not delete the recording.</string>
+    <string name="voice_delete">Delete recording</string>
+    <string name="voice_delete_hint">The audio file will be removed from this phone.</string>
+    <string name="voice_listen">Play</string>
+    <string name="voice_transcribe">Transcribe</string>
+    <string name="voice_transcribing">Transcribing…</string>
+    <string name="voice_transcript">Transcript</string>
+    <string name="voice_transcript_error">Could not transcribe. Check the model and try again.</string>
+    <string name="voice_transcribe_connect">Connect LiteLLM, OpenRouter or Mistral in Chat to transcribe recordings.</string>
+    <string name="voice_transcribe_send">Send this audio to %1$s for transcription?</string>
+    <string name="voice_model">Transcription model</string>
+    <string name="voice_insert">Insert into note</string>
 </resources>

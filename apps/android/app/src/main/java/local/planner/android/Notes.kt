@@ -13,6 +13,7 @@ import java.util.UUID
 
 // Foundation's default Codable dates count seconds from 2001-01-01T00:00:00Z.
 private const val FOUNDATION_EPOCH = 978_307_200L
+internal const val NOTE_WITHOUT_FOLDER = "inbox"
 internal const val MAX_NOTE_BYTES = 8 * 1024 * 1024
 
 internal fun noteTime() = (System.currentTimeMillis() - FOUNDATION_EPOCH * 1000) / 1000.0
@@ -86,12 +87,16 @@ internal class NoteDraft(
     initialFolder: String?,
 ) {
     private val note = original?.document
-    var folder by mutableStateOf(note?.folder ?: initialFolder)
+    val id = note?.id ?: newId()
+    var folder by mutableStateOf(note?.folder ?: initialFolder ?: NOTE_WITHOUT_FOLDER)
     var title by mutableStateOf(note?.title.orEmpty())
     var text by mutableStateOf(note?.text.orEmpty())
     var pinned by mutableStateOf(note?.pinned ?: false)
     var trashed by mutableStateOf(note?.deletedAt != null)
     var saving by mutableStateOf(false)
+    var transcribing by mutableStateOf(false)
+    var transcript by mutableStateOf<String?>(null)
+    var transcriptionError by mutableStateOf<Int?>(null)
     var error by mutableStateOf<Int?>(null)
 
     val dirty get() = title != note?.title.orEmpty() || text != note?.text.orEmpty() ||

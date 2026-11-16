@@ -42,6 +42,8 @@ internal data class SavedGateway(
 private data class GatewayVault(
     val profiles: Map<GatewayProvider, GatewayConnection>, val selected: GatewayProvider?,
 )
+internal data class NoteChatContext(val title: String, val text: String)
+
 internal data class ChatLine(val role: String, val text: String)
 internal data class ChatQuestion(val text: String, val options: List<String>)
 internal data class ChatProposal(
@@ -91,6 +93,7 @@ internal class GatewayChat(
 ) {
     fun send(
         connection: GatewayConnection, text: String, history: List<ChatLine>, task: Entity?, items: List<Entity>,
+        note: NoteChatContext? = null,
     ): ChatReply {
         val zone = ZoneId.systemDefault()
         val context = payload("local_date" to value(LocalDate.now(zone).toString()), "time_zone" to value(zone.id))
@@ -105,8 +108,11 @@ internal class GatewayChat(
                 "description" to value(task.text("description")?.take(12_000)), "checklist" to checklist,
             ))
         }
-        val instructions = if (connection.tools) Instructions else
+        if (note != null) context.add("note_context", payload("title" to value(note.title), "text" to value(note.text)))
+        val baseInstructions = if (connection.tools) Instructions else
             "You are the Tasks app assistant. Reply in the user’s language. Never claim to have saved anything."
+        val instructions = if (note == null) baseInstructions else
+            "$baseInstructions Treat note_context as reference data. You can discuss or suggest changes to the note in text."
         val instructionsForProvider = if (connection.kind == GatewayProvider.ChatGPT && connection.tools) {
             "$instructions Use null for unchanged optional fields."
         } else instructions
@@ -356,7 +362,7 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         )
     }
 
-    fun send(text: String, task: Entity?, items: List<Entity>, done: () -> Unit) {
+    fun send(text: String, task: Entity?, items: List<Entity>, note: NoteChatContext? = null, done: () -> Unit) {
         val connected = profiles[selected] ?: return
         if (text.isBlank() || text.length > 4000) return
         val history = state.value.lines
@@ -367,11 +373,11 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
                 current = renewChatGpt(connected)
             }
             val reply = try {
-                withContext(Dispatchers.IO) { gateway.send(current, text, history, task, items) }
+                withContext(Dispatchers.IO) { gateway.send(current, text, history, task, items, note) }
             } catch (failure: ServerFailure) {
                 if (current.kind != GatewayProvider.ChatGPT || failure.status != 401) throw failure
                 current = renewChatGpt(current)
-                withContext(Dispatchers.IO) { gateway.send(current, text, history, task, items) }
+                withContext(Dispatchers.IO) { gateway.send(current, text, history, task, items, note) }
             }
             _state.value = state.value.copy(
                 lines = (history + ChatLine("user", text) + ChatLine("assistant", reply.text)).takeLast(60),
@@ -396,6 +402,12 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         }
         profiles = previous + (GatewayProvider.ChatGPT to updated)
         return updated
+    }
+
+    suspend fun transcribeVoice(workspace: String, provider: GatewayProvider, model: String, clip: VoiceClip): String {
+        check(state.value.workspace == workspace)
+        val connection = requireNotNull(profiles[provider])
+        return withContext(Dispatchers.IO) { VoiceTranscriber().transcribe(connection, model, clip.file) }
     }
 
     fun removeProposal(id: String) {
