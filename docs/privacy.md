@@ -1,16 +1,16 @@
 # Конфиденциальность / Privacy
 
-Обновлено: 10 ноября 2026 года. Применяется к приложению Tasks / «Задачи» в этом репозитории.
+Обновлено: 16 ноября 2026 года. Применяется к приложению Takt в этом репозитории.
 
 ## Что хранится на устройстве
 
-Названия задач и папок, описания, подзадачи, сроки, отметки выполнения и связи с событиями сохраняются в локальной библиотеке SwiftData внутри sandbox-контейнера приложения. Язык, размеры панелей и выбор календарей сохраняются локально в настройках.
+Названия задач и папок, описания, подзадачи, сроки, отметки выполнения и связи с событиями сохраняются в локальной библиотеке SwiftData внутри sandbox-контейнера приложения. Заметки и их вложения сохраняются рядом с библиотекой. Совместимый сервер получает заметки при синхронизации облачной библиотеки. Язык, размеры панелей и выбор календарей сохраняются локально в настройках.
 
 Режим «Только на устройстве» доступен без аккаунта. В облачном режиме сервер приложения получает адрес электронной почты и данные синхронизируемой библиотеки. Обмен идёт по HTTPS, токены входа хранятся в Связке ключей macOS. В приложении нет рекламы и аналитических SDK.
 
 ## ИИ-помощник
 
-Локальная модель обрабатывает запросы на Mac. При выборе ChatGPT приложение отправляет запрос и необходимый контекст в OpenAI. Для подключения используется отдельный вход, токены сохраняются в Связке ключей macOS.
+Локальная модель обрабатывает запросы на Mac. При выборе ChatGPT приложение отправляет запрос и необходимый контекст в OpenAI. Для подключения используется отдельный вход, токены сохраняются в Связке ключей macOS. Если в меню контекста включено «Использовать заметку», заголовок и текст открытой заметки отправляются выбранному провайдеру вместе с сообщением.
 
 ## Доступ к календарю
 
@@ -22,7 +22,7 @@
 
 ## Уведомления
 
-С разрешения пользователя приложение передаёт macOS название задачи, её локальный идентификатор и срок, чтобы система доставила локальное уведомление. Эти данные не отправляются разработчику. Показ текста на заблокированном экране определяется настройками уведомлений macOS. Время и включение ежедневного напоминания хранятся в локальных настройках. Разрешение можно изменить в **Системные настройки → Уведомления → Задачи**.
+С разрешения пользователя приложение передаёт macOS название задачи, её локальный идентификатор и срок, чтобы система доставила локальное уведомление. Эти данные не отправляются разработчику. Показ текста на заблокированном экране определяется настройками уведомлений macOS. Время и включение ежедневного напоминания хранятся в локальных настройках. Разрешение можно изменить в **Системные настройки → Уведомления → Takt**.
 
 ## Удаление и разрешения
 
@@ -36,13 +36,13 @@
 
 ## English
 
-Tasks stores task content, folders, subtasks, deadlines and event links in a local SwiftData library inside its app sandbox. Preferences are stored locally. On-device mode requires no account. In cloud mode, the app server receives your email address and the library data you sync. The app connects over HTTPS and keeps sign-in tokens in the macOS Keychain. There are no ads or analytics SDKs.
+Takt stores task content, folders, subtasks, deadlines and event links in a local SwiftData library inside its app sandbox. Notes and their attachments are stored with the library. A compatible server receives notes when the cloud library syncs. Preferences are stored locally. On-device mode requires no account. In cloud mode, the app server receives your email address and the library data you sync. The app connects over HTTPS and keeps sign-in tokens in the macOS Keychain. There are no ads or analytics SDKs.
 
-The local assistant processes requests on your Mac. If you choose ChatGPT, the app sends the request and relevant context to OpenAI. Sign-in tokens are stored in the macOS Keychain.
+The local assistant processes requests on your Mac. If you choose ChatGPT, the app sends the request and relevant context to OpenAI. Sign-in tokens are stored in the macOS Keychain. When Use note is enabled in the context menu, the app sends the open note’s title and text to the selected provider with your message.
 
 Calendar access is requested only after you choose to connect calendars. EventKit reads and writes the system calendar. Events may sync via iCloud or another calendar provider configured in macOS; that provider's privacy terms apply. Declining calendar access does not prevent task management.
 
-With notification permission, Tasks passes the task title, local ID and deadline to macOS for local notification delivery. No notification content is sent to the developer. Lock-screen previews follow macOS notification settings. Reminder preferences stay local. Change permission in System Settings → Notifications → Tasks.
+With notification permission, Takt passes the task title, local ID and deadline to macOS for local notification delivery. No notification content is sent to the developer. Lock-screen previews follow macOS notification settings. Reminder preferences stay local. Change permission in System Settings → Notifications → Takt.
 
 Deleting a task removes its local subtasks and links but keeps calendar events. Deleting an event keeps the task. Revoke access in macOS Privacy & Security → Calendars. Revoking permission does not delete existing events. Removing the app bundle alone does not guarantee deletion of the local library; system backups may retain earlier data.
 

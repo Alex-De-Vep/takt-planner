@@ -42,9 +42,9 @@ Takt réunit vos tâches, vos priorités du jour et votre calendrier sur macOS e
 
 **macOS 26 ou ultérieur sur Apple Silicon.**
 
-Version du code source **0.2.17 (build 67)** · [Historique des versions](docs/releases).
+Version du code source **0.3.9 (build 93)** · [Historique des versions](docs/releases).
 
-Téléchargez un DMG depuis [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases). Ouvrez-le, faites glisser **Tasks** dans **Applications**, puis éjectez l’image disque. Quittez l’application avant de remplacer une version précédente.
+Téléchargez un DMG depuis [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases). Ouvrez-le, faites glisser **Takt** dans **Applications**, puis éjectez l’image disque. Quittez l’application avant de remplacer une version précédente.
 
 L’application utilise une signature ad hoc. Gatekeeper peut restreindre l’ouverture d’un téléchargement sur un autre Mac. Dans ce cas, vous pouvez compiler l’application dans Xcode.
 
@@ -70,7 +70,7 @@ Ouvrez [le projet Android](apps/android/) dans Android Studio ou exécutez `./gr
 
 ## Premiers pas sur macOS
 
-Ouvrez **Help → Planner Help** dans l’application ou lisez le [guide complet en anglais](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
+Ouvrez **Help → Takt Help** dans l’application ou lisez le [guide complet en anglais](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Appuyez sur **⌘N** pour créer une tâche. Saisissez son titre et appuyez sur **Retour** pour passer à la description. Ajoutez une étoile à la tâche, créez des sous-tâches avec le bouton de liste à cocher ou ouvrez le calendrier depuis le bouton à droite de la barre d’outils.
 
