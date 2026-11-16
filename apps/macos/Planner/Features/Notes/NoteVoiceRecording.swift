@@ -8,6 +8,9 @@ final class NoteVoiceRecording {
     struct Draft {
         let file: URL
         var transcript: String?
+        var isCall = false
+        var pieces: [URL]?
+        var pieceTranscripts: [String?] = []
         var saved = false
     }
 
@@ -15,13 +18,16 @@ final class NoteVoiceRecording {
     private(set) var recordingID: UUID?
     private(set) var startedAt: Date?
     private(set) var preparing = false
+    private(set) var browserCall: NoteBrowserCall?
+
+    var isBusy: Bool { preparing || recordingID != nil || browserCall != nil }
     private(set) var transcribing: Set<UUID> = []
     private(set) var errors: [UUID: String] = [:]
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private let files = RecordingFiles()
 
     func start(_ noteID: UUID) async {
-        guard recordingID == nil, !preparing, drafts[noteID] == nil else { return }
+        guard !isBusy, drafts[noteID] == nil else { return }
         preparing = true
         errors[noteID] = nil
         defer { preparing = false }
@@ -52,6 +58,30 @@ final class NoteVoiceRecording {
         } catch {
             try? FileManager.default.removeItem(at: file)
             errors[noteID] = "Не удалось начать запись."
+        }
+    }
+
+    func startCall(_ noteID: UUID, russian: Bool) {
+        guard !isBusy, drafts[noteID] == nil else { return }
+        errors[noteID] = nil
+        let file = files.newRecording()
+        do {
+            try FileManager.default.createDirectory(at: files.directory, withIntermediateDirectories: true,
+                                                    attributes: [.posixPermissions: 0o700])
+            let call = NoteBrowserCall(noteID: noteID, file: file, russian: russian) { [weak self] hasAudio, error in
+                guard let self else { return }
+                browserCall = nil
+                if hasAudio {
+                    drafts[noteID] = Draft(file: file, isCall: true)
+                } else {
+                    try? FileManager.default.removeItem(at: file)
+                }
+                errors[noteID] = error
+            }
+            try call.openChrome()
+            browserCall = call
+        } catch {
+            errors[noteID] = (error as? AssistantFailure)?.message ?? "Не удалось начать запись звонка."
         }
     }
 
@@ -87,9 +117,12 @@ final class NoteVoiceRecording {
     }
 
     private func removeFile(_ noteID: UUID) {
-        guard let file = drafts[noteID]?.file else { return }
+        guard let draft = drafts[noteID] else { return }
         do {
-            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            // Исходник удаляется последним, чтобы оставался доступен при сбое очистки частей.
+            for file in (draft.pieces ?? []).filter({ $0 != draft.file }) + [draft.file] {
+                if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            }
             drafts[noteID] = nil
             errors[noteID] = nil
         } catch {
@@ -105,13 +138,45 @@ final class NoteVoiceRecording {
         defer { transcribing.remove(noteID) }
         do {
             if draft.transcript == nil {
-                draft.transcript = try await transport.transcribe(draft.file, profile: profile, modelID: modelID)
-                drafts[noteID] = draft
+                if draft.isCall {
+                    try await transcribeCall(noteID, profile: profile, modelID: modelID, transport: transport)
+                } else {
+                    draft.transcript = try await transport.transcribe(draft.file, profile: profile, modelID: modelID)
+                    drafts[noteID] = draft
+                }
             }
             try saveTranscript(noteID, store: store)
         } catch {
             errors[noteID] = (error as? AssistantFailure)?.message ?? "Не удалось расшифровать запись."
         }
+    }
+
+    private func transcribeCall(_ noteID: UUID, profile: AssistantGatewayProfile, modelID: String,
+                                transport: AssistantGatewayHTTP) async throws {
+        guard var draft = drafts[noteID] else { return }
+        if draft.pieces == nil {
+            let source = draft.file
+            let pieces = try await Task.detached(priority: .utility) { try NoteCallAudio.transcriptionPieces(source) }.value
+            files.track(pieces)
+            draft.pieces = pieces
+            draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
+            drafts[noteID] = draft
+        }
+        guard let pieces = draft.pieces else { return }
+        for (index, piece) in pieces.enumerated() where draft.pieceTranscripts[index] == nil {
+            let text = try await transport.transcribe(piece, profile: profile, modelID: modelID, allowEmpty: pieces.count > 1)
+            draft.pieceTranscripts[index] = text
+            drafts[noteID] = draft
+        }
+        let text = draft.pieceTranscripts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
+        guard !text.isEmpty else {
+            // После пустого ответа всех частей можно выбрать другую модель и повторить.
+            draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
+            drafts[noteID] = draft
+            throw AssistantFailure(message: "Сервис вернул пустую расшифровку.")
+        }
+        draft.transcript = text
+        drafts[noteID] = draft
     }
 
     func retrySaving(_ noteID: UUID, store: NoteStore) {
@@ -132,6 +197,8 @@ final class NoteVoiceRecording {
     private final class RecordingFiles {
         let directory = FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-" + UUID().uuidString)
         private var recordings: Set<URL> = []
+
+        func track(_ urls: [URL]) { recordings.formUnion(urls) }
 
         func newRecording() -> URL {
             let file = directory.appending(path: UUID().uuidString).appendingPathExtension("m4a")
@@ -162,6 +229,9 @@ struct NoteVoiceControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let call = voice.browserCall {
+                callControls(call)
+            }
             if let recording = voice.recordingID, let startedAt = voice.startedAt {
                 HStack {
                     if recording != note.id { Text(strings["Запись в другой заметке"]) }
@@ -193,7 +263,7 @@ struct NoteVoiceControls: View {
             }
         }
         .padding(.horizontal, 32)
-        .padding(.vertical, voice.recordingID != nil || voice.drafts[note.id] != nil || voice.errors[note.id] != nil ? 10 : 0)
+        .padding(.vertical, voice.recordingID != nil || voice.browserCall != nil || voice.drafts[note.id] != nil || voice.errors[note.id] != nil ? 10 : 0)
         .sheet(isPresented: $choosingModel, onDismiss: openConfirmationIfReady) {
             AssistantModelConnections(service: assistant, russian: preferences.language.resolvedCode == "ru",
                                       transcriptionPreferences: preferences)
@@ -215,6 +285,38 @@ struct NoteVoiceControls: View {
         .alert(strings["Удалить временную запись?"], isPresented: $showDiscard) {
             Button(strings["Удалить запись"], role: .destructive) { voice.discard(note.id) }
             Button(strings["Отмена"], role: .cancel) {}
+        }
+    }
+
+    private func callControls(_ call: NoteBrowserCall) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if call.noteID != note.id { Text(strings["Запись в другой заметке"]) }
+                switch call.phase {
+                case .waiting:
+                    Text(strings["Выберите вкладку звонка в Chrome."])
+                    Button(strings["Отмена"]) { call.stop() }
+                case .recording, .paused:
+                    Image(systemName: call.phase == .paused ? "pause.circle" : "record.circle")
+                        .foregroundStyle(call.phase == .recording ? Color.red : Color.secondary)
+                        .accessibilityHidden(true)
+                    let seconds = Int(call.duration)
+                    Text(String(format: "%02d:%02d", seconds / 60, seconds % 60)).monospacedDigit()
+                    Button(strings[call.phase == .paused ? "Продолжить" : "Пауза"]) { call.togglePause() }
+                    Button(strings["Остановить"], systemImage: "stop.circle.fill") { call.stop() }
+                case .stopping:
+                    ProgressView().controlSize(.small)
+                    Text(strings["Сохранение записи…"])
+                }
+            }
+            if call.phase == .recording || call.phase == .paused {
+                HStack(spacing: 16) {
+                    ProgressView(value: Double(call.microphone.squareRoot())) { Text(strings["Микрофон"]) }
+                    ProgressView(value: Double(call.tab.squareRoot())) { Text(strings["Звук вкладки"]) }
+                }
+                .font(.caption)
+                .frame(maxWidth: 325)
+            }
         }
     }
 

@@ -144,7 +144,7 @@ struct AssistantGatewayHTTP: Sendable {
         }
     }
 
-    func transcribe(_ file: URL, profile: AssistantGatewayProfile, modelID: String) async throws -> String {
+    func transcribe(_ file: URL, profile: AssistantGatewayProfile, modelID: String, allowEmpty: Bool = false) async throws -> String {
         guard profile.gateway == .openRouter || profile.gateway == .liteLLM,
               profile.gateway.permits(profile.base), !modelID.isEmpty, modelID.utf8.count <= 512,
               !modelID.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { throw Self.invalid }
@@ -171,7 +171,7 @@ struct AssistantGatewayHTTP: Sendable {
         request.httpBody = data
         let result = try await get(TranscriptionResult.self, request: request)
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw AssistantFailure(message: "Сервис вернул пустую расшифровку.") }
+        guard allowEmpty || !text.isEmpty else { throw AssistantFailure(message: "Сервис вернул пустую расшифровку.") }
         return text
     }
 

@@ -1,0 +1,59 @@
+import AVFoundation
+import Testing
+@testable import Planner
+
+struct NoteCallTests {
+    @Test func waitsForTheWholeAudioPacketAndChecksItsOrigin() throws {
+        let header = "POST /session/chunk HTTP/1.1\r\nHost: 127.0.0.1:5060\r\nOrigin: http://127.0.0.1:5060\r\nX-Takt-Call: 1\r\nContent-Length: 4\r\n\r\n"
+        var packet = Data(header.utf8)
+        packet.append(contentsOf: [1, 2])
+        guard case .waiting = NoteCallRequest.parse(packet) else {
+            Issue.record("A partial packet must wait for its remaining audio.")
+            return
+        }
+        packet.append(contentsOf: [3, 4])
+        guard case .ready(let request) = NoteCallRequest.parse(packet) else {
+            Issue.record("A complete packet must include exactly its declared audio.")
+            return
+        }
+        #expect(request.body == Data([1, 2, 3, 4]))
+        #expect(request.isAuthorized(port: 5060))
+        #expect(!request.isAuthorized(port: 5061))
+
+        var crossOrigin = Data(header.replacingOccurrences(of: "Origin: http://127.0.0.1:5060",
+                                                         with: "Origin: https://example.com").utf8)
+        crossOrigin.append(request.body)
+        guard case .ready(let foreign) = NoteCallRequest.parse(crossOrigin) else {
+            Issue.record("The parser should leave origin validation to the listener.")
+            return
+        }
+        #expect(!foreign.isAuthorized(port: 5060))
+    }
+
+    @Test func preservesBothChannelsAndSplitsACompletedRecording() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appending(path: "call.m4a")
+        let writer = try NoteCallAudio(url: file)
+        var bytes = Data()
+        for index in 0..<24_000 {
+            let mic = Int16(8_000 * sin(Double(index) * 440 * 2 * .pi / 24_000))
+            let tab = Int16(19_000 * sin(Double(index) * 880 * 2 * .pi / 24_000))
+            bytes.append(contentsOf: [UInt8(truncatingIfNeeded: mic), UInt8(truncatingIfNeeded: mic >> 8),
+                                      UInt8(truncatingIfNeeded: tab), UInt8(truncatingIfNeeded: tab >> 8)])
+        }
+        let levels = try writer.append(bytes)
+        #expect(levels.frames == 24_000)
+        #expect(levels.tab > levels.microphone)
+        writer.close()
+
+        let source = try AVAudioFile(forReading: file)
+        #expect(source.processingFormat.channelCount == 2)
+        #expect(source.length == 24_000)
+        let parts = try NoteCallAudio.transcriptionPieces(file, framesPerPiece: 12_000)
+        #expect(parts.count == 2)
+        let readers = try parts.map { try AVAudioFile(forReading: $0) }
+        #expect(readers.allSatisfy { $0.length == 12_000 && $0.processingFormat.channelCount == 2 })
+    }
+}

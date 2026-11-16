@@ -254,7 +254,14 @@ struct NoteDetailView: View {
                     .help(strings["Записать голос"])
                     .accessibilityLabel(strings["Записать голос"])
                     .accessibilityIdentifier("note-record-voice")
-                    .disabled(voice.recordingID != nil || voice.preparing || voice.drafts[note.id] != nil)
+                    .disabled(voice.isBusy || voice.drafts[note.id] != nil)
+                Button {
+                    voice.startCall(note.id, russian: preferences.language.resolvedCode == "ru")
+                } label: { Image(systemName: "phone") }
+                    .help(strings["Записать звонок"])
+                    .accessibilityLabel(strings["Записать звонок"])
+                    .accessibilityIdentifier("note-record-call")
+                    .disabled(voice.isBusy || voice.drafts[note.id] != nil)
                 Button(action: discuss) { Image(systemName: "bubble.left") }
                     .help(strings["Обсудить заметку"])
                     .accessibilityLabel(strings["Обсудить заметку"])
