@@ -38,13 +38,18 @@ internal data class CloudState(
 
 internal class PlannerModel(application: Application) : AndroidViewModel(application) {
     private val store = PlannerStore(application)
-    private val sync = CloudSync(store)
+    private val noteStore = NoteStore(application)
+    private val sync = CloudSync(store, noteStore)
     private val network = Mutex()
     private var nextSync = 0L
     private var failures = 0
     private var draft: TaskDraft? = null
 
     val library = store.library
+    val notes = noteStore.state
+    var noteDraft by mutableStateOf<NoteDraft?>(null)
+        private set
+    private var openingNote = false
     val chat = ChatController(application, viewModelScope)
     private val _cloud = MutableStateFlow(CloudState())
     val cloud = _cloud.asStateFlow()
@@ -58,11 +63,15 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             try {
                 withContext(Dispatchers.IO) { store.load() }
                 loadConnection()
+                withContext(Dispatchers.IO) { noteStore.open(library.value.workspace) }
                 _ready.value = true
                 if (cloud.value.firstSyncPending) firstSync() else refresh()
                 library.collect {
                     chat.bind(it.workspace)
-                    if (it.profile == null) draft = null
+                    if (it.profile == null) {
+                        draft = null
+                        if (library.value.profile == null) noteDraft = null
+                    }
                     withContext(Dispatchers.IO) { DeadlineReminders.update(getApplication(), it) }
                 }
             } catch (failure: Exception) {
@@ -207,6 +216,68 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         }
         failure is java.io.IOException -> R.string.cloud_offline
         else -> R.string.cloud_error
+    }
+
+    fun openNote(id: String?, folderId: String?) {
+        val current = library.value
+        if (current.profile == null || noteDraft != null || openingNote) return
+        openingNote = true
+        viewModelScope.launch {
+            try {
+                val original = id?.let { withContext(Dispatchers.IO) { noteStore.read(current.workspace, it) } }
+                if (library.value.workspace != current.workspace) return@launch
+                if (id != null && original == null) {
+                    _error.value = R.string.note_unavailable
+                } else {
+                    noteDraft = NoteDraft(current.workspace, original, folderId?.let(::noteFolder))
+                }
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _error.value = R.string.storage_error
+            } finally {
+                openingNote = false
+            }
+        }
+    }
+
+    fun closeNote() { noteDraft = null }
+
+    suspend fun searchNotes(workspace: String, text: String): Set<String> = try {
+        withContext(Dispatchers.IO) { noteStore.search(workspace, text) }
+    } catch (failure: Exception) {
+        if (failure is CancellationException) throw failure
+        _error.value = R.string.storage_error
+        emptySet()
+    }
+
+    fun saveNote(draft: NoteDraft) {
+        val current = library.value
+        if (draft.saving || current.workspace != draft.workspace || current.profile == null) return
+        val original = draft.original?.document
+        val folder = draft.folder ?: return
+        if (folder != original?.folder && current.folders.none { noteFolder(it.id) == folder }) {
+            draft.error = R.string.note_choose_folder
+            return
+        }
+        val now = noteTime()
+        val note = (original ?: NoteDocument(newId(), folder, createdAt = now)).copy(
+            folder = folder, title = draft.title.trim(), text = draft.text, pinned = draft.pinned,
+            updatedAt = now, deletedAt = if (draft.trashed) original?.deletedAt ?: now else null,
+        )
+        draft.saving = true
+        draft.error = null
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { noteStore.save(current.workspace, draft.original, note) }
+                if (noteDraft === draft) closeNote()
+                refresh()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                draft.error = if (failure is NoteTooLarge) R.string.note_too_large else R.string.storage_error
+            } finally {
+                draft.saving = false
+            }
+        }
     }
 
     fun saveTask(

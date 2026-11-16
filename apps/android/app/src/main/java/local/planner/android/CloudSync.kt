@@ -19,6 +19,10 @@ import javax.net.ssl.HttpsURLConnection
 
 internal const val MAX_BATCH_BYTES = 4 * 1024 * 1024
 internal const val DEFAULT_ORIGIN = "https://takt-server.tail037e91.ts.net"
+private const val LEGACY_ORIGIN = "https://planner-server.tail037e91.ts.net"
+
+internal fun Profile.withCurrentOrigin(): Profile =
+    if (origin == LEGACY_ORIGIN) copy(origin = DEFAULT_ORIGIN) else this
 
 internal data class Snapshot(
     val protocolVersion: Int,
@@ -36,7 +40,8 @@ private data class Results(val results: List<MutationResult>)
 private data class ErrorBody(val error: Problem?)
 private data class Tokens(val accessToken: String, val refreshToken: String, val expiresIn: Int)
 private data class User(val email: String, val libraryId: String)
-private data class Config(val protocolVersion: Int, val serverTime: String)
+private data class Config(val protocolVersion: Int, val serverTime: String, val limits: Limits?)
+private data class Limits(val maxNoteBytes: Int?)
 private data class Challenge(val challengeId: String)
 
 internal enum class AccountRequest(val path: String) {
@@ -69,17 +74,24 @@ internal fun mutationBatch(queued: List<Mutation>): List<Mutation> {
 }
 
 internal interface Transport {
-    fun request(origin: String, path: String, body: JsonObject? = null, token: String? = null): String
+    fun request(
+        origin: String, path: String, body: JsonObject? = null, token: String? = null,
+        method: String = if (body == null) "GET" else "POST", limit: Int = Int.MAX_VALUE,
+    ): String
 }
 
 internal class HttpsTransport : Transport {
-    override fun request(origin: String, path: String, body: JsonObject?, token: String?): String =
-        exchange(origin + path, token?.let { mapOf("Authorization" to "Bearer $it") }.orEmpty(), body?.toString())
+    override fun request(
+        origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+    ): String = exchange(
+        origin + path, token?.let { mapOf("Authorization" to "Bearer $it") }.orEmpty(), body?.toString(),
+        limit = limit, method = method,
+    )
 
     fun exchange(
         address: String, headers: Map<String, String>, body: String? = null,
         contentType: String = "application/json; charset=utf-8", limit: Int = Int.MAX_VALUE,
-        readTimeoutMillis: Int = 25_000,
+        readTimeoutMillis: Int = 25_000, method: String = if (body == null) "GET" else "POST",
     ): String {
         val connection = URL(address).openConnection() as HttpsURLConnection
         try {
@@ -88,9 +100,9 @@ internal class HttpsTransport : Transport {
             connection.readTimeout = readTimeoutMillis
             connection.setRequestProperty("Accept", "application/json")
             headers.forEach(connection::setRequestProperty)
+            connection.requestMethod = method
             if (body != null) {
                 val bytes = body.toByteArray()
-                connection.requestMethod = "POST"
                 connection.doOutput = true
                 connection.setRequestProperty("Content-Type", contentType)
                 connection.setFixedLengthStreamingMode(bytes.size)
@@ -157,6 +169,7 @@ internal class CredentialVault(private val alias: String = "planner.refresh.v1")
 
 internal class CloudSync(
     private val store: PlannerStore,
+    private val notes: NoteStore,
     private val transport: Transport = HttpsTransport(),
 ) {
     private val vault = CredentialVault()
@@ -176,7 +189,9 @@ internal class CloudSync(
         val user = request<User>(origin, "/v1/me", token = tokens.accessToken)
         val hostKey = MessageDigest.getInstance("SHA-256").digest(origin.toByteArray())
             .joinToString("") { "%02x".format(it) }
-        val profile = Profile(origin, user.email, user.libraryId, "$hostKey:${user.libraryId}")
+        val previousWorkspace = store.connection()?.profile
+            ?.takeIf { it.libraryId == user.libraryId && it.origin == origin }?.workspace
+        val profile = Profile(origin, user.email, user.libraryId, previousWorkspace ?: "$hostKey:${user.libraryId}")
         store.beginConnection(Connection(profile, vault.seal(profile, tokens.refreshToken), initializeEmpty = initializeEmpty))
         remember(profile, tokens)
         firstSync(profile, initializeEmpty)
@@ -197,7 +212,7 @@ internal class CloudSync(
     }
 
     fun firstSync(profile: Profile, initializeEmpty: Boolean) {
-        configure(profile.origin)
+        val config = configure(profile.origin)
         var snapshot = authorized<Snapshot>(profile, "/v1/sync/snapshot")
         if (!snapshot.initialized && initializeEmpty) {
             check(snapshot.libraryId == profile.libraryId && snapshot.protocolVersion == 1)
@@ -212,10 +227,11 @@ internal class CloudSync(
         }
         validateSnapshot(snapshot, profile.libraryId)
         store.activate(profile, snapshot)
+        synchronizeNotes(profile, config)
     }
 
     fun synchronize(profile: Profile) {
-        configure(profile.origin)
+        val config = configure(profile.origin)
         pull(profile)
         while (true) {
             val batch = store.batch(profile.workspace)
@@ -232,6 +248,27 @@ internal class CloudSync(
             store.accept(profile.workspace, results)
         }
         pull(profile)
+        synchronizeNotes(profile, config)
+    }
+
+    private fun synchronizeNotes(profile: Profile, config: Config) {
+        notes.open(profile.workspace)
+        val limit = config.limits?.maxNoteBytes?.takeIf { it > 0 }?.coerceAtMost(MAX_NOTE_BYTES)
+        try {
+            if (limit == null) {
+                notes.ready(profile.workspace, null)
+                return
+            }
+            NoteSync(notes).synchronize(profile.workspace, limit) { path, body, responseLimit ->
+                authorized<JsonObject>(
+                    profile, path, body, method = if (body == null) "GET" else "PUT", limit = responseLimit,
+                )
+            }
+            notes.publish()
+        } catch (failure: Exception) {
+            if (failure is ServerFailure && failure.status == 401) throw failure
+            notes.syncError(profile.workspace, R.string.notes_sync_error)
+        }
     }
 
     fun logout(profile: Profile) {
@@ -240,13 +277,15 @@ internal class CloudSync(
         } finally {
             session = null
             store.disconnect(profile)
+            notes.open("")
         }
     }
 
-    private fun configure(origin: String) {
+    private fun configure(origin: String): Config {
         val config = request<Config>(origin, "/v1/config")
         if (config.protocolVersion != 1) throw ServerFailure(409, "incompatible_protocol")
         clockOffset = Instant.parse(config.serverTime).toEpochMilli() - System.currentTimeMillis()
+        return config
     }
 
     private fun pull(profile: Profile) {
@@ -315,15 +354,18 @@ internal class CloudSync(
         }
     }
 
-    private inline fun <reified T> authorized(profile: Profile, path: String, body: JsonObject? = null): T {
+    private inline fun <reified T> authorized(
+        profile: Profile, path: String, body: JsonObject? = null,
+        method: String = if (body == null) "GET" else "POST", limit: Int = Int.MAX_VALUE,
+    ): T {
         val access = access(profile)
         return try {
-            request<T>(profile.origin, path, body, access)
+            request<T>(profile.origin, path, body, access, method, limit)
         } catch (failure: ServerFailure) {
             if (failure.status != 401) throw failure
             session = null
             try {
-                request<T>(profile.origin, path, body, access(profile))
+                request<T>(profile.origin, path, body, access(profile), method, limit)
             } catch (retry: ServerFailure) {
                 if (retry.status == 401) {
                     session = null
@@ -334,6 +376,8 @@ internal class CloudSync(
         }
     }
 
-    private inline fun <reified T> request(origin: String, path: String, body: JsonObject? = null, token: String? = null): T =
-        json.fromJson(transport.request(origin, path, body, token), T::class.java)
+    private inline fun <reified T> request(
+        origin: String, path: String, body: JsonObject? = null, token: String? = null,
+        method: String = if (body == null) "GET" else "POST", limit: Int = Int.MAX_VALUE,
+    ): T = json.fromJson(transport.request(origin, path, body, token, method, limit), T::class.java)
 }

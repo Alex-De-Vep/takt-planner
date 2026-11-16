@@ -39,7 +39,13 @@ internal class PlannerStore(context: Context) : SQLiteOpenHelper(context, "plann
 
     @Synchronized
     fun load() {
-        val interrupted = connection()?.takeIf(Connection::refreshing)
+        val persisted = connection()
+        val current = persisted?.copy(profile = persisted.profile.withCurrentOrigin())
+        if (current != null && current != persisted) {
+            // The workspace also scopes the local queue and Keystore credential.
+            writableDatabase.setting("connection", json.toJson(current))
+        }
+        val interrupted = current?.takeIf(Connection::refreshing)
         if (interrupted == null) publish() else disconnect(interrupted.profile)
     }
 

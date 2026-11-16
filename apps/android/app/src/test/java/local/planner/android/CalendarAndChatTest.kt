@@ -47,7 +47,9 @@ class CalendarAndChatTest {
     @Test
     fun chatUsesGatewayContractWithoutSendingTaskIds() {
         val gateway = GatewayChat(object : Transport {
-            override fun request(origin: String, path: String, body: JsonObject?, token: String?): String {
+            override fun request(
+                origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+            ): String {
                 assertEquals("/chat/completions", path)
                 assertEquals("qa-key", token)
                 val request = requireNotNull(body)
@@ -71,7 +73,9 @@ class CalendarAndChatTest {
     @Test
     fun calendarActionsAreOutsideTheExistingChatContract() {
         val gateway = GatewayChat(object : Transport {
-            override fun request(origin: String, path: String, body: JsonObject?, token: String?): String {
+            override fun request(
+                origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+            ): String {
                 val result = JsonParser.parseString("""{"message":"Review this","actions":[
                     {"key":"event","kind":"event","title":"Calendar event"},
                     {"key":"task","kind":"task","title":"New task","date":"2026-11-10"}

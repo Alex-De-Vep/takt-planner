@@ -77,4 +77,11 @@ class LibraryTest {
 
     private fun update(vararg fields: Pair<String, FieldChange>) =
         Mutation("b", "library", "device", "task", "task", "update", fields.toMap())
+    @Test
+    fun renamedServerRetainsTheLegacyWorkspaceKey() {
+        val legacy = Profile("https://planner-server.tail037e91.ts.net", "old@example.test", "library", "legacy-key")
+        assertEquals(legacy.copy(origin = DEFAULT_ORIGIN), legacy.withCurrentOrigin())
+        val other = legacy.copy(origin = "https://example.test")
+        assertEquals(other, other.withCurrentOrigin())
+    }
 }
