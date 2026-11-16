@@ -7,6 +7,95 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct RightPanelWindowTests {
+    @Test(arguments: [RightPanel.assistant, .calendar])
+    func overlayHidesCoveredActionsAndKeepsItsHeadingLeading(panel: RightPanel) async throws {
+        let container = WorkspaceContainerController()
+        let workspace = container.workspace
+        let size = NSSize(width: 1050, height: 700)
+        container.view.frame.size = size
+        workspace.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
+            taskActions: AnyView(EmptyView()), isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
+            folderTitle: "Входящие", taskCountTitle: "Задач: 1", newTaskTitle: "Создать", newChecklistItemTitle: "Подзадача",
+            taskActionsTitle: "Действия с задачей", hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: {},
+            sidebarVisibilityChanged: { _ in })
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentViewController = container
+        window.orderFront(nil)
+        defer { window.orderOut(nil); container.detachWindow(); window.close() }
+
+        var calendarClicks = 0
+        var assistantClicks = 0
+        func apply(_ width: CGFloat, visible: Bool = true) {
+            container.update(calendar: AnyView(EmptyView()), visible: visible, width: width, sidebarVisible: true, panel: panel,
+                maximumWidth: CalendarPanelLayout.maximumWidth, widthChanged: { _ in }, visibilityChanged: { _ in },
+                updateToolbar: { active in
+                    workspace.updateRightPanelToolbar(active: active, calendarTitle: "Календарь", assistantTitle: "ИИ-чат",
+                        headingTitle: active == .assistant ? "Помощник" : "Календарь",
+                        toggleCalendar: { calendarClicks += 1 }, toggleAssistant: { assistantClicks += 1 })
+                })
+            container.view.layoutSubtreeIfNeeded()
+        }
+        func viewForItem(_ suffix: String) throws -> NSView {
+            try #require(window.toolbar?.items.first { $0.itemIdentifier == .init("Planner.\(suffix)") }?.view)
+        }
+        func frame(_ view: NSView) -> NSRect { view.convert(view.bounds, to: nil) }
+
+        try await Task.sleep(for: .milliseconds(400))
+        let create = try viewForItem("NewTask")
+        let otherPanel = try viewForItem("RightPanelSwitch")
+        let close = try viewForItem("RightPanelToggle")
+        let createOrigin = frame(create).minX
+        let closeOrigin = frame(close).midX
+        let windowWidth = window.frame.width
+        #expect(create.alphaValue == 1 && otherPanel.alphaValue == 1)
+
+        let width: CGFloat = 550
+        apply(width)
+        try await Task.sleep(for: .milliseconds(450))
+        #expect(workspace.splitViewItems.count == 3)
+        #expect(window.frame.width == windowWidth)
+        #expect(create.alphaValue == 0 && otherPanel.alphaValue == 0 && close.alphaValue == 1)
+        for view in [create, otherPanel] {
+            #expect(view.hitTest(NSPoint(x: view.frame.midX, y: view.frame.midY)) == nil)
+        }
+        #expect(abs(frame(create).minX - createOrigin) <= 1)
+
+        var canvas = close.superview
+        while let candidate = canvas, !otherPanel.isDescendant(of: candidate) { canvas = candidate.superview }
+        let heading = try #require(canvas?.subviews.compactMap { $0 as? WorkspaceCalendarHeadingView }.first)
+        let label = try #require(heading.subviews.first as? NSTextField)
+        #expect(!heading.isHidden && label.stringValue == (panel == .assistant ? "Помощник" : "Календарь"))
+        let panelView = try #require(container.children.first { $0 is CalendarSidebarController }?.view as? CalendarSidebarSurface)
+        #expect(panelView.overlayHeaderElements == [label])
+        #expect(abs(frame(label).minX - (frame(panelView).minX + CalendarPanelLayout.outerInset + 16)) <= 2)
+        #expect(abs(frame(label).midY - frame(close).midY) <= 1)
+        #expect(abs(frame(close).midX - closeOrigin) <= 1)
+
+        apply(width, visible: false)
+        try await Task.sleep(for: .milliseconds(450))
+        #expect(create.alphaValue == 1 && otherPanel.alphaValue == 1 && close.alphaValue == 1)
+        #expect(abs(frame(create).minX - createOrigin) <= 1)
+        #expect(heading.superview == nil)
+
+        window.setContentSize(NSSize(width: 1130, height: size.height))
+        apply(360)
+        try await Task.sleep(for: .milliseconds(450))
+        #expect(workspace.splitViewItems.count == 3)
+        let adjacent = try #require(canvas?.subviews.compactMap { $0 as? WorkspaceToolbarButtonSurface }.first)
+        let switchButton = try #require(adjacent.contentView as? NSButton)
+        #expect(!adjacent.isHidden && otherPanel.alphaValue == 0)
+        #expect(abs(frame(adjacent).maxX - (frame(panelView).minX - 8)) <= 2)
+        #expect(panelView.overlayHeaderElements == [label, switchButton])
+        let toolbar = try #require(canvas)
+        let hitPoint = toolbar.convert(NSPoint(x: adjacent.frame.midX, y: adjacent.frame.midY), to: toolbar.superview)
+        #expect(toolbar.hitTest(hitPoint) === switchButton)
+        switchButton.performClick(nil)
+        #expect(calendarClicks == (panel == .assistant ? 1 : 0))
+        #expect(assistantClicks == (panel == .calendar ? 1 : 0))
+    }
+
     @Test(arguments: [1100.0, 1140.0, 1170.0, 1180.0, 1400.0])
     func restoredChatSwitchesToCalendarWithoutResizingTheWindow(width: Double) async throws {
         let container = WorkspaceContainerController()

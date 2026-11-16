@@ -150,6 +150,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let recordCallButton = NSButton()
     private let outerRightPanelButton = WorkspacePanelToggleButton()
     private let trailingRightPanelButton = WorkspacePanelToggleButton()
+    private let overlaySwitchButton = WorkspacePanelToggleButton()
+    private lazy var overlaySwitchSurface = WorkspaceToolbarButtonSurface(content: overlaySwitchButton)
     private var trailingRightPanelSurface: WorkspaceToolbarButtonSurface!
     private let rightPanelSwitchItem = NSToolbarItem(itemIdentifier: .plannerRightPanelSwitch)
     private var toggleAssistantAction: (() -> Void)?
@@ -162,16 +164,15 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let rightPanelToggleItem = NSToolbarItem(itemIdentifier: .plannerRightPanelToggle)
     private let calendarHeadingItem = NSToolbarItem(itemIdentifier: .plannerCalendarHeading)
     private let calendarHeading = WorkspaceCalendarHeadingView()
+    private let overlayHeading = WorkspaceCalendarHeadingView()
+    private weak var rightPanelOverlay: CalendarSidebarSurface?
+    private var coveredToolbarViews: Set<WorkspaceToolbarContentView> = []
     private let searchToolbarItem = NSToolbarItem(itemIdentifier: .plannerSearch)
     private let toolbarSearch = WorkspaceToolbarSearchView()
     private var searchChangedAction: ((String) -> Void)?
-    private let calendarGapItem = NSToolbarItem(itemIdentifier: .plannerCalendarGap)
-    private let calendarGap = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
-    private var calendarGapWidth: NSLayoutConstraint!
     private var calendarToolbarLayout: WorkspaceHeaderLayout.CalendarPlacement = .closed
-    private var calendarOverlayWidth = CalendarPanelLayout.defaultWidth
     private var holdsRightPanelToolbar = false
-    private var requestedRightPanelToolbar: (column: Bool, visible: Bool, width: CGFloat)?
+    private var requestedRightPanelToolbar: (column: Bool, visible: Bool)?
     private var rightPanelToolbarAnchor: NSSplitView?
     private var rightPanelToolbarTimer: Timer?
     private var rightPanelMinimumWidth = CalendarPanelLayout.minimumWidth
@@ -271,6 +272,9 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         configureButton(outerRightPanelButton, symbol: "bubble.left", identifier: "toggle-assistant-button",
                         action: #selector(toggleOuterRightPanel))
         outerRightPanelButton.image = aiChatImage
+        configureButton(overlaySwitchButton, symbol: "bubble.left", identifier: "toggle-assistant-button",
+                        action: #selector(toggleOuterRightPanel))
+        overlaySwitchSurface.isHidden = true
         configureButton(trailingRightPanelButton, symbol: "calendar", identifier: "toggle-calendar-button",
                         action: #selector(toggleTrailingRightPanel))
         trailingRightPanelButton.image = calendarImage
@@ -292,12 +296,6 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         // Поле ввода сохраняет системную стеклянную капсулу, а кнопки получают отдельные круги.
         searchToolbarItem.isBordered = true
         searchToolbarItem.visibilityPriority = .high
-        calendarGap.translatesAutoresizingMaskIntoConstraints = false
-        calendarGapWidth = calendarGap.widthAnchor.constraint(equalToConstant: 288)
-        NSLayoutConstraint.activate([calendarGapWidth, calendarGap.heightAnchor.constraint(equalToConstant: 1)])
-        calendarGapItem.view = calendarGap
-        calendarGapItem.isBordered = false
-        calendarGapItem.visibilityPriority = .low
         newTaskButton.contentTintColor = NSColor(named: "AccentColor")
         folderSurface = configureButtonSurface(for: folderToolbarItem, content: folderButton)
         sidebarSurface = configureButtonSurface(for: sidebarToolbarItem, content: sidebarButton)
@@ -393,7 +391,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             splitView.setPosition(sidebarItem.isCollapsed ? 300 : 540, ofDividerAt: 1)
         }
         updateHeadingWidth()
-        updateOverlayToolbarGap()
+        updateOverlayToolbar()
         columnFramesChanged?()
     }
 
@@ -402,14 +400,14 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         attachWindowIfNeeded()
         updateWindowChrome()
         updateHeadingWidth()
-        updateOverlayToolbarGap()
+        updateOverlayToolbar()
         columnFramesChanged?()
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
         updateHeadingWidth()
-        updateOverlayToolbarGap()
+        updateOverlayToolbar()
         columnFramesChanged?()
         if let calendarSidebarItem, !calendarSidebarItem.isCollapsed, !updatingCalendarSidebar,
            view.window?.inLiveResize != true,
@@ -508,7 +506,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             guard let self else { return }
             self.toolbarAlignmentScheduled = false
             self.updateHeadingWidth()
-            self.updateOverlayToolbarGap()
+            self.updateOverlayToolbar()
         }
     }
 
@@ -586,6 +584,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
 
     func detachWindow() {
         releaseRightPanelToolbar()
+        setRightPanelOverlay(nil)
         fullScreenDetailDivider.removeFromSuperview()
         calendarHeaderShadow.removeFromSuperview()
         fullScreenObservers.forEach { NotificationCenter.default.removeObserver($0) }
@@ -660,7 +659,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar) + [.sidebarTrackingSeparator, .plannerCalendarBoundary, .plannerCalendarTrailingBoundary, .plannerCalendarGap, .plannerCalendarHeading]
+        toolbarDefaultItemIdentifiers(toolbar) + [.sidebarTrackingSeparator, .plannerCalendarBoundary, .plannerCalendarTrailingBoundary, .plannerCalendarHeading]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
@@ -679,7 +678,6 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         case .plannerRightPanelToggle: return rightPanelToggleItem
         case .plannerCalendarHeading: return calendarHeadingItem
         case .plannerSearch: return searchToolbarItem
-        case .plannerCalendarGap: return calendarGapItem
         case .plannerCalendarBoundary:
             let boundary = NSTrackingSeparatorToolbarItem(identifier: identifier, splitView: splitView, dividerIndex: 2)
             // Граница всё время участвует в геометрии: isHidden менял конечное положение
@@ -791,14 +789,20 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         toggleCalendarAction = toggleCalendar
         toggleAssistantAction = toggleAssistant
         if let active {
-            calendarHeading.update(title: headingTitle,
-                accessibilityIdentifier: active == .assistant ? "assistant-panel-heading" : "calendar-panel-heading")
+            let identifier = active == .assistant ? "assistant-panel-heading" : "calendar-panel-heading"
+            calendarHeading.update(title: headingTitle, accessibilityIdentifier: identifier)
+            overlayHeading.update(title: headingTitle, accessibilityIdentifier: identifier)
         }
 
         // Обе кнопки остаются в своих местах в toolbar. Меняем только значок, подпись и назначение.
         let roles = RightPanelToolbarRoles(active: active)
         updateRightPanelButton(outerRightPanelButton, item: rightPanelSwitchItem, role: roles.outer,
                                title: roles.outer == .assistant ? assistantTitle : calendarTitle, closesPanel: false)
+        overlaySwitchButton.image = outerRightPanelButton.image
+        overlaySwitchButton.contentTintColor = outerRightPanelButton.contentTintColor
+        overlaySwitchButton.toolTip = outerRightPanelButton.toolTip
+        overlaySwitchButton.setAccessibilityIdentifier(outerRightPanelButton.accessibilityIdentifier())
+        overlaySwitchButton.setAccessibilityLabel(outerRightPanelButton.accessibilityLabel())
         updateRightPanelButton(trailingRightPanelButton, item: rightPanelToggleItem, role: roles.trailing,
                                title: roles.trailing == .assistant ? assistantTitle : calendarTitle, closesPanel: active != nil)
         trailingRightPanelSurface.presentation = active == nil ? .circle : .sidebar
@@ -824,14 +828,14 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private var calendarToolbarIdentifiers: [NSToolbarItem.Identifier] {
         // Свободное место находится после всех действий задачи во всех режимах календаря.
         switch calendarToolbarLayout {
-        case .closed: [.space, .plannerRightPanelToggle]
+        case .closed, .overlay: [.space, .plannerRightPanelToggle]
         case .column: [.plannerCalendarBoundary, .plannerCalendarHeading, .flexibleSpace, .plannerRightPanelToggle, .plannerCalendarTrailingBoundary]
-        case .overlay: [.plannerCalendarHeading, .plannerCalendarGap, .plannerRightPanelToggle]
         }
     }
 
     func updateCalendarHeading(title: String) {
         calendarHeading.update(title: title)
+        overlayHeading.update(title: title)
         scheduleToolbarAlignment()
     }
 
@@ -859,9 +863,12 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
 
     private func updateCalendarHeadingVisibility() {
         let visible = calendarToolbarLayout != .closed && !calendarHeaderIsTransitioning && !holdsRightPanelToolbar
-        // Прозрачность сохраняет размеры toolbar item и положение кнопки; isHidden менял бы раскладку.
-        calendarHeading.alphaValue = visible ? 1 : 0
-        calendarHeading.setAccessibilityHidden(!visible)
+        // В отдельной колонке AppKit удерживает место заголовка даже во время перехода.
+        calendarHeading.alphaValue = visible && calendarToolbarLayout == .column ? 1 : 0
+        calendarHeading.setAccessibilityHidden(calendarHeading.alphaValue == 0)
+        overlayHeading.isHidden = !visible || calendarToolbarLayout != .overlay
+        overlayHeading.setAccessibilityHidden(overlayHeading.isHidden)
+        updateOverlayToolbar()
     }
 
     func holdRightPanelToolbar() {
@@ -893,17 +900,13 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         }
     }
 
-    func moveHeldRightPanelToolbar(column: Bool, width: CGFloat) {
+    func moveHeldRightPanelToolbar(width: CGFloat) {
         guard holdsRightPanelToolbar else { return }
-        if column, let anchor = rightPanelToolbarAnchor, anchor.arrangedSubviews.count > 3 {
+        if let anchor = rightPanelToolbarAnchor, anchor.arrangedSubviews.count > 3 {
             let start = anchor.arrangedSubviews[2].frame.maxX
             let currentWidth = anchor.arrangedSubviews[3].frame.width
             let end = start + currentWidth - width
             animateRightPanelToolbar(from: start, to: end) { [weak anchor] x in anchor?.setPosition(x, ofDividerAt: 2) }
-        } else if !column, calendarToolbarLayout == .overlay, let gap = overlayToolbarGap(for: width) {
-            animateRightPanelToolbar(from: calendarGapWidth.constant, to: gap) { [weak self] value in
-                self?.calendarGapWidth.constant = value
-            }
         }
     }
 
@@ -932,25 +935,23 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         calendarHeading.holdsWidth = false
         if let layout = requestedRightPanelToolbar {
             requestedRightPanelToolbar = nil
-            setCalendarToolbar(column: layout.column, visible: layout.visible, overlayWidth: layout.width)
+            setCalendarToolbar(column: layout.column, visible: layout.visible)
         }
     }
 
     /// Разделитель шапки следует за нативной границей календаря. Меню задачи всегда остаётся слева от него.
-    func setCalendarToolbar(column: Bool, visible: Bool, overlayWidth: CGFloat = CalendarPanelLayout.defaultWidth) {
+    func setCalendarToolbar(column: Bool, visible: Bool) {
         if holdsRightPanelToolbar {
-            requestedRightPanelToolbar = (column, visible, overlayWidth)
+            requestedRightPanelToolbar = (column, visible)
             return
         }
-        calendarOverlayWidth = overlayWidth
         let layout: WorkspaceHeaderLayout.CalendarPlacement = !visible ? .closed : (column ? .column : .overlay)
-        guard calendarToolbarLayout != layout else { updateOverlayToolbarGap(); return }
+        guard calendarToolbarLayout != layout else { return }
+        let changesItems = (calendarToolbarLayout == .column) != (layout == .column)
         calendarToolbarLayout = layout
         updateCalendarHeadingVisibility()
-        // В накладном режиме сначала размещаем кнопки, затем занимаем только свободное место.
-        // Широкий календарь не должен вытеснять кнопку закрытия в меню переполнения toolbar.
-        calendarGapWidth.constant = 1
-        if let index = workspaceToolbar.items.firstIndex(where: { $0.itemIdentifier == .plannerRightPanelSwitch }) {
+        // Накладная панель не меняет состав toolbar и не отнимает место у действий слева.
+        if changesItems, let index = workspaceToolbar.items.firstIndex(where: { $0.itemIdentifier == .plannerRightPanelSwitch }) {
             // Оба места кнопок остаются в toolbar: меняются только промежутки и границы секции.
             // Смена календаря на чат не удаляет кнопки и не создаёт новую стеклянную подложку.
             while workspaceToolbar.items.count > index + 1,
@@ -971,23 +972,82 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         columnFramesChanged?()
     }
 
-    private func overlayToolbarGap(for panelWidth: CGFloat) -> CGFloat? {
-        guard let window = attachedWindow, calendarHeading.window === window else { return nil }
-        let heading = calendarHeading.convert(calendarHeading.bounds, to: nil)
-        let trailingEdge = window.contentView?.bounds.maxX ?? window.frame.width
-        let difference = heading.minX - (trailingEdge - panelWidth + 12)
-        // Учитываем кнопку, её контейнер, интервалы toolbar и внешний отступ окна.
-        let availableGap = max(0, trailingEdge - heading.maxX - 96)
-        return max(1, min(availableGap, panelWidth, max(0, calendarGap.frame.width + difference)))
+    func setRightPanelOverlay(_ panel: CalendarSidebarSurface?) {
+        if rightPanelOverlay !== panel { rightPanelOverlay?.overlayHeaderElements = [] }
+        rightPanelOverlay = panel
+        updateOverlayToolbar()
     }
 
-    private func updateOverlayToolbarGap() {
-        guard calendarToolbarLayout == .overlay, !holdsRightPanelToolbar,
-              let width = overlayToolbarGap(for: calendarOverlayWidth) else { return }
-        if abs(width - calendarGapWidth.constant) >= 1 {
-            calendarGapWidth.constant = width
-            scheduleToolbarAlignment()
+    private func updateOverlayToolbar() {
+        guard let panel = rightPanelOverlay, let panelWindow = panel.window,
+              let toolbarWindow = trailingRightPanelSurface.window,
+              let outerSurface = rightPanelSwitchItem.view else {
+            overlayHeading.removeFromSuperview()
+            overlaySwitchSurface.removeFromSuperview()
+            updateCoveredToolbarViews([])
+            return
         }
+
+        // AppKit выносит полноэкранный toolbar в отдельное окно. Сравниваем видимые рамки на экране.
+        let panelOnScreen = panelWindow.convertToScreen(panel.convert(panel.bounds, to: nil))
+        let overlayLeft = panelOnScreen.minX
+        let controls = workspaceToolbar.items.compactMap { item -> (WorkspaceToolbarContentView, NSRect)? in
+            guard item !== rightPanelToggleItem, !item.isHidden,
+                  let control = item.view as? WorkspaceToolbarContentView, let window = control.window,
+                  !control.bounds.isEmpty else { return nil }
+            return (control, window.convertToScreen(control.convert(control.bounds, to: nil)))
+        }
+        let covered = Set(controls.compactMap { control, frame in
+            frame.maxX > overlayLeft && frame.minX < panelOnScreen.maxX ? control : nil
+        })
+        // Скрываются представления, а места кнопок в NSToolbar остаются занятыми.
+        updateCoveredToolbarViews(covered)
+
+        var ancestor = trailingRightPanelSurface.superview
+        while let candidate = ancestor, !outerSurface.isDescendant(of: candidate) {
+            ancestor = candidate.superview
+        }
+        guard let canvas = ancestor else { return }
+        if overlayHeading.superview !== canvas {
+            canvas.addSubview(overlayHeading, positioned: .above, relativeTo: nil)
+        }
+        let leading = canvas.convert(toolbarWindow.convertFromScreen(panelOnScreen), from: nil).minX
+        let button = trailingRightPanelSurface.convert(trailingRightPanelSurface.bounds, to: canvas)
+        // Начало текста совпадает с внутренним отступом содержимого панели.
+        let height: CGFloat = 34
+        overlayHeading.frame = NSRect(x: leading + CalendarPanelLayout.outerInset + 8, y: button.midY - height / 2,
+            width: overlayHeading.preferredWidth, height: height)
+
+        if overlaySwitchSurface.superview !== canvas {
+            canvas.addSubview(overlaySwitchSurface, positioned: .above, relativeTo: nil)
+        }
+        // У панели есть место для открытия другой панели только после последнего действия документа.
+        let switchSize = WorkspaceToolbarButtonSurface.diameter
+        let switchX = leading - 8 - switchSize
+        let lastActionEdge = controls.lazy.filter { $0.0 !== outerSurface }.map { $0.1.maxX }.max() ?? overlayLeft
+        let switchOnScreen = toolbarWindow.convertToScreen(canvas.convert(NSRect(x: switchX, y: 0, width: switchSize, height: 1), to: nil))
+        overlaySwitchSurface.isHidden = activeRightPanel == nil || calendarHeaderIsTransitioning || holdsRightPanelToolbar
+            || !covered.contains(where: { $0 === outerSurface })
+            || switchOnScreen.minX < lastActionEdge + 8
+        overlaySwitchSurface.frame = NSRect(x: switchX, y: button.midY - switchSize / 2,
+            width: switchSize, height: switchSize)
+
+        // Системный NSToolbar перечисляет для VoiceOver только свои элементы.
+        // Заголовок и соседняя кнопка принадлежат панели также в дереве доступности.
+        let headerElements = [overlayHeading.isHidden ? nil : overlayHeading.accessibilityTitle,
+                              overlaySwitchSurface.isHidden ? nil : overlaySwitchButton].compactMap { $0 }
+        headerElements.forEach { $0.setAccessibilityParent(panel) }
+        panel.overlayHeaderElements = headerElements
+    }
+
+    private func updateCoveredToolbarViews(_ covered: Set<WorkspaceToolbarContentView>) {
+        for control in coveredToolbarViews.subtracting(covered) {
+            control.isCoveredByRightPanel = false
+        }
+        for control in covered.subtracting(coveredToolbarViews) {
+            control.isCoveredByRightPanel = true
+        }
+        coveredToolbarViews = covered
     }
 
     func attachCalendarSidebar(_ host: NSViewController, width: CGFloat, animate: Bool, minimumWidth: CGFloat = CalendarPanelLayout.minimumWidth, maximumWidth: CGFloat = CalendarPanelLayout.maximumWidth) {
@@ -1207,7 +1267,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
 
 /// Две строки заголовка в NSToolbar; длинное имя сокращается, не вытесняя кнопки соседней колонки.
 @MainActor
-private final class WorkspaceToolbarHeadingView: NSView {
+private final class WorkspaceToolbarHeadingView: WorkspaceToolbarContentView {
     private let titleField = NSTextField(labelWithString: "")
     private let subtitleField = NSTextField(labelWithString: "")
     private var headingWidth: NSLayoutConstraint!
@@ -1271,7 +1331,6 @@ private extension NSToolbarItem.Identifier {
     static let plannerCalendarHeading = NSToolbarItem.Identifier("Planner.CalendarHeading")
     static let plannerCalendarTrailingBoundary = NSToolbarItem.Identifier("Planner.CalendarTrailingBoundary")
     static let plannerCalendarBoundary = NSToolbarItem.Identifier("Planner.CalendarBoundary")
-    static let plannerCalendarGap = NSToolbarItem.Identifier("Planner.CalendarGap")
     static let plannerRightPanelSwitch = NSToolbarItem.Identifier("Planner.RightPanelSwitch")
     static let plannerRightPanelToggle = NSToolbarItem.Identifier("Planner.RightPanelToggle")
     static let plannerSearch = NSToolbarItem.Identifier("Planner.Search")
