@@ -41,7 +41,7 @@ private data class ErrorBody(val error: Problem?)
 private data class Tokens(val accessToken: String, val refreshToken: String, val expiresIn: Int)
 private data class User(val email: String, val libraryId: String)
 private data class Config(val protocolVersion: Int, val serverTime: String, val limits: Limits?)
-private data class Limits(val maxNoteBytes: Int?)
+private data class Limits(val maxNoteBytes: Int?, val maxNoteFormatVersion: Int?)
 private data class Challenge(val challengeId: String)
 
 internal enum class AccountRequest(val path: String) {
@@ -263,7 +263,8 @@ internal class CloudSync(
                 notes.ready(profile.workspace, null)
                 return
             }
-            NoteSync(notes).synchronize(profile.workspace, limit) { path, body, responseLimit ->
+            val format = config.limits?.maxNoteFormatVersion?.coerceIn(0, NOTE_FORMAT_VERSION) ?: 0
+            NoteSync(notes).synchronize(profile.workspace, limit, format) { path, body, responseLimit ->
                 authorized<JsonObject>(
                     profile, path, body, method = if (body == null) "GET" else "PUT", limit = responseLimit,
                 )

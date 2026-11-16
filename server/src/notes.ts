@@ -6,8 +6,28 @@ import { fail, requireValue } from './errors.js';
 import { digest } from './security.js';
 import { lockLibrary } from './sync.js';
 
+export const NOTE_FORMAT_VERSION = 1;
 export const MAX_NOTE_BYTES = 8 * 1024 * 1024;
 const MAX_NOTES = 10_000;
+
+function noteFormat(bytes: Buffer): number {
+  // Earlier clients and integrations could store arbitrary opaque payloads.
+  let body: unknown;
+  try {
+    body = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    return 0;
+  }
+  if (!body || typeof body !== 'object' || !('richText' in body) || body.richText == null) return 0;
+  const rich = body.richText;
+  if (typeof rich !== 'object' || !('version' in rich) || rich.version !== NOTE_FORMAT_VERSION) {
+    fail(400, 'note_format_unsupported', 'Формат заметки не поддерживается');
+  }
+  requireValue('spans' in rich && Array.isArray(rich.spans)
+    && 'text' in body && typeof body.text === 'string'
+    && 'document' in body && body.document === '');
+  return NOTE_FORMAT_VERSION;
+}
 
 export function installNotes(app: FastifyInstance, db: Database, auth: AuthService, config: Config) {
   app.get('/v1/notes', async request => {
@@ -32,17 +52,21 @@ export function installNotes(app: FastifyInstance, db: Database, auth: AuthServi
       const bytes = Buffer.from(data, 'base64');
       requireValue(bytes.length > 0 && bytes.toString('base64') === data);
       if (bytes.length > MAX_NOTE_BYTES) fail(413, 'note_too_large', 'Заметка слишком большая для синхронизации');
+      const format = noteFormat(bytes);
       const revision = digest(bytes);
       return db.tx(async tx => {
         await lockLibrary(tx, identity);
         const current = await tx.query(
-          'SELECT revision,octet_length(data) AS bytes FROM notes WHERE library_id=$1 AND id=$2',
+          'SELECT revision,format_version,octet_length(data) AS bytes FROM notes WHERE library_id=$1 AND id=$2',
           [identity.libraryId, id]
         );
         const previous = current.rows[0];
         if (previous?.revision === revision) return { revision };
         if ((previous?.revision ?? null) !== baseRevision) {
           fail(409, 'note_conflict', 'Заметка изменилась на другом устройстве');
+        }
+        if (previous && previous.format_version > format) {
+          fail(409, 'note_format_requires_update', 'Обновите приложение, чтобы сохранить форматирование заметки');
         }
         const usage = (await tx.query(
           'SELECT count(*)::int AS count,COALESCE(sum(octet_length(data)),0) AS bytes FROM notes WHERE library_id=$1',
@@ -52,9 +76,10 @@ export function installNotes(app: FastifyInstance, db: Database, auth: AuthServi
         if ((!previous && usage.count >= MAX_NOTES) || totalBytes > Math.min(config.quotaBytes, 100 * 1024 * 1024)) {
           fail(409, 'note_quota', 'Закончилось облачное место для заметок');
         }
-        await tx.query(`INSERT INTO notes(library_id,id,revision,data) VALUES($1,$2,$3,$4)
-          ON CONFLICT(library_id,id) DO UPDATE SET revision=EXCLUDED.revision,data=EXCLUDED.data`,
-          [identity.libraryId, id, revision, bytes]);
+        await tx.query(`INSERT INTO notes(library_id,id,revision,data,format_version) VALUES($1,$2,$3,$4,$5)
+          ON CONFLICT(library_id,id) DO UPDATE SET
+            revision=EXCLUDED.revision,data=EXCLUDED.data,format_version=EXCLUDED.format_version`,
+          [identity.libraryId, id, revision, bytes, format]);
         return { revision };
       }, true);
     }

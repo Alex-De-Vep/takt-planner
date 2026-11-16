@@ -116,6 +116,7 @@ struct SyncConfig: Codable, Sendable {
         let maxBatchOperations: Int
         let maxRequestBytes: Int
         var maxNoteBytes: Int? = nil
+        var maxNoteFormatVersion: Int? = nil
     }
     let protocolVersion: Int
     let serverTime: String

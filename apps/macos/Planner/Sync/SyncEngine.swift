@@ -39,6 +39,7 @@ final class SyncEngine {
     func stop() {
         stopped = true
         notes?.syncEnabled = false
+        notes?.sharedFormatLimit = nil
         timer?.cancel()
         scheduled?.cancel()
         timer = nil
@@ -106,6 +107,8 @@ final class SyncEngine {
         try checkActive()
         guard config.protocolVersion == 1 else { throw SyncProblem.incompatibleProtocol }
         notes?.syncEnabled = config.limits.maxNoteBytes != nil
+        notes?.sharedFormatLimit = (config.limits.maxNoteFormatVersion ?? 0) >= SharedNoteText.currentVersion
+            ? config.limits.maxNoteBytes : nil
         if let server = SyncWire.date(config.serverTime) {
             repository.serverClockOffset = server.timeIntervalSinceNow
         }

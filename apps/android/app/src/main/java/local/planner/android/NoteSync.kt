@@ -11,6 +11,7 @@ internal class NoteSync(private val store: NoteStore) {
     fun synchronize(
         workspace: String,
         limit: Int,
+        formatVersion: Int,
         request: (path: String, body: JsonObject?, responseLimit: Int) -> JsonObject,
     ) {
         val responseLimit = (limit + 2) / 3 * 4 + 1024
@@ -33,11 +34,15 @@ internal class NoteSync(private val store: NoteStore) {
             // The note may have changed between the index and its download.
             remote[id] = downloadedRevision
         }
-        store.ready(workspace, limit)
+        store.ready(workspace, limit, formatVersion)
 
         var error: Int? = null
         for (id in store.pending(workspace)) {
             val pending = store.pending(workspace, id) ?: continue
+            if (formatVersion < NOTE_FORMAT_VERSION && decodeNote(pending.data, id).richText != null) {
+                error = R.string.notes_format_unsupported
+                continue
+            }
             if (pending.data.size > limit) {
                 error = R.string.note_too_large
                 continue

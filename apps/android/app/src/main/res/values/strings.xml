@@ -277,4 +277,15 @@
     <string name="note_edit_text">Edit text</string>
     <string name="note_edit_text_hint">Create an editable text copy. The original note will keep its formatting and images.</string>
     <string name="note_create_text_copy">Create text copy</string>
+    <string name="notes_format_unsupported">Update the Takt server to sync notes with formatting.</string>
+    <string name="note_bold">Bold</string>
+    <string name="note_italic">Italic</string>
+    <string name="note_underline">Underline</string>
+    <string name="note_heading">Heading</string>
+    <string name="note_list">Bulleted list</string>
+    <string name="note_numbered_list">Numbered list</string>
+    <string name="note_checklist">Checklist</string>
+    <string name="note_link">Add link</string>
+    <string name="note_image">Add image</string>
+    <string name="note_image_error">Could not add the image. Try a smaller image file.</string>
 </resources>

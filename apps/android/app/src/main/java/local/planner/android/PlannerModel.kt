@@ -304,37 +304,70 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         emptySet()
     }
 
-    fun saveNote(draft: NoteDraft, done: (String) -> Unit = {}) {
+    fun autosaveNote(draft: NoteDraft) {
+        if (draft.original != null && draft.dirty) saveNote(draft, closeAfterSave = false)
+    }
+
+    fun saveNote(draft: NoteDraft, closeAfterSave: Boolean = true, done: (String) -> Unit = {}) {
         val current = library.value
         if (noteDraft !== draft || draft.saving || noteVoice.startedAt != null ||
             current.workspace != draft.workspace || current.profile == null) return
-        val original = draft.original?.document
+        if (draft.persisting) {
+            if (closeAfterSave || draft.afterPersist == null) {
+                draft.afterPersist = {
+                    if (closeAfterSave) saveNote(draft, done = done) else autosaveNote(draft)
+                }
+            }
+            return
+        }
+        val baseline = draft.original
+        val original = baseline?.document
+        if (original != null && !draft.dirty) {
+            if (closeAfterSave) {
+                closeNote()
+                done(original.id)
+            }
+            return
+        }
         val folder = draft.folder
         if (folder != NOTE_WITHOUT_FOLDER && folder != original?.folder && current.folders.none { noteFolder(it.id) == folder }) {
             draft.error = R.string.note_choose_folder
             return
         }
         val now = noteTime()
+        val richText = draft.richText ?: SharedNoteText().takeIf {
+            original == null && notes.value.workspace == current.workspace && notes.value.formatVersion >= NOTE_FORMAT_VERSION
+        }
         val note = (original ?: NoteDocument(draft.id, folder, createdAt = now)).copy(
-            folder = folder, title = draft.title.trim(), text = draft.text, pinned = draft.pinned,
+            folder = folder, title = draft.title.trim(), text = draft.text, pinned = draft.pinned, richText = richText,
             updatedAt = now, deletedAt = if (draft.trashed) original?.deletedAt ?: now else null,
         )
-        draft.saving = true
+        draft.persisting = true
+        draft.saving = closeAfterSave
         draft.error = null
         viewModelScope.launch {
             try {
-                val savedId = withContext(Dispatchers.IO) { noteStore.save(current.workspace, draft.original, note) }
+                val saved = withContext(Dispatchers.IO) { noteStore.save(current.workspace, baseline, note) }
                 if (noteDraft === draft) {
-                    noteVoice.close()
-                    noteDraft = null
-                    done(savedId)
+                    if (closeAfterSave) {
+                        noteVoice.close()
+                        noteDraft = null
+                    } else {
+                        if (saved.document.id != draft.id) noteVoice.bind(draft.workspace, saved.document.id)
+                        draft.acknowledge(saved)
+                    }
+                    done(saved.document.id)
                 }
                 refresh()
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 draft.error = if (failure is NoteTooLarge) R.string.note_too_large else R.string.storage_error
             } finally {
+                draft.persisting = false
                 draft.saving = false
+                val followUp = draft.afterPersist
+                draft.afterPersist = null
+                if (noteDraft === draft) followUp?.invoke()
             }
         }
     }

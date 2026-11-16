@@ -19,11 +19,15 @@ struct PlannerNote: Codable, Identifiable, Sendable {
     var deletedAt: Date?
     var syncVersion: NoteSyncVersion?
     var lastVoiceTranscriptID: UUID?
+    var richText: SharedNoteText?
 
     var displayTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     var assistantContentVersion: String {
         // Изменение папки и закрепления не отменяет предложение по тексту.
-        let data = document.isEmpty ? Data(text.utf8) : document
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        var data = document.isEmpty ? Data(text.utf8) : document
+        if let richText, let style = try? encoder.encode(richText) { data.append(style) }
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -31,7 +35,8 @@ struct PlannerNote: Codable, Identifiable, Sendable {
         [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: NSColor.labelColor]
     }
 
-    func attributedText() -> NSAttributedString {
+    @MainActor func attributedText() -> NSAttributedString {
+        if let richText, let value = try? richText.attributedText(text) { return value }
         guard !document.isEmpty,
               let value = NSAttributedString(rtfd: document, documentAttributes: nil) else {
             return NSAttributedString(string: text, attributes: Self.bodyAttributes)
@@ -52,6 +57,7 @@ final class NoteStore {
     private(set) var error: String?
     private(set) var unreadable = false
     var syncEnabled = false
+    var sharedFormatLimit: Int?
     private var remoteEdits: [UUID: UUID] = [:]
     @ObservationIgnored let voice: NoteVoiceRecording
     @ObservationIgnored private let url: URL?
@@ -76,8 +82,13 @@ final class NoteStore {
 
     static func validate(_ notes: [PlannerNote]) throws {
         guard Set(notes.map(\.id)).count == notes.count else { throw BackupError.invalid }
-        for note in notes where !note.document.isEmpty {
-            guard NSAttributedString(rtfd: note.document, documentAttributes: nil) != nil else { throw BackupError.invalid }
+        for note in notes {
+            if let richText = note.richText {
+                guard note.document.isEmpty else { throw BackupError.invalid }
+                _ = try richText.attributedText(note.text)
+            } else if !note.document.isEmpty {
+                guard NSAttributedString(rtfd: note.document, documentAttributes: nil) != nil else { throw BackupError.invalid }
+            }
         }
     }
 
@@ -87,6 +98,7 @@ final class NoteStore {
     @discardableResult func create(folder: String) -> UUID? {
         guard !unreadable else { return nil }
         var note = PlannerNote()
+        if sharedFormatLimit != nil { note.richText = SharedNoteText(spans: []) }
         note.folder = folder
         notes.insert(note, at: 0)
         dirty = true
@@ -143,10 +155,7 @@ final class NoteStore {
             var next = notes
             for (id, value) in pending {
                 guard let index = next.firstIndex(where: { $0.id == id }) else { continue }
-                let data = try value.data(from: NSRange(location: 0, length: value.length),
-                                          documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
-                next[index].document = data
-                next[index].text = value.string
+                try setBody(value, in: &next[index])
                 next[index].updatedAt = .now
             }
             try save(next)
@@ -187,14 +196,25 @@ final class NoteStore {
             }
         }
         var next = notes
-        next[index].document = try value.data(from: NSRange(location: 0, length: value.length),
-            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
-        next[index].text = value.string
+        try setBody(value, in: &next[index])
         next[index].updatedAt = .now
         if let voiceTranscriptID { next[index].lastVoiceTranscriptID = voiceTranscriptID }
         try save(next)
         remoteEdits[id] = UUID()
         syncQueued?()
+    }
+
+    private func setBody(_ content: NSAttributedString, in note: inout PlannerNote) throws {
+        note.text = content.string
+        guard note.richText != nil else {
+            note.document = try content.data(from: NSRange(location: 0, length: content.length),
+                documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
+            return
+        }
+        note.richText = try SharedNoteText.encode(content)
+        if let limit = sharedFormatLimit, try Self.wireData(note).count > limit {
+            throw SharedNoteText.Failure.noteTooLarge
+        }
     }
 
     func restore(_ notes: [PlannerNote]) throws {
@@ -238,7 +258,8 @@ final class NoteStore {
             next.append(incoming)
         }
         try save(next)
-        if let previous, previous.document != incoming.document || previous.text != incoming.text {
+        if let previous, previous.document != incoming.document || previous.text != incoming.text ||
+            previous.richText != incoming.richText {
             remoteEdits[note.id] = UUID()
         }
     }

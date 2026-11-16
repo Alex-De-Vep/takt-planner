@@ -31,6 +31,8 @@ internal data class NoteDocument(
     val createdAt: Double = noteTime(),
     val updatedAt: Double = createdAt,
     val deletedAt: Double? = null,
+    val richText: SharedNoteText? = null,
+    val lastVoiceTranscriptID: String? = null,
 ) {
     val summary get() = NoteSummary(
         id, folder.takeIf { it.startsWith("folder-") }?.removePrefix("folder-")?.lowercase(Locale.ROOT),
@@ -60,19 +62,29 @@ internal fun NoteDocument.wireBytes(): ByteArray = payload(
     "pinned" to JsonPrimitive(pinned),
     "createdAt" to JsonPrimitive(createdAt),
     "updatedAt" to JsonPrimitive(updatedAt),
-).apply { deletedAt?.let { addProperty("deletedAt", it) } }.toString().toByteArray()
+).apply {
+    deletedAt?.let { addProperty("deletedAt", it) }
+    richText?.let { add("richText", json.toJsonTree(it)) }
+    lastVoiceTranscriptID?.let { addProperty("lastVoiceTranscriptID", it) }
+}.toString().toByteArray()
 
 internal fun decodeNote(bytes: ByteArray, id: String): NoteDocument {
     val body = json.fromJson(bytes.toString(Charsets.UTF_8), JsonObject::class.java)
     check(body.getAsJsonPrimitive("id").asString.equals(id, ignoreCase = true))
     val document = body.getAsJsonPrimitive("document").asString
     if (document.isNotEmpty()) Base64.getDecoder().decode(document)
+    val richText = body.get("richText")?.takeUnless { it.isJsonNull }?.let { json.fromJson(it, SharedNoteText::class.java) }
     return NoteDocument(
         id, body.getAsJsonPrimitive("folder").asString, body.getAsJsonPrimitive("title").asString,
         body.getAsJsonPrimitive("text").asString, document, body.getAsJsonPrimitive("pinned").asBoolean,
         body.getAsJsonPrimitive("createdAt").asDouble, body.getAsJsonPrimitive("updatedAt").asDouble,
         body.get("deletedAt")?.takeUnless { it.isJsonNull }?.asDouble,
+        richText, body.string("lastVoiceTranscriptID"),
     ).also {
+        if (richText != null) {
+            check(document.isEmpty())
+            richText.validate(it.text)
+        }
         check(it.createdAt.isFinite() && it.updatedAt.isFinite() && it.deletedAt?.isFinite() != false)
     }
 }
@@ -83,22 +95,32 @@ internal fun noteDigest(bytes: ByteArray): String =
 
 internal class NoteDraft(
     val workspace: String,
-    val original: StoredNote?,
+    original: StoredNote?,
     initialFolder: String?,
 ) {
-    private val note = original?.document
-    val id = note?.id ?: newId()
-    var folder by mutableStateOf(note?.folder ?: initialFolder ?: NOTE_WITHOUT_FOLDER)
-    var title by mutableStateOf(note?.title.orEmpty())
-    var text by mutableStateOf(note?.text.orEmpty())
-    var pinned by mutableStateOf(note?.pinned ?: false)
-    var trashed by mutableStateOf(note?.deletedAt != null)
+    private val newNoteId = original?.document?.id ?: newId()
+    var original by mutableStateOf(original)
+        private set
+    val id get() = original?.document?.id ?: newNoteId
+    var folder by mutableStateOf(original?.document?.folder ?: initialFolder ?: NOTE_WITHOUT_FOLDER)
+    var title by mutableStateOf(original?.document?.title.orEmpty())
+    var text by mutableStateOf(original?.document?.text.orEmpty())
+    var richText by mutableStateOf(original?.document?.richText)
+    var pinned by mutableStateOf(original?.document?.pinned ?: false)
+    var trashed by mutableStateOf(original?.document?.deletedAt != null)
     var saving by mutableStateOf(false)
+    var persisting by mutableStateOf(false)
+    var afterPersist: (() -> Unit)? = null
     var transcribing by mutableStateOf(false)
     var transcript by mutableStateOf<String?>(null)
     var transcriptionError by mutableStateOf<Int?>(null)
     var error by mutableStateOf<Int?>(null)
 
-    val dirty get() = title != note?.title.orEmpty() || text != note?.text.orEmpty() ||
-        (note != null && (folder != note.folder || pinned != note.pinned || trashed != (note.deletedAt != null)))
+    fun acknowledge(saved: StoredNote) { original = saved }
+
+    val dirty get(): Boolean {
+        val note = original?.document
+        return title.trim() != note?.title.orEmpty() || text != note?.text.orEmpty() || richText != note?.richText ||
+            (note != null && (folder != note.folder || pinned != note.pinned || trashed != (note.deletedAt != null)))
+    }
 }

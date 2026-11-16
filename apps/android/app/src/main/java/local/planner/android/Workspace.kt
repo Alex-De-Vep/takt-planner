@@ -110,7 +110,9 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     val eventRoute = eventJson
     if (noteDraft != null) {
         key(noteDraft.id) {
-            NoteEditor(noteDraft, library, noteState.limit != null, model, snackbar) { id ->
+            NoteEditor(
+                noteDraft, library, noteState.limit != null, noteState.formatVersion >= NOTE_FORMAT_VERSION, model, snackbar,
+            ) { id ->
                 chatTaskId = null
                 chatNoteId = id
                 tab = Tab.Chat

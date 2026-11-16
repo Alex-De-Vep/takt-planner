@@ -12,6 +12,7 @@ internal data class NotesState(
     val workspace: String = "",
     val loaded: Boolean = false,
     val limit: Int? = null,
+    val formatVersion: Int = 0,
     val entries: List<NoteSummary> = emptyList(),
     val pending: Int = 0,
     val error: Int? = null,
@@ -21,7 +22,7 @@ internal data class NotesState(
 internal data class PendingNote(val id: String, val data: ByteArray, val digest: String)
 internal class NoteTooLarge : IllegalArgumentException()
 
-internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 1) {
+internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 2) {
     private val _state = MutableStateFlow(NotesState())
     val state = _state.asStateFlow()
 
@@ -33,10 +34,13 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
                 PRIMARY KEY (workspace, id)
             )
         """.trimIndent())
-        db.execSQL("CREATE TABLE note_config (workspace TEXT PRIMARY KEY, byte_limit INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE note_config (workspace TEXT PRIMARY KEY, byte_limit INTEGER NOT NULL, format_version INTEGER NOT NULL DEFAULT 0)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Unsupported schema")
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        check(oldVersion == 1 && newVersion == 2)
+        db.execSQL("ALTER TABLE note_config ADD COLUMN format_version INTEGER NOT NULL DEFAULT 0")
+    }
 
     @Synchronized
     fun open(workspace: String) {
@@ -44,11 +48,11 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
         _state.value = NotesState(workspace)
         if (workspace.isEmpty()) return
         try {
-            val limit = readableDatabase.rawQuery(
-                "SELECT byte_limit FROM note_config WHERE workspace = ?", arrayOf(workspace),
-            ).use { if (it.moveToFirst()) it.getInt(0) else null }
-            if (limit != null) {
-                _state.value = NotesState(workspace, loaded = true, limit = limit)
+            val config = readableDatabase.rawQuery(
+                "SELECT byte_limit, format_version FROM note_config WHERE workspace = ?", arrayOf(workspace),
+            ).use { if (it.moveToFirst()) it.getInt(0) to it.getInt(1) else null }
+            if (config != null) {
+                _state.value = NotesState(workspace, loaded = true, limit = config.first, formatVersion = config.second)
                 publish()
             }
         } catch (_: Exception) {
@@ -57,7 +61,7 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
     }
 
     @Synchronized
-    fun ready(workspace: String, limit: Int?) {
+    fun ready(workspace: String, limit: Int?, formatVersion: Int = 0) {
         check(_state.value.workspace == workspace)
         if (limit == null) {
             writableDatabase.delete("note_config", "workspace = ?", arrayOf(workspace))
@@ -65,9 +69,10 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
             writableDatabase.replaceOrThrow("note_config", null, ContentValues().apply {
                 put("workspace", workspace)
                 put("byte_limit", limit)
+                put("format_version", formatVersion)
             })
         }
-        _state.value = _state.value.copy(loaded = true, limit = limit)
+        _state.value = _state.value.copy(loaded = true, limit = limit, formatVersion = formatVersion)
         publish()
     }
 
@@ -90,20 +95,22 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
     }
 
     @Synchronized
-    fun save(workspace: String, original: StoredNote?, note: NoteDocument): String {
+    fun save(workspace: String, original: StoredNote?, note: NoteDocument): StoredNote {
         val limit = _state.value.takeIf { it.workspace == workspace }?.limit ?: error("Notes unavailable")
-        val savedId = writableDatabase.transaction {
+        val saved = writableDatabase.transaction {
             val current = version(workspace, note.id)
             val conflict = current?.digest != original?.digest
             val next = if (conflict) note.copy(id = newId()) else note
+            next.richText?.validate(next.text)
             val bytes = next.wireBytes()
             if (bytes.size > limit) throw NoteTooLarge()
-            write(workspace, next, bytes, if (conflict) null else current?.revision, noteDigest(bytes))
-            next.id
+            val digest = noteDigest(bytes)
+            write(workspace, next, bytes, if (conflict) null else current?.revision, digest)
+            StoredNote(next, digest)
         }
-        if (savedId != note.id) _state.value = _state.value.copy(conflicts = _state.value.conflicts + 1)
+        if (saved.document.id != note.id) _state.value = _state.value.copy(conflicts = _state.value.conflicts + 1)
         publish()
-        return savedId
+        return saved
     }
 
     @Synchronized

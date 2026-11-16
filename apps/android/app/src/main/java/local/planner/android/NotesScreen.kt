@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -45,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -74,6 +79,17 @@ internal fun NotesScreen(
     BackHandler(trash, onBack = toggleTrash)
     Heading(stringResource(if (trash) R.string.notes_trash else R.string.notes)) {
         if (state.limit != null) {
+            if (state.pending > 0) {
+                if (cloud.busy) {
+                    val label = stringResource(R.string.notes_loading)
+                    CircularProgressIndicator(
+                        Modifier.padding(horizontal = 12.dp).size(18.dp).semantics { contentDescription = label },
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    ActionIcon(R.drawable.ic_sync, R.string.notes_pending, onClick = model::refresh)
+                }
+            }
             ActionIcon(if (searching) R.drawable.ic_close else R.drawable.ic_search,
                 if (searching) R.string.close_search else R.string.search) {
                 searching = !searching
@@ -119,10 +135,6 @@ internal fun NotesScreen(
         }
         if (state.conflicts > 0) item {
             Text(stringResource(R.string.note_conflict_copy), style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(vertical = 8.dp))
-        }
-        if (state.pending > 0) item {
-            Text(stringResource(R.string.notes_pending), style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(vertical = 8.dp))
         }
         when {
@@ -183,7 +195,8 @@ private fun NoteRow(note: NoteSummary, library: Library, model: PlannerModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun NoteEditor(
-    draft: NoteDraft, library: Library, writable: Boolean, model: PlannerModel, snackbar: SnackbarHostState,
+    draft: NoteDraft, library: Library, writable: Boolean, sharedFormat: Boolean,
+    model: PlannerModel, snackbar: SnackbarHostState,
     openChat: (String) -> Unit,
 ) {
     val original = draft.original?.document
@@ -193,6 +206,7 @@ internal fun NoteEditor(
     val recording = voice.startedAt != null
     val enabled = writable && !draft.saving && !recording
     val editing = enabled && !removed
+    val sharedEditor = draft.richText != null || (sharedFormat && original == null)
     val hasContent = draft.title.isNotBlank() || draft.text.isNotBlank() || voice.clip != null
     val defaultVoiceTitle = stringResource(R.string.voice_note_title)
     val context = LocalContext.current
@@ -201,14 +215,23 @@ internal fun NoteEditor(
         if (granted) voice.start() else voice.permissionDenied()
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(lifecycle, voice) {
+    DisposableEffect(lifecycle, voice, writable, draft) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) voice.suspendMedia()
+            if (event == Lifecycle.Event.ON_STOP) {
+                voice.suspendMedia()
+                if (writable) model.autosaveNote(draft)
+            }
         }
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
             voice.suspendMedia()
+        }
+    }
+    LaunchedEffect(draft, draft.dirty, draft.title, draft.text, draft.richText, draft.folder, draft.pinned, writable) {
+        if (writable && draft.original != null && draft.dirty) {
+            delay(650)
+            model.autosaveNote(draft)
         }
     }
     var folders by remember { mutableStateOf(false) }
@@ -220,6 +243,7 @@ internal fun NoteEditor(
         if (!draft.saving) {
             when {
                 recording -> voice.stop()
+                draft.persisting && original != null -> model.saveNote(draft)
                 !draft.dirty && (original != null || voice.clip == null) -> model.closeNote()
                 original == null || !writable -> confirmDiscard = true
                 else -> model.saveNote(draft)
@@ -241,9 +265,9 @@ internal fun NoteEditor(
                     draft.trashed = false
                     model.saveNote(draft)
                 }
-            } else if (!formatted || draft.dirty) {
-                EditorBottomAction(R.string.save, editing && !draft.transcribing && (original != null || hasContent)) {
-                    if (original == null && voice.clip != null && draft.title.isBlank() && draft.text.isBlank()) {
+            } else if (original == null) {
+                EditorBottomAction(R.string.save, editing && !draft.transcribing && hasContent) {
+                    if (voice.clip != null && draft.title.isBlank() && draft.text.isBlank()) {
                         draft.title = defaultVoiceTitle
                     }
                     model.saveNote(draft)
@@ -296,7 +320,7 @@ internal fun NoteEditor(
                             enabled = editing,
                         ) { draft.pinned = !draft.pinned }
                         ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, enabled = editing && !draft.transcribing) {
-                            if (draft.dirty) model.saveNote(draft, openChat)
+                            if (draft.dirty || draft.persisting) model.saveNote(draft, done = openChat)
                             else {
                                 model.closeNote()
                                 openChat(original.id)
@@ -314,7 +338,9 @@ internal fun NoteEditor(
                     Text(stringResource(R.string.note_formatted_preview), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 }
-                if (formatted || removed) {
+                if (sharedEditor) {
+                    SharedNoteEditor(draft, editable = editing && sharedFormat)
+                } else if (formatted || removed) {
                     SelectionContainer {
                         Text(draft.text.replace("\uFFFC", ""), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     }
@@ -322,7 +348,7 @@ internal fun NoteEditor(
                     PlannerTextField(draft.text, { draft.text = it }, Modifier.fillMaxWidth(), placeholder = R.string.note_text,
                         minLines = 4, enabled = !draft.saving, readOnly = !editing)
                 }
-                if (!removed) NoteVoiceControls(draft, model, editable = editing && !formatted)
+                if (!removed) NoteVoiceControls(draft, model, editable = editing && !formatted && (!sharedEditor || sharedFormat))
             }
         }
     }

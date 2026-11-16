@@ -100,6 +100,24 @@ test('notes sync across devices with idempotent writes, conflict checks and acco
   assert.deepEqual((await snapshot(first)).entities, []);
 });
 
+test('shared rich notes keep their formatting when an older client tries to save', async () => {
+  const mac = await account();
+  const android = await login();
+  const path = '/v1/notes/' + randomUUID();
+  const encode = body => Buffer.from(JSON.stringify(body)).toString('base64');
+  const legacy = { text: 'Bold', document: '' };
+  const shared = { ...legacy, richText: { version: 1, spans: [{ start: 0, end: 4, bold: true }] } };
+  const created = await api('PUT', path, { baseRevision: null, data: encode(legacy) }, mac);
+  const upgraded = await api('PUT', path, { baseRevision: created.json().revision, data: encode(shared) }, mac);
+  assert.equal(upgraded.statusCode, 200, upgraded.body);
+  const revision = upgraded.json().revision;
+  const downgrade = await api('PUT', path, { baseRevision: revision, data: encode(legacy) }, android);
+  assert.equal(downgrade.statusCode, 409);
+  assert.equal(downgrade.json().error.code, 'note_format_requires_update');
+  assert.deepEqual((await api('GET', path, undefined, android)).json(), { revision, data: encode(shared) });
+  assert.equal((await api('GET', '/v1/config')).json().limits.maxNoteFormatVersion, 1);
+});
+
 test('OpenAPI describes every success/error response, binary upload and retry headers',async()=>{
  const doc=(await api('GET','/v1/openapi.json')).json();
  assert.equal(doc.info.version,SERVER_VERSION);assert.ok(doc.components.schemas.TaskEntity);assert.ok(doc.components.schemas.LoginResponse);

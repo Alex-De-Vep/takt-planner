@@ -43,7 +43,7 @@ export const contractSchemas=[stampSchema,mutationSchema,...entities,entity,erro
  named('NoteIndexResponse',object({notes:array(object({id,revision:noteRevision}))})),
  named('NoteResponse',object({revision:noteRevision,data:noteData})),
  named('NoteWriteResponse',object({revision:noteRevision})),
- named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
+ named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer,maxNoteFormatVersion:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
 ];
 const email={type:'string',minLength:3,maxLength:254},password={type:'string',minLength:12,maxLength:128};
 const mutations={type:'array',minItems:1,maxItems:100,items:ref('Mutation')};

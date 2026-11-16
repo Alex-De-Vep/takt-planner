@@ -99,7 +99,8 @@ struct PlannerBackup: Codable, Sendable {
         for index in notes.indices where notes[index].folder.hasPrefix("folder-") && !validFolders.contains(notes[index].folder) {
             notes[index].folder = "inbox"
         }
-        return Self(version: notes.isEmpty ? 1 : 2, folders: folders, tasks: tasks, conversations: history,
+        let version = notes.contains { $0.richText != nil } ? 3 : (notes.isEmpty ? 1 : 2)
+        return Self(version: version, folders: folders, tasks: tasks, conversations: history,
                     preferences: BackupPreferences(preferences), notes: notes)
     }
 
@@ -121,7 +122,7 @@ struct PlannerBackup: Codable, Sendable {
         guard let header = try? JSONDecoder().decode(Header.self, from: data), header.format == magic else {
             throw BackupError.invalid
         }
-        guard (1...2).contains(header.version) else { throw BackupError.unsupportedVersion }
+        guard (1...3).contains(header.version) else { throw BackupError.unsupportedVersion }
         guard let backup = try? JSONDecoder().decode(Self.self, from: data) else { throw BackupError.invalid }
         try backup.validate()
         return backup
@@ -140,7 +141,7 @@ struct PlannerBackup: Codable, Sendable {
 
     func validate() throws {
         guard format == Self.magic else { throw BackupError.invalid }
-        guard (1...2).contains(version) else { throw BackupError.unsupportedVersion }
+        guard (1...3).contains(version) else { throw BackupError.unsupportedVersion }
         let folderIDs = Set(folders.map(\.id))
         var ids = folderIDs
         guard ids.count == folders.count else { throw BackupError.invalid }
@@ -153,6 +154,12 @@ struct PlannerBackup: Codable, Sendable {
         }
         if let notes {
             guard Set(notes.map(\.id)).count == notes.count else { throw BackupError.invalid }
+            for note in notes {
+                if let body = note.richText {
+                    guard version >= 3, note.document.isEmpty else { throw BackupError.invalid }
+                    try body.validate(text: note.text)
+                }
+            }
         }
         _ = try assistantArchive()
     }

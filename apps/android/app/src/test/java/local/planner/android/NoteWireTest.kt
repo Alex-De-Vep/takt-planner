@@ -4,6 +4,7 @@ import java.time.Instant
 import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class NoteWireTest {
@@ -31,5 +32,26 @@ class NoteWireTest {
         assertEquals("", wire.get("document").asString)
         assertNull(wire.get("deletedAt"))
         assertEquals(note, decodeNote(note.wireBytes(), id))
+    }
+
+    @Test
+    fun macFormatKeepsEmojiOffsetsLinksAndPngOnAndroid() {
+        val png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+kvX8AAAAASUVORK5CYII="
+        val note = NoteDocument(
+            id = id, folder = noteFolder(folder), text = "🚀 Ссылка\n• Пункт\n\uFFFC",
+            richText = SharedNoteText(spans = listOf(
+                NoteSpan(0, 2, bold = true, size = 24),
+                NoteSpan(3, 9, italic = true, link = "https://example.test/page"),
+                NoteSpan(18, 19, image = png),
+            )),
+        )
+        assertEquals(note, decodeNote(note.wireBytes(), id))
+        val styles = requireNotNull(note.richText)
+        assertThrows(IllegalArgumentException::class.java) {
+            styles.copy(spans = listOf(NoteSpan(1, 2, bold = true))).validate("🚀")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SharedNoteText(spans = listOf(NoteSpan(0, 1, link = "javascript:echo"))).validate("a")
+        }
     }
 }
