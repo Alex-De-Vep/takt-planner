@@ -19,14 +19,15 @@ struct WelcomeView: View {
     }
 
     private var features: [Feature] {
-        let assistant = Feature(id: "assistant", icon: "sparkles", title: "ИИ-помощник",
-                                example: "Попросите помощника сократить описание задачи и проверьте правку перед сохранением.", tint: .purple)
-        return [
+        [
             Feature(id: "tasks", icon: "checklist", title: "Задачи и напоминания",
                     example: "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание.", tint: .indigo),
+            Feature(id: "notes", icon: "note.text", title: "Заметки",
+                    example: "Откройте свою папку и выберите «Заметки», чтобы сохранить идеи и списки.", tint: .orange),
             Feature(id: "calendar", icon: "calendar.badge.plus", title: "События календаря",
                     example: "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30.", tint: .teal),
-            assistant
+            Feature(id: "assistant", icon: "sparkles", title: "ИИ-помощник",
+                    example: "Попросите помощника сократить описание задачи и проверьте правку перед сохранением.", tint: .purple)
         ]
     }
 
@@ -43,9 +44,8 @@ struct WelcomeView: View {
                     }
                     .multilineTextAlignment(.center)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 14) { cards(compact: false) }
-                        VStack(spacing: 12) { cards(compact: true) }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible())], spacing: 14) {
+                        cards
                     }
 
                     Divider()
@@ -70,7 +70,7 @@ struct WelcomeView: View {
         .accessibilityIdentifier("planner-welcome")
     }
 
-    private func cards(compact: Bool) -> some View {
+    private var cards: some View {
         ForEach(Array(features.enumerated()), id: \.element.id) { index, feature in
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: feature.icon)
@@ -88,8 +88,7 @@ struct WelcomeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(16)
-            .frame(minWidth: compact ? 0 : 202, idealWidth: compact ? nil : 246, maxWidth: .infinity,
-                   minHeight: compact ? nil : 170, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 125, alignment: .topLeading)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
             .opacity(reduceMotion || appeared ? 1 : 0)
             .offset(y: reduceMotion || appeared ? 0 : 8)

@@ -46,7 +46,7 @@ final class CloudWorkspace {
     var didOpen: ((CloudLibrary) -> Void)?
     private(set) var busy = false
     var error: String?
-    private static let welcomeKey = "planner.welcome.v3"
+    private static let welcomeKey = "planner.welcome.v4"
     var welcomeCompleted: Bool {
         didSet { defaults.set(welcomeCompleted, forKey: Self.welcomeKey) }
     }

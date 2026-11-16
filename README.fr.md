@@ -42,7 +42,7 @@ Takt réunit vos tâches, vos priorités du jour et votre calendrier sur macOS e
 
 **macOS 26 ou ultérieur sur Apple Silicon.**
 
-Version du code source **0.3.9 (build 93)** · [Historique des versions](docs/releases).
+Version du code source **0.3.10 (build 94)** · [Historique des versions](docs/releases).
 
 Téléchargez un DMG depuis [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases). Ouvrez-le, faites glisser **Takt** dans **Applications**, puis éjectez l’image disque. Quittez l’application avant de remplacer une version précédente.
 

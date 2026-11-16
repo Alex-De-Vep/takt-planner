@@ -5,6 +5,7 @@ final class WelcomeUITests: XCTestCase {
     func testFirstLaunchShowsFeaturesAndStorageChoices() {
         let app = XCUIApplication()
         app.launchEnvironment["PLANNER_UI_TEST_LIBRARY"] = UUID().uuidString
+        app.launchEnvironment["PLANNER_UI_TEST_CALENDAR"] = "1"
         app.launchEnvironment["PLANNER_SHOW_WELCOME"] = "1"
         app.launch()
         let local = app.buttons["welcome-local"]
@@ -12,7 +13,7 @@ final class WelcomeUITests: XCTestCase {
         let sync = app.buttons["welcome-sync"]
         XCTAssertTrue(sync.exists)
         XCTAssertFalse(app.textFields["sync-email"].exists)
-        for feature in ["tasks", "calendar", "assistant"] {
+        for feature in ["tasks", "notes", "calendar", "assistant"] {
             XCTAssertTrue(app.staticTexts["welcome-feature-\(feature)"].exists)
         }
         sync.click()

@@ -524,6 +524,7 @@
 "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание." = "Set “Send the report” for 5:00 PM and get a reminder when it’s due.";
 "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30." = "Add “Meet with the team” tomorrow from 11:00 to 11:30 AM.";
 "Попросите помощника сократить описание задачи и проверьте правку перед сохранением." = "Ask the assistant to shorten a task description, then review the edit before saving it.";
+"Откройте свою папку и выберите «Заметки», чтобы сохранить идеи и списки." = "Open one of your folders and choose Notes to save ideas and lists.";
 "В сборке Preview попросите помощника сократить описание задачи и проверьте правку перед сохранением." = "In the Preview build, ask the assistant to shorten a task description and review the edit before saving it.";
 "Локальный ИИ" = "On-device AI";
 "Где хранить задачи" = "Where to store your tasks";

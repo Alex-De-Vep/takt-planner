@@ -42,7 +42,7 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 
 **macOS 26 or later and Apple Silicon.**
 
-Source version **0.3.9 (build 93)** · [Release history](docs/releases).
+Source version **0.3.10 (build 94)** · [Release history](docs/releases).
 
 Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Takt** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
 
