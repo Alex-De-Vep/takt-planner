@@ -1,8 +1,8 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Planner Server API",
-    "version": "0.1.1"
+    "title": "Takt Server API",
+    "version": "0.1.3"
   },
   "components": {
     "securitySchemes": {
@@ -504,6 +504,11 @@
               "retryAfterSeconds": {
                 "type": "integer",
                 "minimum": 1
+              },
+              "attemptsRemaining": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -1295,6 +1300,68 @@
           "status"
         ]
       },
+      "NoteIndexResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "revision"
+              ]
+            }
+          }
+        },
+        "required": [
+          "notes"
+        ]
+      },
+      "NoteResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "data": {
+            "type": "string",
+            "minLength": 1,
+            "format": "byte"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ]
+      },
+      "NoteWriteResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "revision"
+        ]
+      },
       "ConfigResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -1342,6 +1409,11 @@
                 "maximum": 9007199254740991
               },
               "maxRequestBytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "maxNoteBytes": {
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
@@ -1475,7 +1547,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -1614,7 +1686,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -1760,7 +1832,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -1926,7 +1998,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -2086,7 +2158,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -2256,7 +2328,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -2426,7 +2498,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -2586,7 +2658,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -2690,6 +2762,15 @@
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the exhausted limit permits retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
             }
           },
           "403": {
@@ -2763,7 +2844,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -2923,7 +3004,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3066,7 +3147,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3209,7 +3290,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3352,7 +3433,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3506,7 +3587,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3670,7 +3751,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3813,7 +3894,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -3956,7 +4037,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -4110,7 +4191,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -4277,7 +4358,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -4440,7 +4521,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -4618,7 +4699,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -4772,7 +4853,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -4946,7 +5027,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -5100,7 +5181,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -5263,7 +5344,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -5428,7 +5509,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -5595,7 +5676,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -5738,7 +5819,483 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/notes": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteIndexResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the exhausted limit permits retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/notes/{id}": {
+      "get": {
+        "tags": [
+          "notes"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the exhausted limit permits retrying.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "notes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "baseRevision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "nullable": true
+                  },
+                  "data": {
+                    "type": "string",
+                    "minLength": 1,
+                    "format": "byte"
+                  }
+                },
+                "required": [
+                  "baseRevision",
+                  "data"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteWriteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1
@@ -5878,7 +6435,7 @@
             },
             "headers": {
               "Retry-After": {
-                "description": "Seconds until the exceeded limit permits retrying.",
+                "description": "Seconds until the exhausted limit permits retrying.",
                 "schema": {
                   "type": "integer",
                   "minimum": 1

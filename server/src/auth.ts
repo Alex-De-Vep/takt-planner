@@ -17,19 +17,23 @@ export async function installAuth(app: FastifyInstance, db: Database, config: Co
     hashing++;
     try { return await fn(); } finally { hashing--; }
   }
-  async function limit(request: FastifyRequest, address: string) {
-    await rateLimitMany(db,[{key:`auth-ip:${digest(request.ip)}`,max:60,seconds:600},{key:`auth-email:${digest(address)}`,max:30,seconds:600}]);
+  async function limit(request: FastifyRequest, address: string, signIn = false) {
+    const emailScope = signIn ? 'login-email' : 'auth-email';
+    return rateLimitMany(db, [
+      {key:`auth-ip:${digest(request.ip)}`,max:60,seconds:600},
+      {key:`${emailScope}:${digest(address)}`,max:signIn ? 10 : 30,seconds:600},
+    ]);
   }
   async function challenge(tx: Tx, userId: string | null, address: string, purpose: 'verify'|'reset') {
     const id = randomUUID(), value = code();
     const expires = new Date(Date.now()+600000).toISOString();
     await tx.query('UPDATE challenges SET consumed_at=now() WHERE email=$1 AND purpose=$2 AND consumed_at IS NULL',[address,purpose]);
     await tx.query('INSERT INTO challenges(id,user_id,email,purpose,code_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6)',[id,userId,address,purpose,codeHash(config.authSecret,id,value),expires]);
-    if (userId) await queueMail(tx,config.authSecret,address,purpose==='verify'?'Подтверждение почты — Задачи':'Восстановление пароля — Задачи',`Код: ${value}\nКод действует 10 минут. Если вы не запрашивали эту операцию, пропустите письмо.`,expires,userId);
+    if (userId) await queueMail(tx,config.authSecret,address,purpose==='verify'?'Подтверждение почты — Takt':'Восстановление пароля — Takt',`Код: ${value}\nКод действует 10 минут. Если вы не запрашивали эту операцию, пропустите письмо.`,expires,userId);
     return id;
   }
   async function sendLimits(address: string) {
-    await rateLimitMany(db,[{key:`mail-minute:${digest(address)}`,max:1,seconds:60},{key:`mail-hour:${digest(address)}`,max:5,seconds:3600}]);
+    await rateLimitMany(db,[{key:`mail-minute:${digest(address)}`,max:1,seconds:60},{key:`mail-window:${digest(address)}`,max:10,seconds:600}]);
   }
   async function issueTokens(tx: Tx, sessionId: string) {
     const accessToken = token(), refreshToken = token();
@@ -109,10 +113,12 @@ export async function installAuth(app: FastifyInstance, db: Database, config: Co
   app.post('/v1/auth/login',async request=> {
     const body=request.body as any,address=email(body?.email); password(body?.password);
     requireValue(uuid(body?.deviceId) && typeof body?.deviceName==='string' && body.deviceName.length>0 && body.deviceName.length<=100);
-    await limit(request,address);
+    const budget = await limit(request,address,true);
     const r=await db.pool.query('SELECT * FROM users WHERE email=$1 AND deleted_at IS NULL',[address]),u=r.rows[0];
     const valid=await withHash(()=>checkPassword(u?.password_hash??dummyHash,body.password));
-    if (!valid || !u) fail(401,'invalid_credentials','Неверная почта или пароль');
+    if (!valid || !u) {
+      throw new ApiError(401, 'invalid_credentials', 'Неверная почта или пароль', budget.retryAfterSeconds, budget.attemptsRemaining);
+    }
     if (!u.verified_at) fail(403,'email_not_verified','Подтвердите почту');
     return db.tx(async tx=> {
       // Повторная проверка под блокировкой защищает от входа старым паролем одновременно со сбросом.

@@ -15,6 +15,7 @@ import { runWorker } from '../dist/worker.js';
 import Ajv from 'ajv';
 import { stageBackup,verifyBackup } from '../dist/backup.js';
 import { validateMutation,compareStamp } from '../dist/protocol.js';
+import { SERVER_VERSION } from '../dist/version.js';
 const databaseUrl=process.env.TEST_DATABASE_URL;
 assert.ok(databaseUrl && /^planner_delivery_test/.test(new URL(databaseUrl).pathname.slice(1)),'Use an isolated planner_delivery_test database');
 let db,app,store,dir,config;
@@ -73,9 +74,35 @@ test('account removal revokes access and removes queued mail without affecting o
 test('folder deletion preserves placement version and converges across delivery orders',async()=>{const a=await account();await initialize(a);const f=randomUUID(),g=randomUUID(),t1=task(a),t2=task(a),time=Date.now()-1000;for(const t of [t1,t2]){t.changes.placement.value={kind:'folder',folderId:f};t.changes.placement.version.physicalMillis=time;}await send(a,[operation(a,'folder',f,{name:'Удаляемая',sortOrder:0}),operation(a,'folder',g,{name:'Оставшаяся',sortOrder:1}),t1,t2]);await send(a,[operation(a,'task',t1.entityId,{placement:{kind:'folder',folderId:g}},'update',time+10)]);await send(a,[operation(a,'folder',f,{},'delete',time+100)]);await send(a,[operation(a,'task',t2.entityId,{placement:{kind:'folder',folderId:g}},'update',time+10)]);const rows=(await snapshot(a)).entities.filter(e=>e.type==='task');assert.ok(rows.every(e=>e.fields.placement.folderId===g));});
 
 
+test('notes sync across devices with idempotent writes, conflict checks and account isolation', async () => {
+  const first = await account();
+  const second = await login();
+  const other = await account('bob@example.test');
+  const id = randomUUID(), path = '/v1/notes/' + id;
+  const data = Buffer.from('Заметка\nсо второй строкой').toString('base64');
+  const create = { baseRevision: null, data };
+  assert.equal((await api('GET', '/v1/notes')).statusCode, 401);
+  const saved = await api('PUT', path, create, first);
+  assert.equal(saved.statusCode, 200, saved.body);
+  const { revision } = saved.json();
+  assert.deepEqual((await api('PUT', path, create, second)).json(), { revision });
+  assert.deepEqual((await api('GET', '/v1/notes', undefined, second)).json(), { notes: [{ id, revision }] });
+  assert.deepEqual((await api('GET', path, undefined, second)).json(), { revision, data });
+  assert.deepEqual((await api('GET', '/v1/notes', undefined, other)).json(), { notes: [] });
+  assert.equal((await api('GET', path, undefined, other)).statusCode, 404);
+  const edited = Buffer.from('Обновлённая заметка').toString('base64');
+  assert.equal((await api('PUT', path, { baseRevision: null, data: edited }, second)).json().error.code, 'note_conflict');
+  assert.equal((await api('PUT', path, { baseRevision: revision, data: '%%%invalid' }, second)).statusCode, 400);
+  assert.equal((await api('PUT', path, { baseRevision: revision, data: edited }, second)).statusCode, 200);
+  assert.equal((await api('PUT', path, create, first)).statusCode, 409);
+  assert.equal((await api('GET', path, undefined, first)).json().data, edited);
+  await initialize(first);
+  assert.deepEqual((await snapshot(first)).entities, []);
+});
+
 test('OpenAPI describes every success/error response, binary upload and retry headers',async()=>{
  const doc=(await api('GET','/v1/openapi.json')).json();
- assert.equal(doc.info.version,'0.1.1');assert.ok(doc.components.schemas.TaskEntity);assert.ok(doc.components.schemas.LoginResponse);
+ assert.equal(doc.info.version,SERVER_VERSION);assert.ok(doc.components.schemas.TaskEntity);assert.ok(doc.components.schemas.LoginResponse);
  for(const [path,methods]of Object.entries(doc.paths))for(const [method,op]of Object.entries(methods)){
   if(!op.responses)continue;
   assert.ok(op.responses['200']?.content,`${method} ${path}`);
@@ -125,12 +152,33 @@ test('authenticated users behind one proxy have independent budgets',async()=>{
  assert.equal((await api('GET','/v1/me',undefined,b)).statusCode,200);
  assert.ok(Number(denied.headers['retry-after'])>0);
 });
-test('Retry-After reports the longest exceeded window rather than fixed sixty seconds',async()=>{
- const address='alice@example.test';
- await db.pool.query('INSERT INTO limits(key,count,expires_at) VALUES($1,5,now()+interval \'45 minutes\')',[`mail-hour:${hash(address)}`]);
- const r=await api('POST','/v1/auth/register',{email:address,password:pw});
- assert.equal(r.statusCode,429);assert.ok(Number(r.headers['retry-after'])>=2699);assert.equal(r.json().error.retryAfterSeconds,Number(r.headers['retry-after']));
- await assert.rejects(()=>rateLimitMany(db,[{key:'multi-short',max:0,seconds:60},{key:'multi-long',max:0,seconds:600}]),e=>e.retryAfterSeconds>=599);
+test('mail requests use a ten-minute window and ignore the former hourly bucket', async () => {
+ const address = 'alice@example.test', emailHash = hash(address);
+ await db.pool.query("INSERT INTO limits(key,count,expires_at) VALUES($1,50,now()+interval '1 hour')", [`mail-hour:${emailHash}`]);
+ const first = await api('POST', '/v1/auth/register', {email:address,password:pw});
+ assert.equal(first.statusCode, 200);
+ await db.pool.query('UPDATE limits SET count=10 WHERE key=$1', [`mail-window:${emailHash}`]);
+ const denied = await api('POST', '/v1/auth/resend-verification', {email:address});
+ const wait = Number(denied.headers['retry-after']);
+ assert.equal(denied.statusCode, 429);
+ assert.ok(wait > 60 && wait <= 600);
+ assert.equal(denied.json().error.retryAfterSeconds, wait);
+ await assert.rejects(() => rateLimitMany(db,[{key:'multi-short',max:0,seconds:60},{key:'multi-long',max:0,seconds:600}]), e => e.retryAfterSeconds >= 599);
+});
+test('login returns the effective attempts remaining and a timer after the last failed attempt', async () => {
+ const address = 'unknown@example.test';
+ await db.pool.query("INSERT INTO limits(key,count,expires_at) VALUES($1,6,now()+interval '10 minutes')", [`login-email:${hash(address)}`]);
+ const credentials = {email:address,password:pw,deviceId:randomUUID(),deviceName:'Test device'};
+ for (const remaining of [3, 2, 1, 0]) {
+   const reply = await api('POST', '/v1/auth/login', credentials);
+   assert.equal(reply.statusCode, 401);
+   assert.equal(reply.json().error.attemptsRemaining, remaining);
+   if (remaining > 0) assert.equal(reply.headers['retry-after'], undefined);
+   else assert.ok(Number(reply.headers['retry-after']) > 0 && Number(reply.headers['retry-after']) <= 600);
+ }
+ const blocked = await api('POST', '/v1/auth/login', credentials);
+ assert.equal(blocked.statusCode, 429);
+ assert.equal(blocked.json().error.attemptsRemaining, 0);
 });
 test('refresh sessions have independent limits even behind a single proxy',async()=>{
  const a=await account(),b=await login();
@@ -157,7 +205,7 @@ test('worker publishes heartbeat and records graceful stop',async()=>{
 test('proxy probe is local-only, expires and stores at most twenty recent samples',async()=>{
  const probe=await startProxyProbe(db);const url='/health/live?plannerProxyProbe='+probe.token;
  for(let i=0;i<23;i++){
-  const r=await app.inject({method:'GET',url,remoteAddress:'198.51.100.'+(i+1)});assert.deepEqual(r.json(),{status:'ok',version:'0.1.1'});
+  const r=await app.inject({method:'GET',url,remoteAddress:'198.51.100.'+(i+1)});assert.deepEqual(r.json(),{status:'ok',version:SERVER_VERSION});
  }
  const samples=(await diagnostics(db,config)).proxy.lastProbes;assert.equal(samples.length,20);assert.equal(samples[0].clientAddress,'198.51.100.4');assert.equal(samples.at(-1).clientAddress,'198.51.100.23');
  await db.pool.query("UPDATE settings SET value=jsonb_set(value,'{expiresAt}',to_jsonb('2000-01-01T00:00:00Z'::text)) WHERE key='proxy-probe'");
