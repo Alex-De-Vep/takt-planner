@@ -24,6 +24,10 @@ enum TaskFilter: Hashable, Identifiable {
         }
     }
     var acceptsTaskDrop: Bool { self != .all }
+    var acceptsNotes: Bool {
+        if case .folder = self { return true }
+        return false
+    }
     var creationFolder: TaskFilter { isPrimaryFolder ? self : .inbox }
     var id: String {
         switch self {

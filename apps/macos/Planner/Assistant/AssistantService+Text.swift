@@ -93,7 +93,7 @@ extension AssistantService {
     func sendText(_ text: String, language: String) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 8000 else { error = "Сообщение слишком длинное. Сократите его до 8000 символов."; return }
-        guard current?.usesCloudModel != true, !generating, !applying, !storageFailed, model.canChat, let t = currentIndex, let edit = activeTextEdit, edit.committed == nil else { return }
+        guard current?.usesCloudModel != true, !generating, !applying, !storageFailed, let model = localModel, model.canChat, let t = currentIndex, let edit = activeTextEdit, edit.committed == nil else { return }
         error = nil
         let previous = archive
         if let e = archive.threads[t].textEdits?.firstIndex(where: { $0.id == edit.id }) {

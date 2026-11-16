@@ -19,13 +19,8 @@ struct WelcomeView: View {
     }
 
     private var features: [Feature] {
-        #if canImport(MLXLLM)
-        let assistant = Feature(id: "assistant", icon: "sparkles", title: "Локальный ИИ",
+        let assistant = Feature(id: "assistant", icon: "sparkles", title: "ИИ-помощник",
                                 example: "Попросите помощника сократить описание задачи и проверьте правку перед сохранением.", tint: .purple)
-        #else
-        let assistant = Feature(id: "assistant", icon: "sparkles", title: "Локальный ИИ · Preview",
-                                example: "В сборке Preview попросите помощника сократить описание задачи и проверьте правку перед сохранением.", tint: .purple)
-        #endif
         return [
             Feature(id: "tasks", icon: "checklist", title: "Задачи и напоминания",
                     example: "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание.", tint: .indigo),
@@ -40,7 +35,7 @@ struct WelcomeView: View {
             ScrollView {
                 VStack(spacing: 26) {
                     VStack(spacing: 7) {
-                        Text(strings["Добро пожаловать в «Задачи»"])
+                        Text(strings["Добро пожаловать в Takt"])
                             .font(.system(size: 33, weight: .bold, design: .rounded))
                             .accessibilityAddTraits(.isHeader)
                         Text(strings["Планируйте день в своём ритме"])

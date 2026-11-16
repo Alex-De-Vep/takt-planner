@@ -3,25 +3,26 @@ import XCTest
 @MainActor
 final class PlannerHelpUITests: XCTestCase {
     func testHelpMenuOpensEnglishGuide() {
-        checkGuide(language: "en", locale: "en_US", title: "Planner Help", first: "Getting started", today: "Today")
+        checkGuide(language: "en", locale: "en_US", title: "Takt Help", first: "Getting started", today: "Today")
     }
 
     func testHelpMenuOpensRussianGuide() {
-        checkGuide(language: "ru", locale: "ru_RU", title: "Справка по приложению", first: "Быстрый старт", today: "Список «Сегодня»")
+        checkGuide(language: "ru", locale: "ru_RU", title: "Справка по Takt", first: "Быстрый старт", today: "Список «Сегодня»")
     }
 
     func testSettingsOpensTheSameGuide() {
         let app = launch(language: "en", locale: "en_US")
-        let settings = app.buttons["settings-button"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 5))
-        settings.click()
+        let appMenu = app.menuBars.menuBarItems["Takt"]
+        XCTAssertTrue(appMenu.waitForExistence(timeout: 5))
+        appMenu.click()
+        app.menuItems.matching(identifier: "Settings…").firstMatch.click()
 
         let help = app.buttons["settings-help"]
         XCTAssertTrue(help.waitForExistence(timeout: 5))
         XCTAssertEqual(help.label, "Help")
         help.click()
 
-        let guide = app.windows["Planner Help"]
+        let guide = app.windows["Takt Help"]
         XCTAssertTrue(guide.waitForExistence(timeout: 5))
         XCTAssertEqual(guide.staticTexts["help-chapter-title"].label, "Getting started")
     }

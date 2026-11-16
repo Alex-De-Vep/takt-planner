@@ -8,8 +8,9 @@ import XCTest
         app.launchEnvironment["PLANNER_UI_TEST_CALENDAR"] = "1"
         app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
         app.launch(); app.activate()
-        let settings = app.buttons["settings-button"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.click()
+        let appMenu = app.menuBars.menuBarItems["Takt"]
+        XCTAssertTrue(appMenu.waitForExistence(timeout: 10)); appMenu.click()
+        app.menuItems.matching(identifier: "Настройки…").firstMatch.click()
         let review = element("review-notifications-toggle", app)
         XCTAssertTrue(review.waitForExistence(timeout: 5))
         XCTAssertFalse(element("review-notification-time", app).exists)
@@ -23,7 +24,8 @@ import XCTest
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Notification settings"; screenshot.lifetime = .keepAlways; add(screenshot)
         app.terminate(); app.launch(); app.activate()
-        XCTAssertTrue(settings.waitForExistence(timeout: 10)); settings.click()
+        XCTAssertTrue(appMenu.waitForExistence(timeout: 10)); appMenu.click()
+        app.menuItems.matching(identifier: "Настройки…").firstMatch.click()
         XCTAssertTrue(element("review-notification-time", app).waitForExistence(timeout: 5))
         XCTAssertEqual(weekdays.value as? String, selectedWeekdays)
         review.click()

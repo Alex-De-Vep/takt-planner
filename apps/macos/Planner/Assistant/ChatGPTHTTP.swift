@@ -182,7 +182,7 @@ struct ChatGPTHTTP: Sendable {
     private func authenticatedRequest(path: String, accessToken: String) -> URLRequest {
         var request = URLRequest(url: URL(string: ChatGPTIdentity.resource + "/" + path)!)
         request.setValue("Bearer " + accessToken, forHTTPHeaderField: "Authorization")
-        request.setValue("Tasks", forHTTPHeaderField: "User-Agent")
+        request.setValue("Takt", forHTTPHeaderField: "User-Agent")
         return request
     }
 

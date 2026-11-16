@@ -1,0 +1,196 @@
+import AppKit
+import CryptoKit
+import Observation
+
+struct NoteSyncVersion: Codable, Equatable, Sendable {
+    let revision: String
+    let localDigest: String
+}
+
+struct PlannerNote: Codable, Identifiable, Sendable {
+    var id = UUID()
+    var title = ""
+    var folder = "inbox"
+    var document = Data()
+    var text = ""
+    var pinned = false
+    var createdAt = Date()
+    var updatedAt = Date()
+    var deletedAt: Date?
+    var syncVersion: NoteSyncVersion?
+
+    var displayTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
+    func attributedText() -> NSAttributedString {
+        guard !document.isEmpty,
+              let value = NSAttributedString(rtfd: document, documentAttributes: nil) else {
+            return NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 16)])
+        }
+        return value
+    }
+}
+
+@MainActor @Observable
+final class NoteStore {
+    private(set) var notes: [PlannerNote] = []
+    private(set) var error: String?
+    private(set) var unreadable = false
+    var syncEnabled = false
+    private var remoteEdits: [UUID: UUID] = [:]
+    @ObservationIgnored private let url: URL?
+    @ObservationIgnored private var pending: [UUID: NSAttributedString] = [:]
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var dirty = false
+    @ObservationIgnored var syncQueued: (() -> Void)?
+
+    init(url: URL? = nil) {
+        self.url = url
+        guard let url, FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            notes = try JSONDecoder().decode([PlannerNote].self, from: Data(contentsOf: url))
+            try Self.validate(notes)
+        } catch {
+            self.error = error.localizedDescription
+            unreadable = true
+        }
+    }
+
+    static func validate(_ notes: [PlannerNote]) throws {
+        guard Set(notes.map(\.id)).count == notes.count else { throw BackupError.invalid }
+        for note in notes where !note.document.isEmpty {
+            guard NSAttributedString(rtfd: note.document, documentAttributes: nil) != nil else { throw BackupError.invalid }
+        }
+    }
+
+    func content(_ note: PlannerNote) -> NSAttributedString { pending[note.id] ?? note.attributedText() }
+    func remoteEdit(_ id: UUID) -> UUID? { remoteEdits[id] }
+
+    @discardableResult func create(folder: String) -> UUID? {
+        guard !unreadable else { return nil }
+        var note = PlannerNote()
+        note.folder = folder
+        notes.insert(note, at: 0)
+        dirty = true
+        _ = flush()
+        return note.id
+    }
+
+    func edit(_ id: UUID, content: NSAttributedString) {
+        guard !unreadable, notes.contains(where: { $0.id == id }) else { return }
+        pending[id] = NSAttributedString(attributedString: content)
+        scheduleSave()
+    }
+
+    func update(_ id: UUID, _ change: (inout PlannerNote) -> Void) {
+        guard !unreadable, let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        change(&notes[index])
+        notes[index].updatedAt = .now
+        dirty = true
+        scheduleSave()
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            self?.flush()
+        }
+    }
+
+    @discardableResult func flush() -> Bool {
+        saveTask?.cancel()
+        saveTask = nil
+        guard !unreadable else { return false }
+        guard dirty || !pending.isEmpty else { return true }
+        do {
+            var next = notes
+            for (id, value) in pending {
+                guard let index = next.firstIndex(where: { $0.id == id }) else { continue }
+                let data = try value.data(from: NSRange(location: 0, length: value.length),
+                                          documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
+                next[index].document = data
+                next[index].text = value.string
+                next[index].updatedAt = .now
+            }
+            try save(next)
+            pending.removeAll()
+            dirty = false
+            syncQueued?()
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
+    func restore(_ notes: [PlannerNote]) throws {
+        try Self.validate(notes)
+        guard self.notes.isEmpty, !unreadable else { throw BackupError.invalid }
+        try mergeLocal(notes)
+    }
+
+    func mergeLocal(_ source: [PlannerNote]) throws {
+        guard flush() else { throw BackupError.unsavedChanges }
+        let ids = Set(notes.map(\.id))
+        let additions = source.filter { !ids.contains($0.id) }.map { note in
+            var copy = note
+            copy.syncVersion = nil
+            return copy
+        }
+        if !additions.isEmpty { try save(notes + additions) }
+    }
+
+    func applyRemote(_ note: PlannerNote, revision: String) throws {
+        guard flush() else { throw BackupError.unsavedChanges }
+        try Self.validate([note])
+        var next = notes
+        var incoming = note
+        let digest = try Self.digest(Self.wireData(note))
+        incoming.syncVersion = NoteSyncVersion(revision: revision, localDigest: digest)
+        let previous = notes.first(where: { $0.id == note.id })
+        if let index = notes.firstIndex(where: { $0.id == note.id }) {
+            var local = notes[index]
+            let localDigest = try Self.digest(Self.wireData(local))
+            if digest != localDigest && localDigest != local.syncVersion?.localDigest {
+                local.id = UUID()
+                local.syncVersion = nil
+                next.append(local)
+            }
+            next[index] = incoming
+        } else {
+            next.append(incoming)
+        }
+        try save(next)
+        if let previous, previous.document != incoming.document || previous.text != incoming.text {
+            remoteEdits[note.id] = UUID()
+        }
+    }
+
+    func acknowledge(_ id: UUID, revision: String, digest: String) throws {
+        guard flush() else { throw BackupError.unsavedChanges }
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        var next = notes
+        next[index].syncVersion = NoteSyncVersion(revision: revision, localDigest: digest)
+        try save(next)
+    }
+
+    static func wireData(_ note: PlannerNote) throws -> Data {
+        var copy = note
+        copy.syncVersion = nil
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(copy)
+    }
+
+    static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func save(_ next: [PlannerNote]) throws {
+        if let url {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(next).write(to: url, options: .atomic)
+        }
+        notes = next
+        error = nil
+    }
+}

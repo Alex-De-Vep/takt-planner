@@ -260,7 +260,7 @@ final class AssistantCloudConnection {
                 if let hint = previous.tokens?.idToken { query.append(.init(name: "id_token_hint", value: hint)) }
                 else if let email = previous.email { query.append(.init(name: "login_hint", value: email)) }
             } else {
-                query.append(.init(name: "agent_name_hint", value: "Tasks"))
+                query.append(.init(name: "agent_name_hint", value: "Takt"))
             }
             url.queryItems = query
             return url.url.map { NSWorkspace.shared.open($0) } ?? false

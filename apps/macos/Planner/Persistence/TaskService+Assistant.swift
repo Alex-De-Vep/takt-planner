@@ -5,6 +5,24 @@ extension TaskService {
     func assistantTask(id: UUID) throws -> PlannerTask? {
         try context.fetch(FetchDescriptor<PlannerTask>(predicate: #Predicate { $0.id == id })).first
     }
+    // Сначала ищем точное название. В чат попадает только выбранная задача.
+    func assistantTasks(matching title: String) throws -> [PlannerTask] {
+        guard !title.isEmpty else { return [] }
+        var exact = FetchDescriptor<PlannerTask>(
+            predicate: #Predicate { $0.title == title },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        exact.fetchLimit = 8
+        let matches = try context.fetch(exact)
+        if !matches.isEmpty { return matches }
+        var partial = FetchDescriptor<PlannerTask>(
+            predicate: #Predicate { $0.title.localizedStandardContains(title) },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        partial.fetchLimit = exact.fetchLimit
+        return try context.fetch(partial)
+    }
+
     /// Полностью заполненная задача и подзадачи фиксируются одним save. UUID принадлежит действию.
     func createAssistantTask(_ action: AssistantAction, folders: [TaskFolder]) throws -> PlannerTask {
         if let existing = try assistantTask(id: action.id) { return existing }

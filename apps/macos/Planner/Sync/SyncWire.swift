@@ -96,6 +96,7 @@ struct SyncAPIError: Codable, LocalizedError, Sendable {
     let message: String
     let requestId: String?
     let retryAfterSeconds: Int?
+    var attemptsRemaining: Int? = nil
     var errorDescription: String? { message }
 }
 
@@ -111,7 +112,11 @@ struct SyncMutationResults: Codable, Sendable {
 }
 
 struct SyncConfig: Codable, Sendable {
-    struct Limits: Codable, Sendable { let maxBatchOperations: Int; let maxRequestBytes: Int }
+    struct Limits: Codable, Sendable {
+        let maxBatchOperations: Int
+        let maxRequestBytes: Int
+        var maxNoteBytes: Int? = nil
+    }
     let protocolVersion: Int
     let serverTime: String
     let limits: Limits
@@ -130,7 +135,7 @@ struct SyncLibrary: Codable, Sendable {
 }
 
 enum SyncProblem: LocalizedError {
-    case invalidResponse, incompatibleProtocol, signInRequired, oversizedMutation, accountMismatch
+    case invalidResponse, incompatibleProtocol, signInRequired, oversizedMutation, accountMismatch, libraryReset
     var errorDescription: String? {
         switch self {
         case .invalidResponse: "Сервер вернул неожиданные данные."
@@ -138,6 +143,7 @@ enum SyncProblem: LocalizedError {
         case .signInRequired: "Войдите в аккаунт повторно."
         case .oversizedMutation: "Правка превышает допустимый размер запроса."
         case .accountMismatch: "Ответ относится к другой библиотеке."
+        case .libraryReset: "Облачная библиотека изменилась. Локальные данные сохранены. Создайте резервную копию перед повторным подключением."
         }
     }
 }

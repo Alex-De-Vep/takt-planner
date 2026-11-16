@@ -4,6 +4,7 @@ import SwiftData
 /// Единственная точка настройки SwiftData: локальный файл, версия схемы и первый запуск.
 enum PlannerPersistence {
     static let schema = Schema(versionedSchema: PlannerSchemaV6.self)
+    static let restoredLibraryKey = "planner.restoredLibrary"
 
     static func makeContainer(at url: URL? = nil, inMemory: Bool = false) throws -> ModelContainer {
         let configuration: ModelConfiguration
@@ -37,6 +38,11 @@ enum PlannerPersistence {
     static func defaults() -> UserDefaults {
         if let testID, let value = UserDefaults(suiteName: "local.planner.tests.\(testID)") { return value }
         return .standard
+    }
+
+    static func restoredLibraryDirectory(_ id: UUID) throws -> URL {
+        try liveStoreURL().deletingLastPathComponent()
+            .appending(path: "Restored/\(id.uuidString)", directoryHint: .isDirectory)
     }
 
     @MainActor

@@ -51,7 +51,7 @@ final class AssistantGatewayConnections {
                     .init(name: "code_challenge", value: ChatGPTIdentity.challenge(verifier)),
                     .init(name: "code_challenge_method", value: "S256"),
                     .init(name: "state", value: nonce),
-                    .init(name: "key_label", value: "Tasks")
+                    .init(name: "key_label", value: "Takt")
                 ]
                 return url?.url.map { NSWorkspace.shared.open($0) } ?? false
             }

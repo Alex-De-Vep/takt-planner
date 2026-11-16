@@ -1,6 +1,12 @@
 import Foundation
 
 extension AssistantService {
+    var hasAvailableCloudModel: Bool {
+        (cloud.isConnected && !cloud.models.isEmpty) || gateways.catalogs.contains { gateway, models in
+            !models.isEmpty && gateways.profiles[gateway] != nil && !gateways.busy.contains(gateway)
+        }
+    }
+
     var cloudModel: ChatGPTModel? {
         guard current?.usesCloudModel == true, let settings = current?.cloud, settings.gateway == nil else { return nil }
         return cloud.models.first { $0.id == settings.modelID } ?? cloud.models.first
@@ -64,11 +70,6 @@ extension AssistantService {
         changeModel { $0.chooseModel(id: id, efforts: model.efforts, gateway: gateway, profileID: profile.id) }
     }
 
-    func chooseLocalModel() {
-        changeModel { $0.chooseModel(nil) }
-        model.restoreIfInstalled()
-    }
-
     private func changeModel(_ update: (inout AssistantThread) -> Void) {
         guard !generating, !applying, !storageFailed, let i = currentIndex else { return }
         let previous = archive.threads[i]
@@ -84,11 +85,72 @@ extension AssistantService {
         persist()
     }
 
-    func sendCloud(_ input: String, context: AssistantContext, tasks: TaskService?) {
+    func clearDraftFocus() {
+        guard !generating, !applying, let index = currentIndex else { return }
+        let previous = archive.threads[index]
+        archive.threads[index].focusedDraftID = nil
+        if !persist() { archive.threads[index] = previous }
+    }
+
+    // Просмотр черновиков и выбор папки выполняются по данным текущего чата.
+    func handleDraftCommand(_ input: String, context: AssistantContext) -> Bool {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let index = currentIndex, var thread = current else { return false }
+        let show = AssistantIntentPolicy.matches(text,
+            #"^(?:покажи(?:те)?\s+(?:все\s+)?(?:задачи|черновики)(?:\s+(?:этого\s+)?чата)?(?:\s+снова)?|show\s+(?:(?:all|the)\s+)?(?:tasks|drafts)(?:\s+in\s+this\s+chat)?(?:\s+again)?)[.!?]?$"#)
+        let taskIndexes = thread.actions.indices.filter {
+            let action = thread.actions[$0]
+            return action.proposal.kind == .task && action.included && [.pending, .failed].contains(action.status)
+        }
+        let bulk = !taskIndexes.isEmpty && AssistantIntentPolicy.matches(text,
+            #"^(?:(?:создай|сохрани|добавь)\s+все\s+(?:задачи|черновики)|(?:create|save|add)\s+all\s+(?:tasks|drafts))\b"#)
+        let english = context.language == "en"
+        let message: String
+        if show {
+            let hasItems = !thread.visibleActions.isEmpty || thread.textEdits?.contains {
+                $0.hasChanges && $0.status == .pending
+            } == true
+            message = english ? (hasItems ? "Here are the tasks in this chat." : "There are no task cards in this chat yet.")
+                : (hasItems ? "Вот задачи этого чата." : "В этом чате пока нет карточек задач.")
+        } else if bulk {
+            let destination = AssistantIntentPolicy.destination(in: text, choices: context.folders.map { ($0.id, $0.name) }, calendar: false)
+            if let folderID = destination.id, let name = destination.name {
+                for taskIndex in taskIndexes {
+                    thread.actions[taskIndex].proposal.folderID = folderID
+                }
+                message = english ? "The drafts are ready for ‘\(name)’. Confirm to create them."
+                    : "Черновики готовы для папки «\(name)». Подтвердите создание."
+            } else if destination.specified {
+                message = english ? "I couldn’t identify that folder. You can choose a folder in each card."
+                    : "Не удалось определить папку. Её можно выбрать в карточках задач."
+            } else {
+                message = english ? "Review the drafts and confirm to create them." : "Проверьте черновики и подтвердите создание."
+            }
+        } else { return false }
+        recordLocalReply(text, reply: .init(role: .assistant, text: message), thread: thread, at: index)
+        return true
+    }
+
+    func recordLocalReply(_ text: String, reply: AssistantMessage, thread: AssistantThread, at index: Int) {
+        var updated = thread
+        updated.draft = ""
+        if updated.messages.isEmpty { updated.title = String(text.prefix(60)) }
+        updated.messages.append(.init(role: .user, text: text))
+        updated.messages.append(reply)
+        let previous = archive.threads[index]
+        archive.threads[index] = updated
+        error = nil
+        if !persist() { archive.threads[index] = previous }
+    }
+
+    func sendCloud(_ input: String, context: AssistantContext, tasks: TaskService?,
+                   calendar: CalendarService? = nil, visibleCalendarIDs: Set<String>? = nil,
+                   note: AssistantNoteContext? = nil) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !generating, !applying, !storageFailed,
               let i = currentIndex, current?.usesCloudModel == true, let settings = current?.cloud else { return }
         guard text.count <= 8000 else { error = "Сообщение слишком длинное. Сократите его до 8000 символов."; return }
+        if let calendar, handleCalendarChoice(text, calendar: calendar) { return }
         guard canSendCloud else {
             error = settings.gateway == nil ? "Подключите аккаунт ChatGPT для этого диалога."
                 : "Подключите сервис и выберите доступную модель."
@@ -104,27 +166,70 @@ extension AssistantService {
                 context.now = previous.now
                 context.timeZoneID = previous.timeZoneID
             }
+            var requestedTask = context.taskID.flatMap(UUID.init(uuidString:))
+            var modelInput = text
+            if tools, let tasks {
+                if lastCloudMessageIsCurrent, let previous = archive.threads[i].messages.last,
+                   let lookup = previous.taskLookup, let options = previous.questions.first?.options,
+                   let index = options.firstIndex(of: text) ?? Int(text).flatMap({ $0 > 0 && $0 <= options.count ? $0 - 1 : nil }),
+                   lookup.taskIDs.indices.contains(index) {
+                    requestedTask = lookup.taskIDs[index]
+                    modelInput = lookup.request
+                } else if let query = AssistantIntentPolicy.savedTaskQuery(text) {
+                    let matches = try tasks.assistantTasks(matching: query)
+                    if matches.count != 1 {
+                        let options = matches.enumerated().map { index, task in
+                            "\(index + 1). \(task.title)" + (task.folder.map { " · " + $0.name } ?? "")
+                        }
+                        let message = context.language == "en"
+                            ? (matches.isEmpty ? "I couldn’t find a task by that name." : "Which task should I update?")
+                            : (matches.isEmpty ? "Я не нашёл задачу с таким названием." : "Какую задачу обновить?")
+                        let lookup = matches.isEmpty ? nil : AssistantTaskLookup(request: text, taskIDs: matches.map(\.id))
+                        let reply = AssistantMessage(role: .assistant, text: options.isEmpty ? message : "",
+                            questions: options.isEmpty ? [] : [.init(text: message, options: options)], taskLookup: lookup)
+                        recordLocalReply(text, reply: reply, thread: archive.threads[i], at: i)
+                        return
+                    }
+                    requestedTask = matches.first?.id
+                }
+            }
+            var thread = archive.threads[i]
+            let numberedDraft = AssistantIntentPolicy.referencedDraftNumber(text).flatMap { number in
+                thread.numberedTaskDrafts.dropFirst(number - 1).first
+            }
+            if tools, requestedTask == nil, let numberedDraft, [.pending, .failed].contains(numberedDraft.status),
+               thread.cloud?.draftIDs?.contains(numberedDraft.id) ?? true {
+                thread.focusedDraftID = numberedDraft.id
+                thread.activeTextEditID = nil
+            }
             let edit: AssistantTextEdit?
             if !tools { edit = nil }
-            else if let active = activeTextEdit {
-                guard active.committed == nil else { return }
+            else if let id = requestedTask, let tasks {
+                if let pending = archive.threads[i].textEdits?.last(where: {
+                    $0.target == .savedTask && $0.before.id == id && $0.status == .pending && $0.committed == nil
+                }) {
+                    edit = pending
+                } else {
+                    guard let task = try tasks.assistantTask(id: id) else { throw AssistantFailure(message: "Задача больше не существует.") }
+                    edit = AssistantTextEdit(target: .savedTask, before: try tasks.assistantTextSnapshot(task))
+                }
+            } else if let active = activeTextEdit, active.id == thread.activeTextEditID, active.committed == nil {
                 edit = active
-            } else if let id = context.taskID.flatMap(UUID.init(uuidString:)), let tasks {
-                guard let task = try tasks.assistantTask(id: id) else { throw AssistantFailure(message: "Задача больше не существует.") }
-                edit = AssistantTextEdit(target: .savedTask, before: try tasks.assistantTextSnapshot(task))
             } else { edit = nil }
 
             let request: AssistantCloudRequest
             if let profile, let model = gatewayModel {
-                request = try AssistantCloudRequest(thread: archive.threads[i], text: text, context: context, edit: edit,
-                                                    modelID: model.id, effort: cloudEffort, gateway: profile.gateway, supportsTools: tools)
+                request = try AssistantCloudRequest(thread: thread, text: modelInput, context: context, edit: edit,
+                                                    modelID: model.id, effort: cloudEffort, gateway: profile.gateway, supportsTools: tools, note: note)
             } else if settings.gateway == nil, let model = cloudModel {
-                request = try AssistantCloudRequest(thread: archive.threads[i], text: text, context: context, edit: edit,
-                                                    model: model, effort: cloudEffort)
+                request = try AssistantCloudRequest(thread: thread, text: modelInput, context: context, edit: edit,
+                                                    model: model, effort: cloudEffort, note: note)
             } else { return }
             let previous = archive
+            archive.threads[i] = thread
             if profile == nil { archive.threads[i].cloud?.accountID = settings.accountID ?? accountID }
             // Для следующего уточнения сохраняем только время и язык, без снимка календарей.
+            let submittedText = modelInput
             var localContext = context
             localContext.calendars = []; localContext.defaultCalendarID = nil
             archive.threads[i].clarificationContext = localContext
@@ -154,8 +259,14 @@ extension AssistantService {
                     } else { return }
                     try Task.checkCancellation()
                     guard requestID == token, let index = archive.threads.firstIndex(where: { $0.id == threadID }) else { return }
-                    let updated = try Self.cloudReply(completion.response, to: archive.threads[index], drafts: request.drafts,
-                                                      text: text, context: localContext, edit: edit, usage: completion.usage)
+                    let updated: AssistantThread
+                    if let operation = completion.response.calendarRequest, tools, let calendar {
+                        updated = Self.calendarReply(operation, to: archive.threads[index],
+                            context: context, calendar: calendar, visibleIDs: visibleCalendarIDs, usage: completion.usage)
+                    } else {
+                        updated = try Self.cloudReply(completion.response, to: archive.threads[index], drafts: request.drafts,
+                                                          text: submittedText, context: localContext, edit: edit, usage: completion.usage)
+                    }
                     let previous = archive.threads[index]
                     archive.threads[index] = updated
                     if !persist() { archive.threads[index] = previous }
@@ -175,11 +286,17 @@ extension AssistantService {
                            text: String, context: AssistantContext, edit: AssistantTextEdit?, usage: AssistantCloudUsage? = nil) throws -> AssistantThread {
         var thread = original
         var message = reply.message
-        let questions = reply.questions ?? []
+        var resultActionIDs: [UUID] = []
+        var resultEditID: UUID?
+        var questions = reply.questions ?? []
         if questions.isEmpty {
             let destination = AssistantIntentPolicy.destination(in: text,
                 choices: context.folders.map { ($0.id, $0.name) }, calendar: false,
                 replyingToQuestion: thread.messages.dropFirst(thread.cloud?.historyStart ?? 0).dropLast().last?.questions.isEmpty == false)
+            if destination.specified && destination.id == nil, reply.actions?.isEmpty == false {
+                questions = [.init(text: context.language == "en" ? "Which folder should I use?" : "В какую папку добавить задачи?",
+                                   options: context.folders.map(\.name))]
+            }
             for var proposal in reply.actions ?? [] {
                 guard proposal.kind == .task, proposal.linkTo == nil else { throw AssistantCloudStream.invalid }
                 let existing = drafts[proposal.key].flatMap { id in
@@ -188,16 +305,25 @@ extension AssistantService {
                 if proposal.key.hasPrefix("draft_"), existing == nil { throw AssistantCloudStream.invalid }
                 let old = existing.map { thread.actions[$0] }
                 proposal.key = old?.proposal.key ?? UUID().uuidString
-                proposal.folderID = destination.specified ? destination.id : (old?.proposal.folderID ?? context.defaultFolderID)
+                if destination.specified { proposal.folderID = destination.id }
+                else if let old { proposal.folderID = old.proposal.folderID }
+                else { proposal.folderID = context.defaultFolderID }
                 if AssistantIntentPolicy.noDeadline(text) { proposal.date = nil; proposal.time = nil }
                 if let existing, var old {
                     old.proposal = proposal; old.error = nil; old.status = .pending
                     thread.actions[existing] = old
+                    resultActionIDs.append(old.id)
                 } else {
                     let action = AssistantAction(proposal: proposal, context: context)
                     thread.actions.append(action)
+                    resultActionIDs.append(action.id)
                     thread.cloud?.draftIDs?.insert(action.id)
                 }
+            }
+            if !resultActionIDs.isEmpty && reply.textEdit == nil {
+                thread.activeTextEditID = nil
+                thread.focusedEventID = nil
+                thread.focusedDraftID = resultActionIDs.count == 1 ? resultActionIDs.first : nil
             }
             if let change = reply.textEdit {
                 if var edit {
@@ -209,6 +335,9 @@ extension AssistantService {
                         else { edits.append(edit) }
                         thread.textEdits = edits
                         thread.activeTextEditID = edit.id
+                        thread.focusedDraftID = nil
+                        thread.focusedEventID = nil
+                        resultEditID = edit.id
                     } else if message.isEmpty {
                         message = context.language == "ru" ? "Текст не изменился." : "The text is unchanged."
                     }
@@ -222,7 +351,9 @@ extension AssistantService {
         if message.isEmpty {
             message = context.language == "ru" ? "Проверьте предложение в чате." : "Review the proposal in the chat."
         }
-        thread.messages.append(.init(role: .assistant, text: message, questions: questions, cloudUsage: usage))
+        thread.messages.append(.init(role: .assistant, text: message, questions: questions, cloudUsage: usage,
+                                     resultActionID: resultActionIDs.count == 1 && resultEditID == nil ? resultActionIDs.first : nil,
+                                     resultEditID: resultEditID))
         return thread
     }
 }

@@ -13,6 +13,7 @@ struct ChecklistTextEditor: NSViewRepresentable {
     let submit: () -> Void
     let toggleCompleted: () -> Void
     let focusChanged: (Bool) -> Void
+    var endEditing: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -27,6 +28,7 @@ struct ChecklistTextEditor: NSViewRepresentable {
         coordinator.host = host
         coordinator.changed = { text = $0 }
         coordinator.focusChanged = focusChanged
+        coordinator.endEditing = endEditing
         editor.delegate = coordinator
         editor.submit = submit
         editor.toggleCompleted = toggleCompleted
@@ -68,16 +70,20 @@ struct ChecklistTextEditor: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ host: TaskEditorHost, coordinator: Coordinator) {
+        let endEditing = host.ownsEditor ? coordinator.endEditing : nil
         host.detachEditor()
         coordinator.host = nil
         coordinator.changed = nil
         coordinator.focusChanged = nil
+        coordinator.endEditing = nil
+        if let endEditing { Task { @MainActor in endEditing() } }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var host: TaskEditorHost?
         var changed: ((String) -> Void)?
         var focusChanged: ((Bool) -> Void)?
+        var endEditing: (() -> Void)?
         var completed: Bool?
 
         func textDidChange(_ notification: Notification) {
@@ -96,6 +102,7 @@ struct ChecklistTextEditor: NSViewRepresentable {
         func textDidEndEditing(_ notification: Notification) {
             guard let host, host.ownsEditor, notification.object as? NSTextView === host.editor else { return }
             focusChanged?(false)
+            endEditing?()
         }
     }
 }

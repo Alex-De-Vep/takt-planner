@@ -94,6 +94,7 @@ struct PlainTextTaskEditor: NSViewRepresentable {
     var submit: () -> Void = {}
     let toggleCompleted: () -> Void
     var minimumHeight: CGFloat? = nil
+    var endEditing: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> TaskEditorHost {
@@ -106,6 +107,7 @@ struct PlainTextTaskEditor: NSViewRepresentable {
         let view = host.editor
         context.coordinator.host = host
         context.coordinator.changed = { text = $0 }
+        context.coordinator.endEditing = endEditing
         view.delegate = context.coordinator
         view.isEditable = true
         view.isSelectable = true
@@ -115,9 +117,11 @@ struct PlainTextTaskEditor: NSViewRepresentable {
         view.setAccessibilityLabel(placeholder)
         // Не присваиваем строку при каждом рендере: это сохраняет выделение, IME и историю отмены.
         if !view.hasMarkedText() {
-            if view.string != text { view.clearTaskSelection() }
-            view.synchronizeDocumentText(text)
-            host.invalidateIntrinsicContentSize()
+            let documentText = text
+            let replacesText = view.string != documentText
+            if replacesText { view.clearTaskSelection() }
+            view.synchronizeDocumentText(documentText)
+            if replacesText { host.invalidateIntrinsicContentSize() }
         }
         view.needsDisplay = true
         if requestFocus {
@@ -131,19 +135,28 @@ struct PlainTextTaskEditor: NSViewRepresentable {
                          minimumHeight: minimumHeight ?? (isTitle ? 30 : 160))
     }
     static func dismantleNSView(_ host: TaskEditorHost, coordinator: Coordinator) {
+        let endEditing = host.ownsEditor ? coordinator.endEditing : nil
         host.detachEditor()
         coordinator.host = nil
         coordinator.changed = nil
+        coordinator.endEditing = nil
+        // Dismantling can happen inside a SwiftUI update.
+        if let endEditing { Task { @MainActor in endEditing() } }
     }
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var host: TaskEditorHost?
         var changed: ((String) -> Void)?
+        var endEditing: (() -> Void)?
         func textDidChange(_ notification: Notification) {
             guard let host, host.ownsEditor, let view = notification.object as? TaskTextView,
                   view === host.editor else { return }
             view.needsDisplay = true; view.invalidateIntrinsicContentSize()
             host.invalidateIntrinsicContentSize()
             changed?(view.string)
+        }
+        func textDidEndEditing(_ notification: Notification) {
+            guard let host, host.ownsEditor, notification.object as? NSTextView === host.editor else { return }
+            endEditing?()
         }
     }
 }

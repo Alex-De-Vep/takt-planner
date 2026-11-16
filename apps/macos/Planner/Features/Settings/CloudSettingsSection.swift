@@ -73,8 +73,7 @@ struct AccountForm: View {
     @State private var challengeID: String?
     @State private var error: String?
     @State private var working = false
-    @State private var retryAt = Date.distantPast
-    @State private var resendAt = Date.distantPast
+    @State private var loginAttemptsRemaining: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -94,7 +93,6 @@ struct AccountForm: View {
                 if mode == .verify || mode == .resetCode {
                     Text(strings["Введите восьмизначный код из письма."])
                         .foregroundStyle(.secondary)
-                    TextField(strings["Код из письма"], text: $code).textContentType(.oneTimeCode)
                 }
                 if mode != .reset {
                     SecureField(strings[mode == .resetCode ? "Новый пароль" : "Пароль"], text: $password)
@@ -104,20 +102,35 @@ struct AccountForm: View {
                 if mode == .register || mode == .resetCode {
                     Text(strings["От 12 до 128 символов."]).font(.caption).foregroundStyle(.secondary)
                 }
+                if mode == .verify || mode == .resetCode {
+                    TextField(strings["Код из письма"], text: $code).textContentType(.oneTimeCode)
+                }
                 if let error { Text(strings[error]).foregroundStyle(.red) }
                 TimelineView(.periodic(from: .now, by: 1)) { time in
-                    let remaining = max(0, Int(ceil(retryAt.timeIntervalSince(time.date))))
-                    HStack {
-                        Button(actionTitle) { submit() }
-                            .buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.defaultAction)
-                            .disabled(!valid || remaining > 0)
-                            .accessibilityIdentifier("sync-submit")
-                        if mode == .verify {
-                            Button(strings["Отправить код снова"]) { requestCode(resend: true) }
-                                .disabled(remaining > 0 || time.date < resendAt)
+                    let remaining = secondsUntilRetry(primaryAction, at: time.date)
+                    let codeWait = secondsUntilRetry(.requestCode, at: time.date)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if mode == .login, remaining == 0, let attempts = loginAttemptsRemaining, (1...3).contains(attempts) {
+                            Text(strings.format("Осталось попыток входа: %d", attempts))
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        if remaining > 0 { Text("\(remaining) s").font(.caption).monospacedDigit() }
+                        if remaining > 0 {
+                            countdown("Повторить через %@", seconds: remaining)
+                        }
+                        if primaryAction != .requestCode, codeWait > 0 {
+                            countdown("Новый код через %@", seconds: codeWait)
+                        }
+                        HStack {
+                            Button(actionTitle) { submit() }
+                                .buttonStyle(.borderedProminent)
+                                .keyboardShortcut(.defaultAction)
+                                .disabled(!valid || remaining > 0)
+                                .accessibilityIdentifier("sync-submit")
+                            if mode == .verify || mode == .resetCode {
+                                Button(strings["Отправить код снова"]) { requestCode(resend: true) }
+                                    .disabled(codeWait > 0)
+                            }
+                        }
                     }
                 }
                 HStack {
@@ -142,6 +155,24 @@ struct AccountForm: View {
         .padding(26)
         .frame(width: 440)
         .onAppear { if mode == .login { email = cloud.signInEmail ?? "" } }
+        .onChange(of: email) { loginAttemptsRemaining = nil }
+    }
+
+    private var primaryAction: CloudWorkspace.AccountAction {
+        switch mode {
+        case .login: .signIn
+        case .register, .reset: .requestCode
+        case .verify, .resetCode: .confirmCode
+        }
+    }
+
+    private func secondsUntilRetry(_ action: CloudWorkspace.AccountAction, at date: Date) -> Int {
+        max(0, Int(ceil(cloud.retryDeadline(for: action, email: email).timeIntervalSince(date))))
+    }
+
+    private func countdown(_ key: String, seconds: Int) -> some View {
+        let time = String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        return Text(strings.format(key, time)).font(.caption).monospacedDigit().foregroundStyle(.secondary)
     }
 
     private var title: String {
@@ -181,6 +212,7 @@ struct AccountForm: View {
         password = ""
         code = ""
         error = nil
+        loginAttemptsRemaining = nil
     }
 
     private func connect(importLocal: Bool) {
@@ -192,13 +224,10 @@ struct AccountForm: View {
 
     private func requestCode(resend: Bool) {
         run {
-            let reset = mode == .reset
+            let reset = mode == .reset || mode == .resetCode
             let path = reset ? "/v1/auth/password-reset/request" :
                 (resend ? "/v1/auth/resend-verification" : "/v1/auth/register")
-            challengeID = try await cloud.challenge(email: email, password: reset || resend ? nil : password, path: path)
-            code = ""
-            mode = reset ? .resetCode : .verify
-            resendAt = .now.addingTimeInterval(60)
+            try await sendCode(path: path, password: reset || resend ? nil : password, next: reset ? .resetCode : .verify)
         }
     }
 
@@ -209,16 +238,17 @@ struct AccountForm: View {
             run {
                 do { try await signIn() }
                 catch let failure as SyncHTTPFailure where failure.problem.code == "email_not_verified" {
-                    challengeID = try await cloud.challenge(email: email, password: nil, path: "/v1/auth/resend-verification")
-                    mode = .verify
-                    resendAt = .now.addingTimeInterval(60)
+                    guard secondsUntilRetry(.requestCode, at: .now) == 0 else { return }
+                    try await sendCode(path: "/v1/auth/resend-verification", password: nil, next: .verify)
                 }
             }
         case .verify, .resetCode:
             guard let challengeID else { return }
             run {
                 let reset = mode == .resetCode
-                try await cloud.confirm(challengeID: challengeID, code: code, password: password, reset: reset)
+                try await withRetry(.confirmCode) {
+                    try await cloud.confirm(challengeID: challengeID, code: code, password: password, reset: reset)
+                }
                 if reset { changeMode(.login) }
                 else {
                     mode = .login
@@ -228,10 +258,34 @@ struct AccountForm: View {
         }
     }
 
+    private func sendCode(path: String, password: String?, next: Mode) async throws {
+        challengeID = try await withRetry(.requestCode) {
+            try await cloud.challenge(email: email, password: password, path: path)
+        }
+        code = ""
+        mode = next
+        cloud.postpone(.requestCode, email: email, seconds: 60)
+    }
+
     private func signIn() async throws {
-        try await cloud.signIn(email: email, password: password, activeService: service)
+        loginAttemptsRemaining = nil
+        try await withRetry(.signIn) {
+            try await cloud.signIn(email: email, password: password, activeService: service)
+        }
         password = ""
         if cloud.setup == nil { dismiss() }
+    }
+
+    private func withRetry<T>(_ action: CloudWorkspace.AccountAction, _ operation: () async throws -> T) async throws -> T {
+        do {
+            return try await operation()
+        } catch let failure as SyncHTTPFailure {
+            if let delay = failure.problem.retryAfterSeconds, delay > 0 {
+                cloud.postpone(action, email: email, seconds: delay)
+            }
+            if action == .signIn { loginAttemptsRemaining = failure.problem.attemptsRemaining }
+            throw failure
+        }
     }
 
     private func run(_ operation: @escaping @MainActor () async throws -> Void) {
@@ -242,8 +296,9 @@ struct AccountForm: View {
             defer { working = false }
             do { try await operation() }
             catch let failure as SyncHTTPFailure {
-                if let delay = failure.problem.retryAfterSeconds { retryAt = .now.addingTimeInterval(Double(delay)) }
-                error = failure.problem.message
+                if failure.status != 429 || failure.problem.retryAfterSeconds == nil {
+                    error = failure.problem.message
+                }
             } catch { self.error = error.localizedDescription }
         }
     }

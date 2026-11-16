@@ -120,10 +120,44 @@ final class TaskDeletionUITests: XCTestCase {
         XCTAssertFalse(field("task-title-field", in: app).exists)
     }
 
+    func testDeleteKeyConfirmsFolderDeletionAndMovesTasksToInbox() {
+        let app = launchIsolatedApp()
+        app.buttons["new-folder-button"].click()
+        let name = app.textFields["folder-name-field"]
+        XCTAssertTrue(name.waitForExistence(timeout: 3))
+        name.typeText("Удаляемая папкаX" + XCUIKeyboardKey.delete.rawValue)
+        assertValue("Удаляемая папка", of: name)
+        app.buttons["save-folder-button"].click()
+
+        let row = field("folder-row-Удаляемая папка", in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 3))
+        createTask("Сохранить после удаления папки", in: app)
+        row.click()
+        app.typeText(XCUIKeyboardKey.delete.rawValue)
+        let prompt = app.staticTexts["Удалить папку?"].firstMatch
+        XCTAssertTrue(prompt.waitForExistence(timeout: 3))
+        app.buttons["Отмена"].firstMatch.click()
+        XCTAssertTrue(row.exists)
+
+        row.click()
+        app.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertTrue(prompt.waitForExistence(timeout: 3))
+        app.buttons["Удалить папку"].firstMatch.click()
+        let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 3), .completed)
+        XCTAssertTrue(app.staticTexts["Сохранить после удаления папки"].firstMatch.waitForExistence(timeout: 3))
+
+        field("sidebar-inbox", in: app).click()
+        app.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertFalse(prompt.exists)
+        XCTAssertTrue(app.staticTexts["Сохранить после удаления папки"].firstMatch.exists)
+    }
+
     private func launchIsolatedApp() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchEnvironment["PLANNER_UI_TEST_LIBRARY"] = UUID().uuidString
+        app.launchEnvironment["PLANNER_UI_TEST_CALENDAR"] = "1"
         app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
         app.launch()
         XCTAssertTrue(app.buttons["new-task-button"].waitForExistence(timeout: 10))

@@ -1,5 +1,5 @@
 /* Английское название приложения для системных интерфейсов. */
-"CFBundleDisplayName" = "Tasks";
-"CFBundleName" = "Tasks";
+"CFBundleDisplayName" = "Takt";
+"CFBundleName" = "Takt";
 
-"NSCalendarsFullAccessUsageDescription" = "Tasks needs access to your calendars to display events and schedule time for tasks.";
+"NSCalendarsFullAccessUsageDescription" = "Takt needs access to your calendars to display events and schedule time for tasks.";

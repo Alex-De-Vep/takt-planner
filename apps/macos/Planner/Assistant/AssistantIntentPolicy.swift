@@ -54,6 +54,31 @@ enum AssistantIntentPolicy {
             (0..<match.numberOfRanges).map { match.range(at: $0).location == NSNotFound ? "" : ns.substring(with: match.range(at: $0)) }
         }
     }
+    static func referencesOpenTask(_ text: String) -> Bool {
+        matches(text, #"(?:эт[уаой]{1,2}|открыт[а-я]*|выбран[а-я]*)\s+задач|(?:this|current|open|selected)\s+task"#)
+    }
+
+    // Номер из карточки сохраняет цель и для реплик без изменений.
+    static func referencedDraftNumber(_ text: String) -> Int? {
+        let references = groups(text, pattern: #"(?<!\w)(?:[#№]\s*|(?:задач[а-я]*|черновик[а-я]*|task|draft)\s+(?:номер\s+|number\s+)?)([1-9][0-9]*)(?!\w)"#)
+        if references.count == 1, let number = Int(references[0][1]) { return number }
+        let words = [#"перв[а-я]+|first"#, #"втор[а-я]+|second"#, #"треть[а-я]+|third"#,
+                     #"четв[её]рт[а-я]+|fourth"#, #"пят[а-я]+|fifth"#]
+        let ordinals = words.indices.filter {
+            matches(text, #"\b(?:"# + words[$0] + #")\s+(?:задач[а-я]+|черновик[а-я]*|task|draft)\b"#)
+        }
+        return ordinals.count == 1 ? ordinals[0] + 1 : nil
+    }
+
+    static func savedTaskQuery(_ text: String) -> String? {
+        let quoted = #"(?:задач[ауиеё]|task)\s+[«"“]([^»"”]+)[»"”]"#
+        let edit = #"^\s*(?:найди|открой|улучши|сократи|уточни|доработай|переформулируй|перепиши|распиши|разбей|переименуй|измени|обнови|find|open|improve|shorten|refine|rewrite|expand|split|rename|edit|update)\b"#
+        guard matches(text, edit) else { return nil }
+        let named = #"^\s*(?:найди\s+задачу\s+(?:про\s+|с\s+названием\s+)?|find\s+(?:the\s+)?task\s+(?:about\s+|called\s+)?)(.+?)(?:\s+и\s+(?:сократи|улучши|уточни|доработай|переформулируй|перепиши|распиши|разбей|переименуй|измени|обнови)\b|\s+and\s+(?:shorten|improve|refine|rewrite|expand|split|rename|edit|update)\b|[.!?]*$)"#
+        return (groups(text, pattern: quoted).first ?? groups(text, pattern: named).first)?[1]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func destination(in text: String, choices: [(id: String, name: String)], calendar: Bool, replyingToQuestion: Bool = false) -> Destination {
         let exact = choices.filter { folded($0.name) == folded(text.trimmingCharacters(in: .whitespacesAndNewlines)) }
         if replyingToQuestion, exact.count == 1 { return Destination(specified: true, id: exact[0].id, name: exact[0].name) }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Собирает обновление «Задач» для Apple silicon с прежним идентификатором и проверкой DMG."""
+"""Собирает Takt для Apple Silicon с прежним идентификатором и проверяет DMG."""
 from build_ai_preview import main
 
 if __name__ == "__main__":

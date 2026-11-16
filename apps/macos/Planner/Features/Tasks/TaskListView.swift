@@ -249,6 +249,13 @@ struct TaskListView: View {
                         focusedList = area
                     }
                     return payload.provider()
+                } preview: {
+                    // Под курсором показываем значок документа вместо снимка строки.
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 30))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(PlannerStyle.accent)
+                        .frame(width: 40, height: 44)
                 }
                 .contextMenu {
                     TaskMoveMenu(task: task, folders: folders, move: { move(task, $0) })

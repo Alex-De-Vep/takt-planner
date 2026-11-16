@@ -10,19 +10,21 @@ final class AssistantService {
     var applying = false
     var error: String?
     var storageFailed = false
-    let model: ModelManager
+    let localModel: ModelManager?
     let cloud = AssistantCloudConnection()
     let gateways = AssistantGatewayConnections()
     var cloudPreview = ""
     @ObservationIgnored private let store: AssistantStore
+    @ObservationIgnored private var unsavedDrafts: [UUID: AssistantStore.Draft] = [:]
     @ObservationIgnored var generation: Task<Void, Never>?
     var requestID = UUID()
     var currentIndex: Int? { archive.threads.firstIndex { $0.id == archive.currentID } }
     var current: AssistantThread? { currentIndex.map { archive.threads[$0] } }
 
-    init(model: ModelManager = ModelManager(), store: AssistantStore = AssistantStore()) {
-        self.model = model; self.store = store
-        model.cancelGeneration = { [weak self] in self?.stop() }
+    init(model: ModelManager? = nil, store: AssistantStore = AssistantStore()) {
+        // Локальный движок доступен только при явной подстановке в тестах.
+        self.localModel = model; self.store = store
+        model?.cancelGeneration = { [weak self] in self?.stop() }
         do {
             archive = try store.load()
             // После аварии task UUID позволяет восстановление. Неизвестный результат EventKit требует проверки.
@@ -41,42 +43,86 @@ final class AssistantService {
         } catch { self.error = error.localizedDescription; storageFailed = true }
     }
     @discardableResult func persist() -> Bool {
-        guard !storageFailed else { return false }
+        guard !storageFailed, flushDrafts() else { return false }
         do { try store.save(archive); return true }
         catch { self.error = error.localizedDescription; return false }
     }
     func newConversation() {
         guard !generating, !applying, !storageFailed else { return }
         error = nil
-        let thread = AssistantThread()
-        archive.threads.insert(thread, at: 0); archive.currentID = thread.id; persist()
+        let previous = archive
+        let thread = emptyConversation()
+        archive.threads.insert(thread, at: 0)
+        archive.currentID = thread.id
+        if !persist() { archive = previous }
     }
     func selectConversation(_ id: UUID) { guard !generating, !applying else { return }; error = nil; archive.currentID = id; persist() }
-    func setDraft(_ text: String) { guard let i = currentIndex else { return }; archive.threads[i].draft = text; persist() }
+    func draft(for id: UUID) -> String { archive.threads.first { $0.id == id }?.draft ?? "" }
+
+    func setDraft(_ text: String, for id: UUID? = nil) {
+        guard let id = id ?? archive.currentID,
+              let i = archive.threads.firstIndex(where: { $0.id == id }) else { return }
+        if archive.threads[i].draft != text {
+            archive.threads[i].draft = text
+            let thread = archive.threads[i]
+            unsavedDrafts[thread.id] = AssistantStore.Draft(thread)
+        }
+        saveDraft(for: id)
+    }
+
+    @discardableResult
+    private func saveDraft(for id: UUID) -> Bool {
+        guard let draft = unsavedDrafts[id] else { return true }
+        do {
+            try store.saveDraft(draft, for: id)
+            unsavedDrafts[id] = nil
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
+    func flushDrafts() -> Bool {
+        var saved = true
+        for id in Array(unsavedDrafts.keys) {
+            if !saveDraft(for: id) { saved = false }
+        }
+        return saved
+    }
     func clearHistory() {
         guard !generating, !applying else { return }
-        var thread = AssistantThread()
-        if let current, current.usesCloudModel, var cloud = current.cloud {
-            // Переносим настройки модели, а сетевой контекст начинаем с пустого диалога.
-            cloud.historyStart = 0
-            cloud.draftIDs = []
-            thread.cloud = cloud
-        }
+        let thread = emptyConversation()
         let previous = archive
         archive = AssistantArchive(currentID: thread.id, threads: [thread])
         storageFailed = false
-        if persist() { error = nil }
+        if persist() {
+            for thread in previous.threads { store.discardDraft(for: thread.id) }
+            error = nil
+        }
         else { archive = previous; storageFailed = true }
+    }
+    private func emptyConversation() -> AssistantThread {
+        var thread = AssistantThread()
+        if let current, current.usesCloudModel, let selected = current.cloud {
+            // Новый разговор наследует настройки модели и начинает собственную историю.
+            thread.cloud = AssistantCloudThread(accountID: selected.accountID, modelID: selected.modelID,
+                                                effort: selected.effort, historyStart: 0, draftIDs: [],
+                                                gateway: selected.gateway, gatewayProfileID: selected.gatewayProfileID)
+        }
+        return thread
     }
     // Следующий запрос ждёт фактического завершения отмены, чтобы не запускать две генерации.
     func stop() { generation?.cancel() }
     func disableModel() async {
+        guard let model = localModel else { return }
         stop()
         if let generation { await generation.value }
         await model.disable()
     }
     func send(_ text: String, context: AssistantContext, taskService: TaskService? = nil) {
         if current?.usesCloudModel == true { sendCloud(text, context: context, tasks: taskService); return }
+        guard let model = localModel else { return }
         if let taskService, routeTextRequest(text, context: context, tasks: taskService) { return }
         guard current?.textEdits?.contains(where: { $0.target == .proposal && $0.status == .pending && $0.hasChanges }) != true else {
             error = "Сначала примите или отмените предложенные правки."; return
@@ -86,6 +132,7 @@ final class AssistantService {
         guard !text.isEmpty, !generating, !applying, !storageFailed,
               model.canChat, let i = currentIndex else { return }
         error = nil
+        let previous = archive
         var context = context
         if archive.threads[i].messages.last?.questions.isEmpty == false,
            let previous = archive.threads[i].clarificationContext {
@@ -95,7 +142,7 @@ final class AssistantService {
         archive.threads[i].draft = ""
         archive.threads[i].messages.append(AssistantMessage(role: .user, text: text))
         if archive.threads[i].messages.count == 1 { archive.threads[i].title = String(text.prefix(60)) }
-        guard persist() else { return }
+        guard persist() else { archive = previous; return }
         var snapshot = archive.threads[i]
         let protectedIDs = snapshot.protectedLocalActionIDs ?? []
         let protected = snapshot.actions.filter { protectedIDs.contains($0.id) }
@@ -142,12 +189,20 @@ final class AssistantService {
             if token == requestID { generating = false; generation = nil }
         }
     }
-    func updateAction(_ updated: AssistantAction) {
-        guard !applying, !generating, updated.status != .created, let i = currentIndex,
-              let a = archive.threads[i].actions.firstIndex(where: { $0.id == updated.id }) else { return }
-        archive.threads[i].actions[a] = updated; persist()
+    @discardableResult func updateAction(_ updated: AssistantAction) -> Bool {
+        guard !applying, !generating, !storageFailed, updated.isEditable, let i = currentIndex,
+              let a = archive.threads[i].actions.firstIndex(where: { $0.id == updated.id && $0.isEditable }) else { return false }
+        let previous = archive.threads[i].actions[a]
+        error = nil
+        archive.threads[i].actions[a] = updated
+        if persist() { return true }
+        archive.threads[i].actions[a] = previous
+        return false
     }
     func problems(_ action: AssistantAction, folders: [AssistantFolder], calendars: [AssistantCalendar]) -> [String] {
+        if let move = action.calendarMove {
+            return calendars.contains { $0.id == move.source.calendarID } ? [] : ["Нет доступного календаря для переноса события."]
+        }
         var issues = ActionPlanValidator.problems(action, folders: folders, calendars: calendars)
         if action.proposal.kind == .event, let link = action.proposal.linkTo, link != action.context.taskID {
             let source = current?.actions.first { $0.proposal.key == link && $0.proposal.kind == .task }
@@ -159,10 +214,12 @@ final class AssistantService {
         }
         return issues
     }
-    func readyCount(folders: [AssistantFolder], calendars: [AssistantCalendar]) -> Int {
-        current?.actions.filter { $0.included && [.pending, .failed].contains($0.status) && problems($0, folders: folders, calendars: calendars).isEmpty && !hasUnreviewedText(for: $0.id) }.count ?? 0
+    func readyCount(folders: [AssistantFolder], calendars: [AssistantCalendar], actionID: UUID? = nil,
+                    kind: AssistantProposal.Kind? = nil) -> Int {
+        current?.actions.filter { (actionID == nil || $0.id == actionID) && (kind == nil || $0.proposal.kind == kind) && $0.included && [.pending, .failed].contains($0.status) && problems($0, folders: folders, calendars: calendars).isEmpty && !hasUnreviewedText(for: $0.id) }.count ?? 0
     }
-    func apply(taskService: TaskService, calendar: CalendarService, folders: [TaskFolder]) async {
+    func apply(taskService: TaskService, calendar: CalendarService, folders: [TaskFolder], actionID: UUID? = nil,
+               kind: AssistantProposal.Kind? = nil) async {
         guard !applying, !generating, let t = currentIndex, !storageFailed else { return }
         applying = true; error = nil; defer { applying = false }
         let folderSnapshots = Self.folders(folders, preferences: nil)
@@ -173,7 +230,7 @@ final class AssistantService {
         }
         for a in indices {
             var action = archive.threads[t].actions[a]
-            guard action.included, [.pending, .failed].contains(action.status), !hasUnreviewedText(for: action.id) else { continue }
+            guard actionID == nil || action.id == actionID, kind == nil || action.proposal.kind == kind, action.included, [.pending, .failed].contains(action.status), !hasUnreviewedText(for: action.id) else { continue }
             let problems = problems(action, folders: folderSnapshots, calendars: calendars)
             guard problems.isEmpty else { archive.threads[t].actions[a].error = problems.joined(separator: "\n"); continue }
             action.status = .applying; action.error = nil; archive.threads[t].actions[a] = action
@@ -183,6 +240,13 @@ final class AssistantService {
                 if action.proposal.kind == .task {
                     let task = try taskService.createAssistantTask(action, folders: folders)
                     action.createdTaskID = task.id
+                } else if let move = action.calendarMove {
+                    guard let latest = calendar.resolve(identifier: move.source.identifier, externalIdentifier: nil) else {
+                        throw AssistantFailure(message: "Событие изменилось. Найдите его снова перед переносом.")
+                    }
+                    let saved = try calendar.save(move.draft(for: latest), original: latest)
+                    action.createdEventID = saved.identifier
+                    action.createdEventExternalID = saved.externalIdentifier
                 } else {
                     let linkedTask: PlannerTask?
                     if let link = action.proposal.linkTo {

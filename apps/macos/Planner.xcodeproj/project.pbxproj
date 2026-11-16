@@ -102,7 +102,7 @@
 			"isa" = "PBXFileReference";
 			"explicitFileType" = "wrapper.application";
 			"includeInIndex" = 0;
-			"path" = "Planner.app";
+			"path" = "Takt.app";
 			"sourceTree" = "BUILT_PRODUCTS_DIR";
 		};
 		"E95622D03D4488C5502B5907" = {
@@ -127,13 +127,14 @@
 			"isa" = "XCBuildConfiguration";
 			"name" = "Debug";
 			"buildSettings" = {
-				"PRODUCT_NAME" = "$(TARGET_NAME)";
+				"PRODUCT_NAME" = "Takt";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.17";
-				"CURRENT_PROJECT_VERSION" = "67";
+				"MARKETING_VERSION" = "0.3.9";
+				"CURRENT_PROJECT_VERSION" = "93";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				"PRODUCT_MODULE_NAME" = "Planner";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)";
 				"CODE_SIGN_ENTITLEMENTS" = "Planner/Planner.entitlements";
 				"ENABLE_APP_SANDBOX" = "YES";
@@ -141,9 +142,9 @@
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" = "AccentColor";
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "TasksIcon";
-				"INFOPLIST_KEY_CFBundleDisplayName" = "Задачи";
+				"INFOPLIST_KEY_CFBundleDisplayName" = "Takt";
 				"INFOPLIST_KEY_LSApplicationCategoryType" = "public.app-category.productivity";
-				"INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription" = "Задачам нужен доступ к календарям для просмотра событий и планирования времени.";
+				"INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription" = "Takt нужен доступ к календарям для просмотра событий и планирования времени.";
 				"INFOPLIST_KEY_NSHumanReadableCopyright" = "";
 				"INFOPLIST_KEY_CFBundleDevelopmentRegion" = "ru";
 			};
@@ -152,13 +153,14 @@
 			"isa" = "XCBuildConfiguration";
 			"name" = "Release";
 			"buildSettings" = {
-				"PRODUCT_NAME" = "$(TARGET_NAME)";
+				"PRODUCT_NAME" = "Takt";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.Planner";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.17";
-				"CURRENT_PROJECT_VERSION" = "67";
+				"MARKETING_VERSION" = "0.3.9";
+				"CURRENT_PROJECT_VERSION" = "93";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				"PRODUCT_MODULE_NAME" = "Planner";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)";
 				"CODE_SIGN_ENTITLEMENTS" = "Planner/Planner.entitlements";
 				"ENABLE_APP_SANDBOX" = "YES";
@@ -166,9 +168,9 @@
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME" = "AccentColor";
 				"ASSETCATALOG_COMPILER_APPICON_NAME" = "TasksIcon";
-				"INFOPLIST_KEY_CFBundleDisplayName" = "Задачи";
+				"INFOPLIST_KEY_CFBundleDisplayName" = "Takt";
 				"INFOPLIST_KEY_LSApplicationCategoryType" = "public.app-category.productivity";
-				"INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription" = "Задачам нужен доступ к календарям для просмотра событий и планирования времени.";
+				"INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription" = "Takt нужен доступ к календарям для просмотра событий и планирования времени.";
 				"INFOPLIST_KEY_NSHumanReadableCopyright" = "";
 				"INFOPLIST_KEY_CFBundleDevelopmentRegion" = "ru";
 			};
@@ -188,7 +190,7 @@
 			"fileSystemSynchronizedGroups" = ("66332D41A4DCEC022D9AEE99");
 			"packageProductDependencies" = ("F00A3114FECE325544C8D53F", "95CB4AE20E729691802A43DA", "37C7DCE0D0BB66CE2EF181D1");
 			"name" = "Planner";
-			"productName" = "Planner";
+			"productName" = "Takt";
 			"productReference" = "0422B35A368B797F6AC12F60";
 			"productType" = "com.apple.product-type.application";
 		};
@@ -241,11 +243,11 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.17";
-				"CURRENT_PROJECT_VERSION" = "67";
+				"MARKETING_VERSION" = "0.3.9";
+				"CURRENT_PROJECT_VERSION" = "93";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
-				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner";
+				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt";
 				"BUNDLE_LOADER" = "$(TEST_HOST)";
 			};
 		};
@@ -256,11 +258,11 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.17";
-				"CURRENT_PROJECT_VERSION" = "67";
+				"MARKETING_VERSION" = "0.3.9";
+				"CURRENT_PROJECT_VERSION" = "93";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
-				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner";
+				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt";
 				"BUNDLE_LOADER" = "$(TEST_HOST)";
 			};
 		};
@@ -332,8 +334,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.17";
-				"CURRENT_PROJECT_VERSION" = "67";
+				"MARKETING_VERSION" = "0.3.9";
+				"CURRENT_PROJECT_VERSION" = "93";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
@@ -346,8 +348,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.2.17";
-				"CURRENT_PROJECT_VERSION" = "67";
+				"MARKETING_VERSION" = "0.3.9";
+				"CURRENT_PROJECT_VERSION" = "93";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";

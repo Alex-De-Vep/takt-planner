@@ -60,9 +60,10 @@ final class PlannerUITests: XCTestCase {
         app.launchEnvironment["PLANNER_UI_TEST_LIBRARY"] = UUID().uuidString
         app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
         app.launch()
-        let settings = app.buttons["settings-button"]
-        XCTAssertTrue(settings.waitForExistence(timeout: 10))
-        settings.click()
+        let appMenu = app.menuBars.menuBarItems["Takt"]
+        XCTAssertTrue(appMenu.waitForExistence(timeout: 10))
+        appMenu.click()
+        app.menuItems.matching(identifier: "Настройки…").firstMatch.click()
         let picker = app.popUpButtons["language-picker"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         picker.click()

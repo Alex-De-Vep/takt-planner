@@ -11,6 +11,18 @@ struct CloudLibrary {
 
 @MainActor @Observable
 final class CloudWorkspace {
+    enum AccountAction: Hashable { case signIn, requestCode, confirmCode }
+
+    private struct RetryKey: Hashable {
+        let action: AccountAction
+        let email: String
+
+        init(_ action: AccountAction, email: String) {
+            self.action = action
+            self.email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        }
+    }
+
     struct Setup {
         let profile: SyncProfile
         fileprivate let library: SyncLibrary
@@ -25,10 +37,12 @@ final class CloudWorkspace {
     private let deviceID: String
     private(set) var profile: SyncProfile?
     private var lastAccount: SyncAccount?
+    private var accountRetries: [RetryKey: Date] = [:]
     private(set) var setup: Setup?
     private(set) var engine: SyncEngine?
     private var activeAPI: SyncHTTP?
     var signInEmail: String? { profile?.account.email ?? lastAccount?.email }
+    var willOpen: (() throws -> Void)?
     var didOpen: ((CloudLibrary) -> Void)?
     private(set) var busy = false
     var error: String?
@@ -74,9 +88,19 @@ final class CloudWorkspace {
             .appending(path: "Cloud/\(accountID.syncID)/\(libraryID.syncID)", directoryHint: .isDirectory)
     }
 
-    private func library(for account: SyncAccount) throws -> (CloudLibrary, SyncRepository) {
-        let container = try PlannerPersistence.makeContainer(at: root(for: account).appending(path: "Planner.store"))
+    private func cacheKey(for account: SyncAccount) -> String { "planner.cloud.cache.\(account.libraryId)" }
+
+    private func library(for account: SyncAccount, cacheID: UUID? = nil) throws -> (CloudLibrary, SyncRepository) {
+        var directory = try root(for: account)
+        if let id = cacheID ?? defaults.string(forKey: cacheKey(for: account)).flatMap(UUID.init(uuidString:)) {
+            directory = directory.appending(path: "Recovered/\(id.uuidString)", directoryHint: .isDirectory)
+        }
+        let database = directory.appending(path: "Planner.store")
+        if cacheID == nil, defaults.string(forKey: cacheKey(for: account)) != nil,
+           !FileManager.default.fileExists(atPath: database.path) { throw BackupError.invalid }
+        let container = try PlannerPersistence.makeContainer(at: database)
         let service = TaskService(context: container.mainContext)
+        service.notes = NoteStore(url: directory.appending(path: "Notes.json"))
         let repo = try SyncRepository(context: container.mainContext, libraryID: account.libraryId, deviceID: deviceID)
         service.syncRepository = repo
         repo.didApplyTasks = { [weak service] ids in
@@ -92,13 +116,39 @@ final class CloudWorkspace {
         return library
     }
 
+    func useRestoredLocalLibrary() {
+        engine?.stop()
+        engine = nil
+        let api = activeAPI
+        activeAPI = nil
+        setup = nil
+        error = nil
+        // Keep the old account identity so a sign-in to a different account still
+        // asks whether to transfer tasks. The restored library opens before resume().
+        saveProfile(nil)
+        welcomeCompleted = true
+        if let api { Task { try? await api.close(removeCredential: false) } }
+    }
+
     private func attach(repo: SyncRepository, service: TaskService, api: SyncHTTP) {
         engine?.stop()
-        let engine = SyncEngine(repository: repo, api: api)
+        let engine = SyncEngine(repository: repo, api: api, notes: service.notes)
         self.engine = engine
         activeAPI = api
         service.syncQueued = { [weak engine] in engine?.wake(after: .seconds(2)) }
+        service.notes.syncQueued = { [weak engine] in engine?.wake(after: .seconds(2)) }
         engine.start()
+    }
+
+    func retryDeadline(for action: AccountAction, email: String) -> Date {
+        accountRetries[RetryKey(action, email: email)] ?? .distantPast
+    }
+
+    func postpone(_ action: AccountAction, email: String, seconds: Int) {
+        let now = Date.now
+        accountRetries = accountRetries.filter { $0.value > now }
+        let key = RetryKey(action, email: email)
+        accountRetries[key] = max(accountRetries[key] ?? now, now.addingTimeInterval(Double(seconds)))
     }
 
     func challenge(email: String, password: String?, path: String) async throws -> String {
@@ -150,10 +200,10 @@ final class CloudWorkspace {
         guard profile == nil else { throw SyncProblem.accountMismatch }
 
         let nextSetup = Setup(profile: next, library: library, config: config, tokens: login.tokens)
-        if let current, current.id != account.id {
+        if defaults.string(forKey: PlannerPersistence.restoredLibraryKey) != nil || (current.map { $0.id != account.id } ?? false) {
             setup = nextSetup
         } else {
-            try await activate(nextSetup, source: activeService.context)
+            try await activate(nextSetup, source: activeService)
         }
     }
 
@@ -165,13 +215,24 @@ final class CloudWorkspace {
         error = nil
         defer { busy = false }
         do {
-            try await activate(setup, source: importLocal ? activeService.context : nil)
+            try await activate(setup, source: importLocal ? activeService : nil)
             cancelSetup()
         } catch { self.error = error.localizedDescription }
     }
 
-    private func activate(_ setup: Setup, source: ModelContext?) async throws {
-        let (prepared, repo) = try library(for: setup.profile.account)
+    private func activate(_ setup: Setup, source: TaskService?) async throws {
+        let restored = defaults.string(forKey: PlannerPersistence.restoredLibraryKey) != nil
+        // A reused server account can have the same UUID and a different database.
+        // A restored local library connects through a clean cache and keeps the previous one on disk.
+        let cacheID = restored ? UUID() : nil
+        let (prepared, repo) = try library(for: setup.profile.account, cacheID: cacheID)
+        let directory = prepared.container.configurations.first?.url.deletingLastPathComponent()
+        var activated = false
+        defer {
+            if !activated, cacheID != nil, let directory {
+                try? FileManager.default.removeItem(at: directory)
+            }
+        }
         let publicAPI = publicAPI()
         let bearer = setup.tokens.accessToken
         if !setup.library.initialized {
@@ -187,12 +248,27 @@ final class CloudWorkspace {
         try await authenticated.install(setup.tokens)
         do {
             try Task.checkCancellation()
-            if let source { try repo.mergeLocal(from: source) }
+            try willOpen?()
+            if let source {
+                guard source.notes.flush() else { throw BackupError.unsavedChanges }
+                try repo.mergeLocal(from: source.context)
+                try prepared.service.notes.mergeLocal(source.notes.notes)
+            }
+            if restored, source != nil,
+               let id = defaults.string(forKey: PlannerPersistence.restoredLibraryKey).flatMap(UUID.init(uuidString:)),
+               let directory {
+                let restoredDirectory = try PlannerPersistence.restoredLibraryDirectory(id)
+                let sourceStore = AssistantStore(url: restoredDirectory.appending(path: "Assistant/conversations.json"))
+                let targetStore = AssistantStore(url: directory.appending(path: "Assistant/conversations.json"))
+                try targetStore.save(sourceStore.load())
+            }
         } catch {
             try? await authenticated.close(removeCredential: true)
             throw error
         }
+        if let cacheID { defaults.set(cacheID.uuidString, forKey: cacheKey(for: setup.profile.account)) }
         saveProfile(setup.profile)
+        activated = true
         didOpen?(prepared)
         attach(repo: repo, service: prepared.service, api: authenticated)
         welcomeCompleted = true

@@ -10,21 +10,35 @@ struct AssistantPanel: View {
     let calendar: CalendarService
     let folders: [TaskFolder]
     let selectedTask: PlannerTask?
+    let selectedNote: PlannerNote?
     let filter: TaskFilter
-    let openTask: (PlannerTask) -> Void
     let openEvent: (CalendarEvent) -> Void
     @State private var useFolder = true
-    @State private var useTask = true
     @State private var cloudTaskID: UUID?
+    @State private var cloudNoteID: UUID?
     @State private var editing: AssistantAction?
+    @State private var showDrafts = false
     @State private var showClear = false
     @State private var showModelConnections = false
     private var folderOptions: [AssistantFolder] { AssistantService.folders(folders, preferences: preferences) }
     private var calendarOptions: [AssistantCalendar] { calendar.calendars.filter(\.writable).map { AssistantCalendar(id: $0.id, name: $0.title) } }
     private var isCloud: Bool { service.current?.usesCloudModel == true }
-    private var canSend: Bool { isCloud ? service.canSendCloud : service.model.canChat }
-    private var canPropose: Bool { !isCloud || service.supportsCloudProposals }
-    private var taskIsAttached: Bool { isCloud ? canPropose && selectedTask?.id == cloudTaskID && cloudTaskID != nil : useTask }
+    private var canSend: Bool { service.canSendCloud }
+    private var canPropose: Bool { isCloud && service.supportsCloudProposals }
+    private var taskIsAttached: Bool { canPropose && selectedTask?.id == cloudTaskID && cloudTaskID != nil }
+    private var availableNote: PlannerNote? {
+        guard let selectedNote, selectedNote.deletedAt == nil else { return nil }
+        return selectedNote
+    }
+    private var attachedNote: PlannerNote? {
+        guard canSend, let note = availableNote, note.id == cloudNoteID else { return nil }
+        return note
+    }
+    private var draftActions: [AssistantAction] { service.current?.visibleActions ?? [] }
+    private var actionsBusy: Bool { service.generating || service.applying || service.storageFailed || editing != nil }
+    private var pendingEdits: [AssistantTextEdit] {
+        (service.current?.textEdits ?? []).filter { $0.hasChanges && $0.status == .pending }
+    }
     private var context: AssistantContext {
         let defaultFolder = preferences.assistantUseCurrentFolder && useFolder && filter.isPrimaryFolder
             ? (filter == .inbox ? "inbox" : filter == .week ? "week" : filter == .month ? "month" : { if case .folder(let id) = filter { return id.uuidString }; return "inbox" }())
@@ -38,8 +52,7 @@ struct AssistantPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             conversationHeader
-            if isCloud || service.model.canChat || service.current?.messages.isEmpty == false { conversation }
-            else { AssistantModelSetup(manager: service.model) }
+            conversation
             modelFooter
         }
         .background(Color.clear)
@@ -47,23 +60,32 @@ struct AssistantPanel: View {
             AssistantModelConnections(service: service, russian: preferences.language.resolvedCode == "ru",
                 boundAccountID: service.chatGPTAccountID, selectModel: service.selectCloudModel)
         }
+        .sheet(item: $editing) { action in
+            AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,
+                actions: service.current?.actions ?? [], save: {
+                    if service.updateAction($0) { editing = nil; return nil }
+                    return service.error ?? "Не удалось сохранить"
+                }, cancel: { editing = nil })
+        }
         .onAppear(perform: prepareConversation)
         .onChange(of: preferences.rightPanel) { prepareConversation() }
         .onChange(of: service.archive.currentID) {
-            editing = nil; cloudTaskID = nil
+            editing = nil; cloudTaskID = nil; cloudNoteID = nil; showDrafts = false
             prepareConversation()
         }
         .onChange(of: selectedTask?.id) { cloudTaskID = nil }
-        .onChange(of: isCloud) { cloudTaskID = nil }
-        .onChange(of: service.current?.cloud?.gatewayProfileID) { cloudTaskID = nil }
+        .onChange(of: availableNote?.id) { cloudNoteID = nil }
+        .onChange(of: canSend) { if !canSend { cloudNoteID = nil } }
+        .onChange(of: service.current?.focusedDraftID) { if service.current?.focusedDraftID != nil { cloudTaskID = nil } }
+        .onChange(of: isCloud) { cloudTaskID = nil; cloudNoteID = nil }
+        .onChange(of: service.current?.cloud?.gatewayProfileID) { cloudTaskID = nil; cloudNoteID = nil }
+        .onChange(of: service.chatGPTAccountID) { cloudNoteID = nil }
         .onChange(of: canPropose) { if !canPropose { cloudTaskID = nil } }
     }
     private func prepareConversation() {
         guard preferences.rightPanel == .assistant else { return }
-        // Каталог доступен в едином меню даже при выборе модели на Mac.
         service.cloud.activate()
         service.gateways.activate()
-        if !isCloud { service.model.restoreIfInstalled() }
     }
     private var conversationHeader: some View {
         VStack(spacing: 0) {
@@ -72,7 +94,7 @@ struct AssistantPanel: View {
                     ForEach(service.archive.threads) { thread in
                         Button { service.selectConversation(thread.id) } label: {
                             Label(thread.title == "Новый разговор" ? strings[thread.title] : thread.title,
-                                  systemImage: thread.usesCloudModel ? "cloud" : "desktopcomputer")
+                                  systemImage: "bubble.left")
                         }
                     }
                     Divider()
@@ -107,41 +129,47 @@ struct AssistantPanel: View {
                         ForEach(service.current?.messages ?? []) { message in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(strings[message.role == .user ? "Вы" : "Помощник"]).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                                Text(message.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                                if message.id == service.current?.messages.last?.id, !isCloud || service.lastCloudMessageIsCurrent {
-                                    ForEach(message.questions) { question in
-                                        Text(question.text).fontWeight(.medium)
+                                let latest = message.id == service.current?.messages.last?.id
+                                if !message.text.isEmpty {
+                                    Text(message.calendarTimeZoneID != nil ? strings[message.text] : message.text)
+                                        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                ForEach(message.questions) { question in
+                                    Text(strings[question.text]).fontWeight(.medium)
+                                    if latest, !isCloud || service.lastCloudMessageIsCurrent {
                                         ForEach(Array(question.options.prefix(4).enumerated()), id: \.offset) { _, option in
-                                            Button(option) { send(option) }.disabled(!canSend || service.generating || service.applying)
+                                            Button(option) { send(option) }.disabled((!canSend && message.calendarSelection == nil) || service.generating || service.applying)
                                         }
                                         if question.options.count > 4 {
                                             Menu(strings["Другие варианты"]) {
                                                 ForEach(Array(question.options.dropFirst(4).enumerated()), id: \.offset) { _, option in
                                                     Button(option) { send(option) }
                                                 }
-                                            }.disabled(!canSend || service.generating || service.applying)
+                                            }.disabled((!canSend && message.calendarSelection == nil) || service.generating || service.applying)
                                         }
                                     }
                                 }
+                                if let agenda = message.calendarAgenda, !agenda.isEmpty {
+                                    if latest { calendarAgenda(agenda, zoneID: message.calendarTimeZoneID) }
+                                    else {
+                                        DisclosureGroup(strings.format("События · %d", agenda.count)) { calendarAgenda(agenda, zoneID: message.calendarTimeZoneID) }
+                                    }
+                                }
+                                if latest, message.calendarAccessRequired == true, calendar.access != .full { calendarAccessButton }
                             }
                             .padding(12).background(message.role == .user ? PlannerStyle.accent.opacity(0.10) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                            if message.role == .assistant, message.id == service.current?.messages.last?.id, !showDrafts {
+                                if let id = message.resultActionID, let action = draftActions.first(where: { $0.id == id }) {
+                                    actionCard(action)
+                                }
+                                if let id = message.resultEditID,
+                                   let edit = service.current?.textEdits?.first(where: { $0.id == id && $0.status != .cancelled }) {
+                                    textEditCard(edit)
+                                }
+                            }
                         }
-                        ForEach(service.current?.actions ?? []) { action in actionCard(action) }
-                        ForEach(service.current?.textEdits?.filter { $0.hasChanges && $0.status != .cancelled } ?? []) { edit in
-                            AssistantTextEditCard(edit: edit, busy: service.generating || service.applying || service.storageFailed,
-                                active: service.current?.activeTextEditID == edit.id, canRefine: canPropose, update: service.updateTextEdit,
-                                refine: { if canPropose { service.chooseTextEdit(edit.id) } },
-                                apply: { service.applyTextEdit(edit.id, tasks: taskService) },
-                                cancel: { service.cancelTextEdit(edit.id) },
-                                refresh: {
-                                    guard canPropose else { return }
-                                    service.refreshTextEdit(edit.id, tasks: taskService)
-                                    if let active = service.activeTextEdit, active.id != edit.id {
-                                        sendTextCommand(edit.lastRequest ?? strings["Улучшить описание"])
-                                    }
-                                },
-                                open: { if let task = try? taskService.assistantTask(id: edit.before.id) { openTask(task) }
-                                        else { service.error = "Задача больше не существует." } })
+                        if showDrafts {
+                            draftList
                         }
                         if service.generating {
                             if !service.cloudPreview.isEmpty {
@@ -150,7 +178,7 @@ struct AssistantPanel: View {
                             }
                             HStack {
                                 ProgressView().controlSize(.small)
-                                Text(strings[isCloud ? "Готовлю ответ…" : "Готовлю предложение…"]).foregroundStyle(.secondary)
+                                Text(strings["Готовлю ответ…"]).foregroundStyle(.secondary)
                             }
                         }
                         if let error = service.error { Text(strings[error]).font(.callout).foregroundStyle(.red).textSelection(.enabled) }
@@ -159,66 +187,131 @@ struct AssistantPanel: View {
                     .padding(16)
                 }
                 // Новое сообщение отправляется явно; изменения карточек не отбирают прокрутку.
+                .onChange(of: showDrafts) { if showDrafts { proxy.scrollTo("assistant-bottom", anchor: .bottom) } }
                 .onChange(of: service.current?.messages.count) { proxy.scrollTo("assistant-bottom", anchor: .bottom) }
                 .onChange(of: service.generating) { if !service.generating { proxy.scrollTo("assistant-bottom", anchor: .bottom) } }
             }
-            if (service.current?.actions.contains { $0.included && [.pending, .failed].contains($0.status) } ?? false) {
-                let count = service.readyCount(folders: folderOptions, calendars: calendarOptions)
+            if !draftActions.isEmpty || !pendingEdits.isEmpty {
                 Button {
-                    Task { await service.apply(taskService: taskService, calendar: calendar, folders: folders) }
+                    showDrafts.toggle()
                 } label: {
-                    Text(service.applying ? strings["Создание…"] : strings.format("Создать: %d", count)).frame(maxWidth: .infinity)
+                    Label(strings.format(draftActions.contains(where: { $0.proposal.kind == .event })
+                                        ? "Карточки чата · %d" : "Задачи чата · %d", draftActions.count + pendingEdits.count),
+                          systemImage: showDrafts ? "chevron.down" : "chevron.right")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("assistant-apply").padding(.horizontal, 16).padding(.bottom, 10)
-                .disabled(count == 0 || service.generating || service.applying || service.storageFailed || editing != nil)
+                .buttonStyle(.borderless)
+                .padding(.horizontal, 16)
+                .accessibilityIdentifier("assistant-chat-tasks")
             }
-            if isCloud || service.model.canChat { composer }
-            else { AssistantModelSetup(manager: service.model).frame(maxHeight: 210) }
+            if service.hasAvailableCloudModel || isCloud { composer }
         }
     }
+
     private var examples: some View {
         VStack(alignment: .leading, spacing: 12) {
             Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.accent)
-            Text(strings["Опишите, что нужно сделать"]).font(.title3.weight(.semibold))
-            Text(strings[!canPropose ? "Выбранная модель поддерживает только диалог." : isCloud
-                ? "Задайте вопрос, подготовьте задачи с подзадачами или приложите задачу для правки."
-                : "Помощник подготовит задачи и события. Перед созданием вы проверите каждое предложение."]).foregroundStyle(.secondary)
-            ForEach(!canPropose ? [] : isCloud ? ["Создай задачу с подзадачами", "Распиши новую задачу: подготовить презентацию"]
-                : ["Создай задачи для подготовки проекта", "Запланируй встречу на завтра", "Создай задачу с подзадачами", "Распиши новую задачу: подготовить презентацию"], id: \.self) { example in
-                Button(strings[example]) { service.setDraft(strings[example]) }
+            if service.hasAvailableCloudModel || isCloud {
+                Text(strings["Начните общение с вашим ИИ-агентом"]).font(.title3.weight(.semibold))
+            } else if service.cloud.busy || !service.gateways.busy.isEmpty {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(strings["Подключить модель"]) { showModelConnections = true }
+                    .buttonStyle(.borderedProminent)
             }
         }.padding(.vertical, 12)
     }
+
+    private var draftList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(draftActions) { action in
+                actionCard(action)
+            }
+            ForEach(pendingEdits) { edit in
+                textEditCard(edit)
+            }
+            applyDraftsButton()
+        }
+    }
+
+    @ViewBuilder private func applyDraftsButton(actionID: UUID? = nil) -> some View {
+        let includedCount = draftActions.count(where: { $0.proposal.kind == .task && (actionID == nil || $0.id == actionID)
+            && $0.included && [.pending, .failed].contains($0.status) })
+        if includedCount >= (actionID == nil ? 2 : 1) {
+            let count = service.readyCount(folders: folderOptions, calendars: calendarOptions, actionID: actionID, kind: .task)
+            let title = actionID == nil ? strings.format("Создать: %d", count) : strings["Создать задачу"]
+            Button {
+                Task { await service.apply(taskService: taskService, calendar: calendar, folders: folders, actionID: actionID, kind: .task) }
+            } label: {
+                Text(service.applying ? strings["Создание…"] : title)
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("assistant-apply")
+            .disabled(count == 0 || actionsBusy)
+        }
+    }
+
+    private func textEditCard(_ edit: AssistantTextEdit) -> some View {
+        AssistantTextEditCard(
+            edit: edit, busy: service.generating || service.applying || service.storageFailed,
+            apply: { service.applyTextEdit(edit.id, tasks: taskService) },
+            refresh: {
+                guard canSend && canPropose else { return }
+                service.refreshTextEdit(edit.id, tasks: taskService)
+                if let active = service.activeTextEdit, active.id != edit.id {
+                    send(edit.lastRequest ?? strings["Улучшить описание"])
+                }
+            }
+        )
+        .contextMenu {
+            if edit.status == .pending, edit.committed == nil {
+                Button(strings["Отмена"]) { service.cancelTextEdit(edit.id) }
+                    .disabled(service.generating || service.applying || service.storageFailed)
+            }
+        }
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if editing != nil { Text(strings["Завершите изменение карточки кнопкой «Готово» или «Отмена»."]).font(.caption).foregroundStyle(.secondary) }
             if useFolder && preferences.assistantUseCurrentFolder && filter.isPrimaryFolder {
                 contextChip(strings["Папка"] + ": " + filter.title(in: folders, using: strings)) { useFolder = false }
             }
-            if canPropose, let target = service.activeTextEdit {
-                contextChip(strings[target.target == .savedTask ? "Доработка задачи" : "Черновик задачи"] + ": " + target.before.title) { service.chooseTextEdit(nil); cloudTaskID = nil }
-                textTools
-            } else if taskIsAttached, let task = selectedTask {
+            if taskIsAttached, let task = selectedTask {
                 contextChip(strings["Задача"] + ": " + task.displayTitle(using: strings)) {
-                    if isCloud { cloudTaskID = nil } else { useTask = false }
+                    setCurrentTaskAttached(false)
                 }
-                textTools
-            } else if isCloud, canPropose, let task = selectedTask {
-                Button { cloudTaskID = task.id } label: { Label(strings["Приложить открытую задачу"], systemImage: "paperclip") }
+            } else if canPropose, let target = service.activeTextEdit {
+                contextChip(strings[target.target == .savedTask ? "Доработка задачи" : "Черновик задачи"] + ": " + target.before.title) {
+                    service.chooseTextEdit(nil)
+                }
+            } else if canPropose, let thread = service.current, let draft = thread.focusedDraft,
+                      let number = thread.taskDraftNumber(draft.id) {
+                contextChip("#\(number) · " + draft.proposal.title) { service.clearDraftFocus() }
+            } else if canPropose, selectedTask != nil {
+                Button { setCurrentTaskAttached(true) } label: { Label(strings["Приложить открытую задачу"], systemImage: "paperclip") }
                     .buttonStyle(.borderless).font(.caption).disabled(service.generating || service.applying)
+            }
+            if let note = attachedNote {
+                contextChip(strings["Заметка"] + ": " + noteTitle(note)) { cloudNoteID = nil }
             }
             HStack(alignment: .bottom, spacing: 8) {
                 ZStack(alignment: .topLeading) {
                     if service.current?.draft.isEmpty != false { Text(strings["Сообщение помощнику"]).foregroundStyle(.tertiary).padding(.top, 8).padding(.leading, 5).allowsHitTesting(false) }
-                    AssistantComposer(text: Binding(get: { service.current?.draft ?? "" }, set: { value in service.setDraft(value) }), submit: { send(service.current?.draft ?? "") })
+                    if let threadID = service.archive.currentID {
+                        AssistantComposer(text: Binding(get: { service.draft(for: threadID) },
+                            set: { service.setDraft($0, for: threadID) }), submit: {
+                            if service.archive.currentID == threadID { send(service.draft(for: threadID)) }
+                        })
+                        .id(threadID)
                         .frame(height: 76)
+                    }
                 }
                 Button {
                     if service.generating { service.stop() } else { send(service.current?.draft ?? "") }
                 } label: { Image(systemName: service.generating ? "stop.fill" : "arrow.up").frame(width: 24, height: 24) }
                 .buttonStyle(.borderedProminent).clipShape(Circle())
                 .help(strings[service.generating ? "Остановить" : "Отправить"])
-                .disabled(service.applying || service.storageFailed || editing != nil || (!service.generating && (!canSend || (service.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))))
+                .disabled(service.applying || service.storageFailed || editing != nil || (!service.generating && (service.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)))
             }
             .padding(8).background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         }.padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 6)
@@ -248,10 +341,19 @@ struct AssistantPanel: View {
                 AssistantModelPicker(service: service) { showModelConnections = true }.disabled(editing != nil)
                 if isCloud { AssistantUsageButton(service: service) }
                 Spacer(minLength: 0)
-                if isCloud || service.model.canChat {
+                if service.hasAvailableCloudModel || isCloud {
                     Menu {
-                        Toggle(strings["Использовать текущую папку"], isOn: $useFolder)
-                        if !isCloud { Toggle(strings["Использовать выбранную задачу"], isOn: $useTask) }
+                        Toggle(strings["Использовать папку"], isOn: $useFolder)
+                        Toggle(strings["Использовать задачу"], isOn: Binding(
+                            get: { taskIsAttached },
+                            set: { attached in setCurrentTaskAttached(attached) }
+                        ))
+                        .disabled(selectedTask == nil || !canPropose || service.generating || service.applying)
+                        Toggle(strings["Использовать заметку"], isOn: Binding(
+                            get: { attachedNote != nil },
+                            set: { cloudNoteID = $0 ? availableNote?.id : nil }
+                        ))
+                        .disabled(availableNote == nil || !canSend || service.generating || service.applying)
                     } label: { Image(systemName: "scope") }.menuStyle(.borderlessButton).fixedSize()
                         .help(strings["Контекст сообщения"])
                 }
@@ -259,40 +361,89 @@ struct AssistantPanel: View {
         }
         .padding(.horizontal, 16).padding(.bottom, 14)
     }
+    private func setCurrentTaskAttached(_ attached: Bool) {
+        guard !service.generating, !service.applying else { return }
+        if attached {
+            guard canPropose, let selectedTask else { return }
+            cloudTaskID = selectedTask.id
+        } else {
+            // Снимаем и фокус правки этой задачи, чтобы её текст не ушёл со следующим сообщением.
+            if let edit = service.activeTextEdit, edit.target == .savedTask, edit.before.id == cloudTaskID {
+                service.chooseTextEdit(nil)
+            }
+            cloudTaskID = nil
+        }
+    }
+
+    private func noteTitle(_ note: PlannerNote) -> String {
+        note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle
+    }
+
     private func contextChip(_ title: String, remove: @escaping () -> Void) -> some View {
         HStack(spacing: 4) { Text(title).lineLimit(1); Button(action: remove) { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) }
             .font(.caption).foregroundStyle(.secondary)
     }
     private func send(_ text: String) {
-        guard editing == nil, canSend else { return }
-        service.send(text, context: context, taskService: taskService)
-    }
-    private func sendTextCommand(_ command: String) {
-        if isCloud { send(command) }
-        else { service.sendText(command, language: preferences.language.resolvedCode) }
-    }
-    private var textTools: some View {
-        AssistantTextToolsButton(title: strings["Доработать текст"],
-            commands: ["Переформулировать название", "Улучшить описание", "Расписать задачу", "Разбить на подзадачи", "Сократить описание"].map { strings[$0] },
-            enabled: canSend && !service.generating && !service.applying && editing == nil) { command in
-                guard editing == nil else { return }
-                if service.activeTextEdit != nil { sendTextCommand(command) }
-                else if taskIsAttached, let task = selectedTask, service.beginTextEdit(task: task, tasks: taskService) {
-                    sendTextCommand(command)
-                }
-            }
-            .fixedSize()
+        guard editing == nil, !service.generating, !service.applying, !service.storageFailed,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if service.handleDraftCommand(text, context: context) {
+            showDrafts = true
+            return
+        }
+        if service.handleCalendarChoice(text, calendar: calendar) {
+            showDrafts = false
+            return
+        }
+        guard canSend else {
+            service.error = "Выберите доступную модель в меню"
+            return
+        }
+        showDrafts = false
+        var requestContext = context
+        if canPropose, let selectedTask, AssistantIntentPolicy.referencesOpenTask(text) {
+            requestContext.taskID = selectedTask.id.uuidString
+            requestContext.taskTitle = selectedTask.title
+        }
+        let noteContext = attachedNote.map { note in
+            AssistantNoteContext(title: noteTitle(note), text: taskService.notes.content(note).string
+                .replacingOccurrences(of: "\u{fffc}", with: ""))
+        }
+        service.sendCloud(text, context: requestContext, tasks: taskService,
+                          calendar: calendar, visibleCalendarIDs: preferences.visibleCalendarIDs, note: noteContext)
     }
 
     private func actionCard(_ action: AssistantAction) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let move = action.calendarMove { eventMoveCard(action, move: move) }
+            else { standardActionCard(action) }
+            HStack {
+                if action.proposal.kind == .event { eventApplyButton(action) }
+                else { applyDraftsButton(actionID: action.id) }
+                if action.isEditable {
+                    Spacer(minLength: 0)
+                    Button(strings["Редактировать"]) { editing = action }
+                        .disabled(actionsBusy)
+                }
+            }
+        }
+        .font(.callout).padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func standardActionCard(_ action: AssistantAction) -> some View {
         let problems = service.problems(action, folders: folderOptions, calendars: calendarOptions)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Image(systemName: action.proposal.kind == .task ? "checkmark.circle" : "calendar")
+                if let number = service.current?.taskDraftNumber(action.id) {
+                    Text("#\(number)").monospacedDigit().foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: action.proposal.kind == .task ? "checkmark.circle" : "calendar")
+                }
                 Text(action.proposal.title).fontWeight(.semibold)
                 Spacer(minLength: 0)
-                if [.pending, .failed].contains(action.status), action.createdEventID == nil {
-                    Toggle("", isOn: Binding(get: { action.included }, set: { value in var copy = action; copy.included = value; service.updateAction(copy) })).labelsHidden().toggleStyle(.checkbox)
+                if action.isEditable {
+                    Toggle("", isOn: Binding(get: { action.included }, set: { value in var copy = action; copy.included = value; service.updateAction(copy) }))
+                        .labelsHidden().toggleStyle(.checkbox).disabled(actionsBusy)
                 }
             }
             if action.proposal.kind == .task {
@@ -300,17 +451,14 @@ struct AssistantPanel: View {
                 if action.proposal.today == true { Label(strings["На сегодня"], systemImage: "star.fill").foregroundStyle(.yellow) }
             } else {
                 Text(calendarOptions.first { $0.id == action.proposal.calendarID }?.name ?? strings["Календарь не выбран"])
-                if action.status != .created && action.createdEventID == nil {
+                if action.isEditable {
                     if calendar.access != .full {
-                        Button(strings[calendar.access == .notDetermined || calendar.access == .writeOnly ? "Подключить календарь" : "Открыть системные настройки"]) {
-                            if calendar.access == .notDetermined || calendar.access == .writeOnly { Task { await calendar.connect() } }
-                            else { calendar.openPrivacySettings() }
-                        }.disabled(calendar.connecting)
-                    } else if action.proposal.calendarID == nil,
+                        calendarAccessButton
+                    } else if action.proposal.calendarID == nil, action.context.calendars.isEmpty,
                               let id = calendar.creationCalendar(preferred: preferences.creationCalendarID) {
                         Button(strings["Использовать календарь по умолчанию"]) {
                             var copy = action; copy.proposal.calendarID = id; service.updateAction(copy)
-                        }
+                        }.disabled(actionsBusy)
                     }
                 }
             }
@@ -327,79 +475,105 @@ struct AssistantPanel: View {
                     Text(action.proposal.reminderMinutes.map { strings.format("Напоминание: за %d мин", $0) } ?? strings["Без напоминания"])
                 }
             }
-            if let description = action.proposal.description, !description.isEmpty { Text(description).lineLimit(4) }
-            ForEach(Array((action.proposal.checklist ?? []).enumerated()), id: \.offset) { _, title in Label(title, systemImage: "circle").lineLimit(2) }
+            if let description = action.proposal.description, !description.isEmpty { Text(description).textSelection(.enabled) }
+            ForEach(Array((action.proposal.checklist ?? []).enumerated()), id: \.offset) { _, title in Label(title, systemImage: "circle") }
             if let link = action.proposal.linkTo {
                 Label(action.context.taskID == link ? (action.context.taskTitle ?? strings["Задача"]) : (service.current?.actions.first { $0.proposal.key == link }?.proposal.title ?? strings["Связанная задача"]), systemImage: "link")
             }
-            if action.status == .created {
-                HStack { Label(strings["Создано"], systemImage: "checkmark.circle.fill").foregroundStyle(.green); Spacer(); Button(strings["Открыть"]) { open(action) } }
-            } else if action.status == .needsReview {
+            if action.status == .needsReview {
                 Text(strings["Проверьте календарь: результат предыдущего сохранения неизвестен. Автоматическое повторение отключено."]).foregroundStyle(.orange)
             } else {
                 ForEach(problems, id: \.self) { Text(strings[$0]).foregroundStyle(.orange) }
                 if let error = action.error { Text(strings[error]).foregroundStyle(.red) }
-                if action.createdEventID == nil {
-                    if editing?.id == action.id {
-                        AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,
-                            actions: service.current?.actions ?? [], save: { service.updateAction($0); editing = nil }, cancel: { editing = nil })
-                            .disabled(service.generating || service.applying)
-                    } else {
-                        Button(strings["Изменить предложение"]) { editing = action }.disabled(service.generating || service.applying)
-                        if action.proposal.kind == .task {
-                            if canPropose {
-                                Button(strings["Доработать текст"]) { service.beginTextEdit(proposal: action) }
-                                    .disabled(service.generating || service.applying)
-                                    .accessibilityIdentifier("assistant-refine-proposal-\(action.id)")
-                            }
-                            if service.hasUnreviewedText(for: action.id) {
-                                Text(strings["Сначала примите или отмените предложенные правки."]).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                if action.proposal.kind == .task, service.hasUnreviewedText(for: action.id) {
+                    Text(strings["Сначала примите или отмените предложенные правки."]).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
-        .font(.callout).padding(12)
-        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 12))
         .opacity(action.included ? 1 : 0.55)
     }
-    private func open(_ action: AssistantAction) {
-        if let id = action.createdTaskID, let task = try? taskService.assistantTask(id: id) { openTask(task) }
-        else if let id = action.createdEventID, let event = calendar.resolve(identifier: id, externalIdentifier: action.createdEventExternalID) { openEvent(event) }
-        else { service.error = "Созданный объект больше недоступен. Возможно, он удалён." }
+    private var calendarAccessButton: some View {
+        let canRequest = calendar.access == .notDetermined || calendar.access == .writeOnly
+        return Button(strings[canRequest ? "Подключить календарь" : "Открыть системные настройки"]) {
+            if canRequest { Task { await calendar.connect() } }
+            else { calendar.openPrivacySettings() }
+        }.disabled(calendar.connecting)
     }
-}
 
-struct AssistantModelSetup: View {
-    @Environment(\.translations) private var strings
-    @Bindable var manager: ModelManager
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: "sparkles").font(.system(size: 32)).foregroundStyle(PlannerStyle.accent)
-                Text(strings["Ваш личный ии-помощник"]).font(.title2.weight(.semibold))
-                Text(strings["Создавайте задачи и события обычными сообщениями. Перед сохранением помощник предложит проверить результат."])
-                Text(strings["Требуется Mac с чипом Apple M1 или новее."]).fontWeight(.medium)
-                Text(manager.displayName + " · " + ByteCountFormatter.string(fromByteCount: manager.total, countStyle: .file))
-                Text(strings["Ваши сообщения обрабатываются на этом Mac. Содержимое чата не отправляется разработчикам модели."]).foregroundStyle(.secondary)
-                Link(strings["Лицензионное соглашение"], destination: manager.modelURL)
-                if manager.busy {
-                    if manager.state == .downloading {
-                        ProgressView(value: manager.fraction)
-                        Text(ByteCountFormatter.string(fromByteCount: manager.received, countStyle: .file) + " / " + ByteCountFormatter.string(fromByteCount: manager.total, countStyle: .file)).monospacedDigit()
-                    } else { ProgressView().controlSize(.small) }
-                    Text(strings[manager.state == .verifying ? "Проверка файлов…" : manager.state == .preparing ? "Подготовка модели…" : "Загрузка модели…"])
-                    Button(strings["Отменить загрузку"]) { manager.cancel() }
-                } else {
-                    Button(strings[manager.accepted ? "Включить помощника" : "Скачать и включить"]) { manager.install() }
-                        .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("assistant-download")
-                }
-                if let error = manager.error { Text(strings[error]).foregroundStyle(.red).textSelection(.enabled) }
-                Text(strings["Нажимая кнопку, вы включаете помощника и подтверждаете ознакомление с лицензионным соглашением."]).font(.caption).foregroundStyle(.secondary)
-            }.padding(20).frame(maxWidth: .infinity, alignment: .leading)
+    private func eventInterval(start: Date, end: Date, allDay: Bool, zone: TimeZone) -> String {
+        var local = Calendar(identifier: .gregorian)
+        local.timeZone = zone
+        let last = allDay ? (local.date(byAdding: .day, value: -1, to: end) ?? end) : end
+        let date = Date.FormatStyle(date: .abbreviated, time: .omitted,
+                                    locale: preferences.language.locale, calendar: local, timeZone: zone)
+        let time = Date.FormatStyle(date: .omitted, time: .shortened,
+                                    locale: preferences.language.locale, calendar: local, timeZone: zone)
+        let startDay = start.formatted(date)
+        let endDay = last.formatted(date)
+        if allDay {
+            return (startDay == endDay ? startDay : startDay + " – " + endDay) + " · " + strings["Весь день"]
+        }
+        return startDay + " · " + start.formatted(time) + " – "
+            + (startDay == endDay ? "" : endDay + " · ") + last.formatted(time)
+    }
+
+    private func calendarAgenda(_ items: [AssistantCalendarItem], zoneID: String?) -> some View {
+        let zone = zoneID.flatMap(TimeZone.init(identifier:)) ?? .current
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(items) { item in
+                Button {
+                    // По времени начала различаем в том числе экземпляры одного повторяющегося события.
+                    let range = DateInterval(start: item.start, end: item.start.addingTimeInterval(1))
+                    if let events = try? calendar.load(range, visibleIDs: [item.calendarID]),
+                       let event = events.first(where: item.matches) {
+                        openEvent(event)
+                    } else { service.error = "Событие изменилось. Найдите его снова в календаре." }
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Label(item.title, systemImage: "calendar")
+                        Text(eventInterval(start: item.start, end: item.end, allDay: item.allDay, zone: zone))
+                            .font(.caption).foregroundStyle(.secondary)
+                        if !item.calendarName.isEmpty { Text(item.calendarName).font(.caption).foregroundStyle(.secondary) }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }.buttonStyle(.plain)
+            }
         }
     }
+
+    private func eventMoveCard(_ action: AssistantAction, move: AssistantCalendarMove) -> some View {
+        let zone = TimeZone(identifier: move.timeZoneID) ?? .current
+        return VStack(alignment: .leading, spacing: 8) {
+            Label(action.proposal.title, systemImage: "calendar").fontWeight(.semibold)
+            Text(eventInterval(start: move.start, end: move.end, allDay: move.source.allDay, zone: zone))
+            if !move.source.calendarName.isEmpty { Text(move.source.calendarName).foregroundStyle(.secondary) }
+            if zone != .current { Text(zone.identifier).foregroundStyle(.secondary) }
+            if action.status == .needsReview {
+                Text(strings["Проверьте календарь: результат предыдущего сохранения неизвестен. Автоматическое повторение отключено."])
+                    .foregroundStyle(.orange)
+            } else {
+                if calendar.access != .full { calendarAccessButton }
+                ForEach(service.problems(action, folders: folderOptions, calendars: calendarOptions), id: \.self) {
+                    Text(strings[$0]).foregroundStyle(.orange)
+                }
+                if let error = action.error { Text(strings[error]).foregroundStyle(.red) }
+            }
+        }
+    }
+
+    @ViewBuilder private func eventApplyButton(_ action: AssistantAction) -> some View {
+        if action.included && [.pending, .failed].contains(action.status) {
+            let title = action.calendarMove != nil ? "Перенести событие"
+                : (action.createdEventID == nil ? "Создать событие" : "Сохранить связь")
+            Button(strings[title]) {
+                Task { await service.apply(taskService: taskService, calendar: calendar, folders: folders, actionID: action.id) }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(calendar.access != .full || actionsBusy ||
+                service.readyCount(folders: folderOptions, calendars: calendarOptions, actionID: action.id) == 0)
+            .accessibilityIdentifier("assistant-apply-event")
+        }
+    }
+
 }
 
 /// Обычный NSTextView сохраняет системный ввод и явно различает Enter и Shift+Enter.
@@ -421,7 +595,7 @@ private struct AssistantComposer: NSViewRepresentable {
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.parent = self
         guard let view = scroll.documentView as? NSTextView else { return }
-        if view.string != text { view.string = text }
+        if !view.hasMarkedText(), view.string != text { view.string = text }
     }
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: AssistantComposer

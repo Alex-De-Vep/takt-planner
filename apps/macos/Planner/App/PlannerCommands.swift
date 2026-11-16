@@ -8,6 +8,7 @@ struct PlannerActions {
     let toggleToday: () -> Void
     let toggleCompleted: () -> Void
     let hasSelection: Bool
+    var createsNote = false
 }
 
 private struct PlannerActionsKey: FocusedValueKey {
@@ -33,7 +34,7 @@ struct PlannerCommands: Commands {
                 .keyboardShortcut(",", modifiers: .command)
         }
         CommandGroup(replacing: .newItem) {
-            Button(strings["Новая задача"]) { actions?.newTask() }
+            Button(strings[actions?.createsNote == true ? "Новая заметка" : "Новая задача"]) { actions?.newTask() }
                 .keyboardShortcut("n")
                 .disabled(actions == nil)
             Button(strings["Новая папка"]) { actions?.newFolder() }

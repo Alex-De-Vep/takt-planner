@@ -17,11 +17,26 @@ enum FolderValidationError: LocalizedError {
     }
 }
 
-/// Все пользовательские изменения проходят через сервис и сразу сохраняются на диск.
+/// Сервис сохраняет команды сразу, а ввод текста группирует до паузы или выхода из поля.
 @MainActor @Observable
 final class TaskService {
+    enum TextField: Hashable {
+        case title(UUID), description(UUID), checklist(UUID)
+    }
+
+    private struct PendingText {
+        let taskID: UUID
+        let text: String
+        let save: (TaskService, String) -> Bool
+    }
+
     let context: ModelContext
+    var notes = NoteStore()
     private let saveContext: (ModelContext) throws -> Void
+    private let textSaveDelay: Duration
+    // AppKit already displays the edit. Observing it here would refresh the SwiftUI document on every key.
+    @ObservationIgnored private var pendingText: [TextField: PendingText] = [:]
+    @ObservationIgnored private var textSaves: [TextField: Task<Void, Never>] = [:]
     var error: PlannerError?
     var syncRepository: SyncRepository?
     var syncQueued: (() -> Void)?
@@ -33,10 +48,69 @@ final class TaskService {
     var titleDrafts: [UUID: String] = [:]
     var checklistDrafts: [UUID: String] = [:]
 
-    init(context: ModelContext, saveContext: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
+    init(context: ModelContext, textSaveDelay: Duration = .milliseconds(300),
+         saveContext: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
+        self.textSaveDelay = textSaveDelay
         self.saveContext = saveContext
         context.autosaveEnabled = false
+    }
+
+    func editTitle(_ task: PlannerTask, text: String) {
+        stageText(text, for: .title(task.id), taskID: task.id) { service, text in
+            guard task.modelContext != nil, !task.isDeleted else { return true }
+            return service.rename(task, to: text)
+        }
+    }
+
+    func editDescription(_ task: PlannerTask, text: String) {
+        stageText(text, for: .description(task.id), taskID: task.id) { service, text in
+            guard task.modelContext != nil, !task.isDeleted else { return true }
+            return service.updateDescription(task, text: text)
+        }
+    }
+
+    func editChecklistTitle(_ item: TaskChecklistItem, text: String) {
+        guard let taskID = item.task?.id else { return }
+        stageText(text, for: .checklist(item.id), taskID: taskID) { service, text in
+            guard item.modelContext != nil, !item.isDeleted else { return true }
+            return service.renameChecklistItem(item, to: text)
+        }
+    }
+
+    private func stageText(_ text: String, for field: TextField, taskID: UUID,
+                           save: @escaping (TaskService, String) -> Bool) {
+        textSaves[field]?.cancel()
+        pendingText[field] = PendingText(taskID: taskID, text: text, save: save)
+        textSaves[field] = Task { [weak self, textSaveDelay] in
+            do { try await Task.sleep(for: textSaveDelay) } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.flushText(field)
+        }
+    }
+
+    @discardableResult
+    func flushText(_ field: TextField) -> Bool {
+        textSaves.removeValue(forKey: field)?.cancel()
+        guard let draft = pendingText[field] else { return true }
+        guard draft.save(self, draft.text) else { return false }
+        pendingText[field] = nil
+        return true
+    }
+
+    @discardableResult
+    func flushEditorText(taskID: UUID? = nil) -> Bool {
+        let fields = pendingText.keys.filter { taskID == nil || pendingText[$0]?.taskID == taskID }
+        var saved = true
+        for field in fields {
+            if !flushText(field) { saved = false }
+        }
+        return saved
+    }
+
+    private func discardText(_ field: TextField) {
+        textSaves.removeValue(forKey: field)?.cancel()
+        pendingText[field] = nil
     }
 
     @discardableResult
@@ -80,16 +154,23 @@ final class TaskService {
         return persist { context.insert(task) } ? task : nil
     }
 
-    func rename(_ task: PlannerTask, to title: String, now: Date = .now) {
+    func title(for task: PlannerTask) -> String {
+        pendingText[.title(task.id)]?.text ?? titleDrafts[task.id] ?? task.title
+    }
+
+    @discardableResult
+    func rename(_ task: PlannerTask, to title: String, now: Date = .now) -> Bool {
         // Разрешаем временно пустой заголовок во время ввода; список покажет «Новая задача».
         titleDrafts[task.id] = title
-        guard task.title != title else { titleDrafts[task.id] = nil; return }
+        guard task.title != title else { titleDrafts[task.id] = nil; return true }
         let previous = (task.title, task.updatedAt)
         if persist({ task.title = title; task.updatedAt = now }) {
             titleDrafts[task.id] = nil
             notificationChanged?(task.id, false)
+            return true
         } else {
             (task.title, task.updatedAt) = previous
+            return false
         }
     }
 
@@ -119,7 +200,9 @@ final class TaskService {
         }
     }
 
-    func description(for task: PlannerTask) -> String { descriptionDrafts[task.id] ?? task.descriptionText }
+    func description(for task: PlannerTask) -> String {
+        pendingText[.description(task.id)]?.text ?? descriptionDrafts[task.id] ?? task.descriptionText
+    }
 
     @discardableResult
     func updateDescription(_ task: PlannerTask, text: String, now: Date = .now) -> Bool {
@@ -132,7 +215,9 @@ final class TaskService {
         return saved
     }
 
-    func checklistTitle(for item: TaskChecklistItem) -> String { checklistDrafts[item.id] ?? item.title }
+    func checklistTitle(for item: TaskChecklistItem) -> String {
+        pendingText[.checklist(item.id)]?.text ?? checklistDrafts[item.id] ?? item.title
+    }
 
     /// Enter вставляет пункт после текущего, а кнопка в шапке — в конец списка.
     func addChecklistItem(to task: PlannerTask, after previous: TaskChecklistItem? = nil, now: Date = .now) -> TaskChecklistItem? {
@@ -190,7 +275,7 @@ final class TaskService {
     func deleteChecklistItem(_ item: TaskChecklistItem, now: Date = .now) -> Bool {
         let id = item.id
         let saved = persist { item.task?.updatedAt = now; context.delete(item) }
-        if saved { checklistDrafts[id] = nil }
+        if saved { discardText(.checklist(id)); checklistDrafts[id] = nil }
         return saved
     }
 
@@ -288,6 +373,7 @@ final class TaskService {
         let saved = persist { context.delete(task) }
         if saved {
             notificationChanged?(id, false)
+            for field in pendingText.keys.filter({ pendingText[$0]?.taskID == id }) { discardText(field) }
             descriptionDrafts[id] = nil; titleDrafts[id] = nil
             for itemID in checklistIDs { checklistDrafts[itemID] = nil }
         }

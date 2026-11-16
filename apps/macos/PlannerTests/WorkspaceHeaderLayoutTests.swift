@@ -184,10 +184,10 @@ struct WorkspaceHeaderLayoutTests {
         #expect(layout.minimumTaskWidth == 400)
         #expect(!CalendarPanelLayout.isColumn(width: 1000, sidebarVisible: false))
         #expect(CalendarPanelLayout.isColumn(width: 1100, sidebarVisible: false))
-        #expect(CalendarPanelLayout.isColumn(width: 1000, sidebarVisible: false, fullScreen: true))
+        #expect(!CalendarPanelLayout.isColumn(width: 1000, sidebarVisible: false, fullScreen: true))
         #expect(!CalendarPanelLayout.isColumn(width: 1100, sidebarVisible: true))
         // На границе помещаемости резервируем внешний зазор, не увеличивая окно принудительно.
-        let threshold = CalendarPanelLayout.minimumMainWidth(sidebarVisible: true, fullScreen: true) + 320 + 8
+        let threshold = CalendarPanelLayout.minimumMainWidth(sidebarVisible: true, fullScreen: true) + CalendarPanelLayout.assistantMinimumWidth + CalendarPanelLayout.outerInset
         #expect(!CalendarPanelLayout.isColumn(width: threshold - 1, sidebarVisible: true, fullScreen: true))
         #expect(CalendarPanelLayout.isColumn(width: threshold, sidebarVisible: true, fullScreen: true))
     }
@@ -266,7 +266,7 @@ struct WorkspaceHeaderLayoutTests {
         let sidebarSeparator = try #require(controller.toolbar(toolbar, itemForItemIdentifier: .sidebarTrackingSeparator,
                                                                willBeInsertedIntoToolbar: true))
         let calendarItem = try item("RightPanelToggle")
-        let calendarSurface = try #require((calendarItem.view as? WorkspaceRightPanelSlot)?.surface)
+        let calendarSurface = try #require(calendarItem.view as? WorkspaceToolbarButtonSurface)
         let calendarButton = try #require(calendarSurface.contentView as? NSButton)
         controller.updateSearch(text: "Запрос", title: "Поиск", clearTitle: "Очистить", changed: { _ in })
         let columns = controller.splitViewItems.map { ObjectIdentifier($0.viewController) }
@@ -277,7 +277,7 @@ struct WorkspaceHeaderLayoutTests {
                 toggleCalendar: {}, toggleAssistant: {})
             controller.setCalendarToolbar(column: true, visible: visible)
             #expect(calendarSurface.presentation == (visible ? .sidebar : .circle))
-            #expect(calendarSurface.contentView === calendarButton && (calendarItem.view as? WorkspaceRightPanelSlot)?.surface === calendarSurface)
+            #expect(calendarSurface.contentView === calendarButton && calendarItem.view === calendarSurface)
             #expect(calendarButton.borderShape == (visible ? .capsule : .circle))
             controller.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
                 taskActions: AnyView(EmptyView()), isSidebarVisible: visible, newFolderTitle: "Новая папка",

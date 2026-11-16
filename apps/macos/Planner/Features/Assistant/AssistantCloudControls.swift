@@ -13,10 +13,6 @@ struct AssistantModelPicker: View {
     var body: some View {
         HStack(spacing: 10) {
             Menu {
-                Button(action: service.chooseLocalModel) {
-                    Label(service.model.displayName + " · " + strings["На этом Mac"], systemImage: isCloud ? "desktopcomputer" : "checkmark")
-                }
-                Divider()
                 if cloudReady {
                     ForEach(service.cloud.models) { model in
                         Button { service.selectCloudModel(model.id) } label: {
@@ -44,8 +40,7 @@ struct AssistantModelPicker: View {
                     Label(strings["Подключения моделей…"], systemImage: "person.crop.circle")
                 }
             } label: {
-                Label(isCloud ? service.cloudModelName : service.model.displayName,
-                      systemImage: isCloud ? "cloud" : "desktopcomputer")
+                Label(isCloud ? service.cloudModelName : strings["Выбрать модель"], systemImage: "cloud")
                     .lineLimit(1).frame(maxWidth: 154, alignment: .leading)
             }
             .menuStyle(.borderlessButton).fixedSize()
