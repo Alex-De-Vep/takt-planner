@@ -182,7 +182,7 @@ import Testing
                 .frame(width: 280)
             Divider()
             NoteDetailView(note: note, store: store, voice: NoteVoiceRecording(), assistant: assistant,
-                           preferences: AppPreferences(), discuss: {}).frame(width: 650)
+                           preferences: AppPreferences()).frame(width: 650)
         }.frame(height: 600).background(Color(nsColor: .windowBackgroundColor)).tint(PlannerStyle.accent)
         let host = NSHostingView(rootView: root)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 931, height: 600), styleMask: [.titled], backing: .buffered, defer: false)

@@ -21,24 +21,20 @@ struct TaskListView: View {
     let move: (PlannerTask, TaskFilter) -> Void
     let taskDrag: TaskDragState
 
-    @State private var displayedScope: Scope?
+    @State private var displayedScope: WorkspaceListScope?
     @State private var selectionRevision = 0
     @State private var activeListAtTop = true
     @State private var dragSourceID = UUID()
-    @State private var activeNativeFocus = TaskListNativeFocus()
-    @State private var completedNativeFocus = TaskListNativeFocus()
+    @State private var activeNativeFocus = WorkspaceListNativeFocus()
+    @State private var completedNativeFocus = WorkspaceListNativeFocus()
     @FocusState private var focusedList: ListArea?
 
     private enum ListArea: Hashable { case active, completed }
-    private struct Scope: Hashable {
-        let filter: TaskFilter
-        let search: String
-    }
     private struct Rows: Equatable {
         let active: [UUID]
         let completed: [UUID]
     }
-    private var scope: Scope { Scope(filter: filter, search: search) }
+    private var scope: WorkspaceListScope { .tasks(filter, search: search) }
     private var rowIDs: Rows {
         Rows(active: snapshot.activeTasks.map(\.id), completed: snapshot.completedTasks.map(\.id))
     }
@@ -122,7 +118,7 @@ struct TaskListView: View {
                     }
                 }
             }
-            .modifier(TaskListAppearance())
+            .modifier(WorkspaceListAppearance())
             // Анимация задаётся непосредственно List, который выполняет нативные вставки и удаления строк.
             .animation(rowAnimation, value: rowIDs.active)
             .focused($focusedList, equals: .active)
@@ -130,7 +126,7 @@ struct TaskListView: View {
             .onDeleteCommand(perform: deleteSelection(in: snapshot.activeTasks))
             .accessibilityIdentifier("task-list")
             .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y <= 1
+                geometry.contentOffset.y + geometry.contentInsets.top <= 1
             } action: { _, atTop in
                 activeListAtTop = atTop
             }
@@ -139,7 +135,7 @@ struct TaskListView: View {
                 if id == createdTaskID {
                     // Не прокручиваем уже видимую первую строку во время анимированной вставки.
                     guard !activeListAtTop else { return }
-                    withAnimation(rowAnimation) { proxy.scrollTo(id, anchor: .top) }
+                    withAnimation(rowAnimation) { proxy.scrollTo(id) }
                 } else {
                     // После удаления сосед занимает освобождённое место без принудительной прокрутки поверх анимации.
                     if displayedScope == scope, let previous, !rowIDs.active.contains(previous) { return }
@@ -201,7 +197,7 @@ struct TaskListView: View {
             List(selection: selection(in: snapshot.completedTasks, area: .completed)) {
                 rows(snapshot.completedTasks, area: .completed)
             }
-            .modifier(TaskListAppearance())
+            .modifier(WorkspaceListAppearance())
             .focused($focusedList, equals: .completed)
             .animation(rowAnimation, value: rowIDs.completed)
             .onDeleteCommand(perform: deleteSelection(in: snapshot.completedTasks))
@@ -231,7 +227,7 @@ struct TaskListView: View {
                 // Прежние отступы находятся внутри TaskRow и тоже принимают клик.
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.visible, edges: .bottom)
-                .background(TaskRowSelectionSync(taskID: task.id, selectedID: $selectedID, revision: selectionRevision,
+                .background(WorkspaceRowSelectionSync(rowID: task.id, selectedID: $selectedID, revision: selectionRevision,
                     isEligible: {
                         // Уходящая анимированная строка не должна выбирать соседа вместо перемещённой задачи.
                         guard task.modelContext != nil, !task.isDeleted,
@@ -314,7 +310,7 @@ struct TaskListView: View {
 }
 
 /// Нативный inset-список даёт отступы и скруглённое выделение без дополнительной заливки строк.
-private struct TaskListAppearance: ViewModifier {
+struct WorkspaceListAppearance: ViewModifier {
     func body(content: Content) -> some View {
         content
             .listStyle(.inset)

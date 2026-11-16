@@ -7,12 +7,12 @@ import Observation
 @MainActor @Observable
 final class WorkspaceTaskContent {
     var view = AnyView(EmptyView())
-    @ObservationIgnored private var key: TaskListAnimationKey?
+    @ObservationIgnored private var key: WorkspaceListAnimationKey?
 
-    func update(_ view: AnyView, key: TaskListAnimationKey?, transaction: Transaction, host: NSView) {
-        if let old = self.key, let key, old.filter == key.filter, old.search == key.search, old != key,
+    func update(_ view: AnyView, key: WorkspaceListAnimationKey?, transaction: Transaction, host: NSView) {
+        if let old = self.key, let key, old.scope == key.scope, old != key,
            !transaction.disablesAnimations, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            TaskListTransitions.prepare(in: host)
+            WorkspaceListTransitions.prepare(in: host, scope: key.scope)
         }
         self.key = key
         withTransaction(transaction) { self.view = view }
@@ -20,9 +20,13 @@ final class WorkspaceTaskContent {
 }
 
 /// Только идентичность результатов: ввод и смена фокуса не запускают переход всего списка.
-struct TaskListAnimationKey: Equatable {
-    let filter: TaskFilter
-    let search: String
+enum WorkspaceListScope: Hashable {
+    case tasks(TaskFilter, search: String)
+    case notes(NoteScope, folder: TaskFilter?, search: String)
+}
+
+struct WorkspaceListAnimationKey: Equatable {
+    let scope: WorkspaceListScope
     let active: [UUID]
     let completed: [UUID]
 }
@@ -30,6 +34,12 @@ struct TaskListAnimationKey: Equatable {
 struct WorkspaceTaskRoot: View {
     let content: WorkspaceTaskContent
     var body: some View { content.view }
+}
+
+struct WorkspaceNoteRecordingActions {
+    let canStart: Bool
+    let startVoice: () -> Void
+    let startCall: () -> Void
 }
 
 /// Нативная оболочка окна: один NSSplitViewController связывает стеклянную панель с NSToolbar.
@@ -53,7 +63,8 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, TaskAc
     let taskActionsTitle: String
     let deadlineTitle: String
     let hasSelectedTask: Bool
-    let taskListKey: TaskListAnimationKey
+    let noteRecording: WorkspaceNoteRecordingActions?
+    let listAnimationKey: WorkspaceListAnimationKey
     let newFolder: () -> Void
     let newTask: () -> Void
     let newChecklistItem: () -> Void
@@ -88,6 +99,8 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, TaskAc
                 toggleCalendar: active == .calendar ? { isCalendarVisible = false } : toggleCalendarPanel,
                 toggleAssistant: active == .assistant ? { isCalendarVisible = false } : toggleAssistant)
         })
+        controller.updateNoteRecording(noteRecording, voiceTitle: strings["Записать голос"],
+                                       callTitle: strings["Записать звонок"])
         controller.updateSearch(text: search, title: searchTitle, clearTitle: clearSearchTitle, changed: { search = $0 })
         controller.updateDeadline(AnyView(deadline().environment(\.self, context.environment)),
                                   title: deadlineTitle, visible: hasSelectedTask)
@@ -96,7 +109,7 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, TaskAc
             tasks: AnyView(tasks().environment(\.self, context.environment)),
             detail: AnyView(detail().environment(\.self, context.environment)),
             taskActions: AnyView(taskActions().environment(\.self, context.environment)),
-            transaction: context.transaction, taskListKey: taskListKey,
+            transaction: context.transaction, listAnimationKey: listAnimationKey,
             isSidebarVisible: isSidebarVisible,
             newFolderTitle: newFolderTitle,
             toggleSidebarTitle: toggleSidebarTitle,
@@ -133,6 +146,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let sidebarButton = NSButton()
     private let newTaskButton = NSButton()
     private let checklistButton = NSButton()
+    private let recordVoiceButton = NSButton()
+    private let recordCallButton = NSButton()
     private let outerRightPanelButton = WorkspacePanelToggleButton()
     private let trailingRightPanelButton = WorkspacePanelToggleButton()
     private var trailingRightPanelSurface: WorkspaceToolbarButtonSurface!
@@ -185,6 +200,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let headingToolbarItem = NSToolbarItem(itemIdentifier: .plannerFolderHeading)
     private let newTaskToolbarItem = NSToolbarItem(itemIdentifier: .plannerNewTask)
     private let checklistToolbarItem = NSToolbarItem(itemIdentifier: .plannerChecklist)
+    private let recordVoiceItem = NSToolbarItem(itemIdentifier: .plannerRecordVoice)
+    private let recordCallItem = NSToolbarItem(itemIdentifier: .plannerRecordCall)
     private let deadlineToolbarItem = NSToolbarItem(itemIdentifier: .plannerDeadline)
     private let taskActionsToolbarItem = NSToolbarItem(itemIdentifier: .plannerTaskActions)
     private lazy var sidebarTrackingItem = NSTrackingSeparatorToolbarItem(
@@ -200,6 +217,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private var newFolderAction: (() -> Void)?
     private var newTaskAction: (() -> Void)?
     private var newChecklistItemAction: (() -> Void)?
+    private var noteRecording: WorkspaceNoteRecordingActions?
     private var sidebarVisibilityChanged: ((Bool) -> Void)?
     private var isUpdatingVisibility = false
     private var hasSetInitialWidths = false
@@ -248,6 +266,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         configureButton(sidebarButton, symbol: "sidebar.left", identifier: "toggle-sidebar-button", action: #selector(toggleFolders))
         configureButton(newTaskButton, symbol: "square.and.pencil", identifier: "new-task-button", action: #selector(createTask))
         configureButton(checklistButton, symbol: "checklist", identifier: "add-checklist-item-button", action: #selector(createChecklistItem))
+        configureButton(recordVoiceButton, symbol: "waveform", identifier: "note-record-voice", action: #selector(recordNoteVoice))
+        configureButton(recordCallButton, symbol: "phone.badge.waveform", identifier: "note-record-call", action: #selector(recordNoteCall))
         configureButton(outerRightPanelButton, symbol: "bubble.left", identifier: "toggle-assistant-button",
                         action: #selector(toggleOuterRightPanel))
         outerRightPanelButton.image = aiChatImage
@@ -290,6 +310,9 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         configureButtonSurface(for: checklistToolbarItem, content: checklistButton)
         checklistToolbarItem.isHidden = true
         checklistButton.isEnabled = false
+        configureButtonSurface(for: recordVoiceItem, content: recordVoiceButton)
+        configureButtonSurface(for: recordCallItem, content: recordCallButton)
+        updateNoteRecording(nil, voiceTitle: "", callTitle: "")
         configureButtonSurface(for: deadlineToolbarItem, content: deadlineHost)
         deadlineToolbarItem.isHidden = true
         deadlineToolbarItem.visibilityPriority = .high
@@ -325,13 +348,13 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
 
     required init?(coder: NSCoder) { nil }
 
-    func update(sidebar: AnyView, tasks: AnyView, detail: AnyView, taskActions: AnyView, transaction: Transaction = Transaction(), taskListKey: TaskListAnimationKey? = nil, isSidebarVisible: Bool,
+    func update(sidebar: AnyView, tasks: AnyView, detail: AnyView, taskActions: AnyView, transaction: Transaction = Transaction(), listAnimationKey: WorkspaceListAnimationKey? = nil, isSidebarVisible: Bool,
                 newFolderTitle: String, toggleSidebarTitle: String, folderTitle: String, taskCountTitle: String,
                 newTaskTitle: String, newChecklistItemTitle: String, taskActionsTitle: String, hasSelectedTask: Bool,
                 newFolder: @escaping () -> Void, newTask: @escaping () -> Void, newChecklistItem: @escaping () -> Void,
                 sidebarVisibilityChanged: @escaping (Bool) -> Void) {
         sidebarHost.rootView = sidebar
-        taskContent.update(tasks, key: taskListKey, transaction: transaction, host: tasksHost.view)
+        taskContent.update(tasks, key: listAnimationKey, transaction: transaction, host: tasksHost.view)
         detailHost.updateContent(detail)
         taskActionsHost.rootView = taskActions
         newFolderAction = newFolder
@@ -632,7 +655,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         [.plannerNewFolder, .plannerToggleSidebar]
         + (sidebarItem.isCollapsed ? [] : [.sidebarTrackingSeparator])
         + [.plannerFolderHeading, .flexibleSpace, .plannerSearch, .plannerDetailTrackingSeparator,
-         .plannerNewTask, .space, .plannerChecklist, .space, .plannerDeadline, .space, .plannerTaskActions]
+         .plannerNewTask, .space, .plannerChecklist, .plannerRecordVoice, .plannerRecordCall, .space, .plannerDeadline, .space, .plannerTaskActions]
         + [.flexibleSpace, .plannerRightPanelSwitch] + calendarToolbarIdentifiers
     }
 
@@ -648,6 +671,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         case .plannerFolderHeading: return headingToolbarItem
         case .plannerNewTask: return newTaskToolbarItem
         case .plannerChecklist: return checklistToolbarItem
+        case .plannerRecordVoice: return recordVoiceItem
+        case .plannerRecordCall: return recordCallItem
         case .plannerDeadline: return deadlineToolbarItem
         case .plannerTaskActions: return taskActionsToolbarItem
         case .plannerRightPanelSwitch: return rightPanelSwitchItem
@@ -675,6 +700,27 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     }
 
     @objc private func createChecklistItem() { newChecklistItemAction?() }
+
+    func updateNoteRecording(_ actions: WorkspaceNoteRecordingActions?, voiceTitle: String, callTitle: String) {
+        self.noteRecording = actions
+        let enabled = actions?.canStart == true
+        for (title, item, button) in [(voiceTitle, recordVoiceItem, recordVoiceButton), (callTitle, recordCallItem, recordCallButton)] {
+            if item.label != title { updateLabel(title, item: item, button: button) }
+            item.isHidden = actions == nil
+            item.isEnabled = enabled
+            button.isEnabled = enabled
+        }
+    }
+
+    @objc private func recordNoteVoice() {
+        guard let noteRecording, noteRecording.canStart else { return }
+        noteRecording.startVoice()
+    }
+
+    @objc private func recordNoteCall() {
+        guard let noteRecording, noteRecording.canStart else { return }
+        noteRecording.startCall()
+    }
 
     func updateDeadline(_ content: AnyView, title: String, visible: Bool) {
         deadlineHost.rootView = content
@@ -1235,6 +1281,8 @@ private extension NSToolbarItem.Identifier {
     static let plannerDetailTrackingSeparator = NSToolbarItem.Identifier("Planner.DetailTrackingSeparator")
     static let plannerNewTask = NSToolbarItem.Identifier("Planner.NewTask")
     static let plannerChecklist = NSToolbarItem.Identifier("Planner.Checklist")
+    static let plannerRecordVoice = NSToolbarItem.Identifier("Planner.RecordVoice")
+    static let plannerRecordCall = NSToolbarItem.Identifier("Planner.RecordCall")
     static let plannerDeadline = NSToolbarItem.Identifier("Planner.Deadline")
     static let plannerTaskActions = NSToolbarItem.Identifier("Planner.TaskActions")
 }

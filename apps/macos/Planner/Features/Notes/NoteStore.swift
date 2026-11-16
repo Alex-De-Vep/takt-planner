@@ -108,6 +108,24 @@ final class NoteStore {
         scheduleSave()
     }
 
+    @discardableResult func moveToTrash(_ id: UUID) -> Bool {
+        guard flush(), let index = notes.firstIndex(where: { $0.id == id && $0.deletedAt == nil }) else {
+            return false
+        }
+        var next = notes
+        let time = Date.now
+        next[index].deletedAt = time
+        next[index].updatedAt = time
+        do {
+            try save(next)
+            syncQueued?()
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
     private func scheduleSave() {
         saveTask?.cancel()
         saveTask = Task { [weak self] in

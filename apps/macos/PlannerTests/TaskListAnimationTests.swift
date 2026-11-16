@@ -17,8 +17,7 @@ struct TaskListAnimationTests {
         fixture.container.mainContext.insert(task)
         fixture.tasks = [task]
         fixture.update(animated: true)
-        try await Task.sleep(for: .milliseconds(40))
-        let probe = try #require(fixture.probe(for: task.id))
+        let probe = try #require(await fixture.waitForProbe(for: task.id))
         for _ in 0..<40 {
             var ancestor: NSView? = probe
             while let view = ancestor, !(view is NSTableRowView) { ancestor = view.superview }
@@ -51,6 +50,28 @@ struct TaskListAnimationTests {
         let deletion = await fixture.samples(of: probe)
         #expect(deletion.contains { $0 > before + 1 && $0 < after - 1 })
         #expect(abs((fixture.position(of: probe) ?? -100) - before) < 1)
+    }
+
+    @Test func insertingNoteMovesExistingRowThroughIntermediatePositions() async throws {
+        let fixture = try AnimationFixture()
+        defer { fixture.close() }
+        let store = NoteStore()
+        let first = try #require(store.create(folder: "inbox"))
+        _ = store.create(folder: "inbox")
+        fixture.updateNotes(store)
+        try await Task.sleep(for: .milliseconds(400))
+        let probe = try #require(fixture.probe(for: first))
+        let before = try #require(fixture.position(of: probe))
+
+        let inserted = try #require(store.create(folder: "inbox"))
+        fixture.updateNotes(store, selected: inserted)
+        let samples = await fixture.samples(of: probe)
+        let after = try #require(fixture.position(of: probe))
+        #expect(after > before + 40)
+        #expect(samples.contains { $0 > before + 1 && $0 < after - 1 })
+        let selectedProbe = try #require(fixture.probe(for: inserted))
+        let table = try #require(selectedProbe.nativeFocus?.table)
+        #expect(table.selectedRow == table.row(for: selectedProbe))
     }
 
     @Test func rapidInsertionsFinishAtTheCorrectPosition() async throws {
@@ -102,16 +123,32 @@ struct TaskListAnimationTests {
             createdTaskID: nil, search: "", filter: .inbox, snapshot: snapshot, now: .now,
             create: {}, toggleToday: { _ in }, toggleCompleted: { _ in }, delete: { _ in },
             deleteImmediately: { _ in }, folders: [], dragScopeID: UUID(), move: { _, _ in }, taskDrag: drag)
-        content.update(AnyView(list), key: TaskListAnimationKey(filter: .inbox, search: "",
+        content.update(AnyView(list), key: WorkspaceListAnimationKey(scope: .tasks(.inbox, search: ""),
             active: snapshot.activeTasks.map(\.id), completed: []),
             transaction: Transaction(animation: animated ? .easeInOut(duration: 0.26) : nil), host: host.view)
     }
-    func probe(for id: UUID) -> TaskRowSelectionSync.Probe? {
-        func find(_ view: NSView) -> TaskRowSelectionSync.Probe? {
-            if let probe = view as? TaskRowSelectionSync.Probe, probe.taskID == id { return probe }
+    func updateNotes(_ store: NoteStore, selected: UUID? = nil) {
+        let scope = WorkspaceListScope.notes(.folder, folder: .inbox, search: "")
+        let list = NoteListView(store: store, notes: store.notes, folders: [], selection: .constant(selected),
+            trash: false, createdNoteID: selected, scope: scope, create: {})
+        content.update(AnyView(list), key: WorkspaceListAnimationKey(scope: scope,
+            active: store.notes.map(\.id), completed: []),
+            transaction: Transaction(animation: .easeInOut(duration: 0.26)), host: host.view)
+    }
+    func probe(for id: UUID) -> WorkspaceRowSelectionSync.Probe? {
+        func find(_ view: NSView) -> WorkspaceRowSelectionSync.Probe? {
+            if let probe = view as? WorkspaceRowSelectionSync.Probe, probe.rowID == id { return probe }
             return view.subviews.lazy.compactMap(find).first
         }
         return find(host.view)
+    }
+    func waitForProbe(for id: UUID) async -> WorkspaceRowSelectionSync.Probe? {
+        // На загруженной машине первая раскладка может начаться позже фиксированной задержки.
+        for _ in 0..<120 {
+            if let probe = probe(for: id) { return probe }
+            try? await Task.sleep(for: .milliseconds(8))
+        }
+        return nil
     }
     func position(of probe: NSView) -> CGFloat? {
         var ancestor: NSView? = probe
@@ -131,5 +168,9 @@ struct TaskListAnimationTests {
         }
         return result
     }
-    func close() { window.close() }
+    func close() {
+        content.update(AnyView(EmptyView()), key: nil, transaction: Transaction(), host: host.view)
+        window.close()
+        window.contentViewController = nil
+    }
 }

@@ -683,7 +683,6 @@
 
 "Заметка в корзине" = "This note is in Trash";
 
-"Экспорт заметки" = "Export note";
 
 "Добавить изображение" = "Add image";
 
@@ -740,7 +739,6 @@
 "Запись пуста." = "The recording is empty.";
 "Запись слишком большая для расшифровки." = "The recording is too large to transcribe.";
 "Сервис вернул пустую расшифровку." = "The service returned an empty transcript.";
-"Обсудить заметку" = "Discuss Note";
 "Готовый текст заметки" = "Proposed Note Text";
 "Изменения сохранены" = "Changes Saved";
 "Заменить текст заметки" = "Replace Note Text";
