@@ -79,3 +79,9 @@ final class WorkspaceToolbarButtonSurface: NSView {
         }
     }
 }
+
+/// Нативная форма подсветки не меняет центр значка в его фиксированной области.
+@MainActor
+final class WorkspacePanelToggleButton: NSButton {
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0) }
+}

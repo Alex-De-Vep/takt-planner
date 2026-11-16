@@ -10,7 +10,7 @@ struct RightPanelToolbarTests {
         try #require(controller.toolbar(NSToolbar(), itemForItemIdentifier: .init("Planner.\(suffix)"), willBeInsertedIntoToolbar: true))
     }
     private func surface(_ item: NSToolbarItem) throws -> WorkspaceToolbarButtonSurface {
-        try #require((item.view as? WorkspaceRightPanelSlot)?.surface)
+        try #require(item.view as? WorkspaceToolbarButtonSurface)
     }
     private func button(_ item: NSToolbarItem) throws -> NSButton {
         try #require(surface(item).contentView as? NSButton)
@@ -39,9 +39,12 @@ struct RightPanelToolbarTests {
         let controller = WorkspaceSplitController()
         let outer = try item(controller, "RightPanelSwitch"), trailing = try item(controller, "RightPanelToggle")
         let outerSlot = outer.view, trailingSlot = trailing.view
-        let assistantButton = try button(outer), calendarButton = try button(trailing)
-        let assistantImage = assistantButton.image, calendarImage = calendarButton.image
-        let assistantAction = assistantButton.action, calendarAction = calendarButton.action
+        let fixedOuter = try button(outer), fixedTrailing = try button(trailing)
+        let assistantImage = try #require(fixedOuter.image), calendarImage = try #require(fixedTrailing.image)
+        update(controller, active: .calendar)
+        let closeImage = try #require(fixedTrailing.image)
+        #expect(closeImage !== calendarImage && closeImage !== assistantImage)
+        let outerAction = fixedOuter.action, trailingAction = fixedTrailing.action
         let search = try item(controller, "Search").view
         let controllers = controller.splitViewItems.map { ObjectIdentifier($0.viewController) }
         for english in [false, true] {
@@ -53,12 +56,10 @@ struct RightPanelToolbarTests {
                 #expect(outer.view === outerSlot && trailing.view === trailingSlot)
                 let outerSurface = try surface(outer), trailingSurface = try surface(trailing)
                 let outerButton = try button(outer), trailingButton = try button(trailing)
-                #expect(outerButton === (active == .assistant ? calendarButton : assistantButton))
-                #expect(trailingButton === (active == .assistant ? assistantButton : calendarButton))
-                #expect(assistantButton.image === assistantImage && calendarButton.image === calendarImage)
-                #expect(assistantButton.action == assistantAction && calendarButton.action == calendarAction)
-                #expect(assistantButton.accessibilityIdentifier() == "toggle-assistant-button")
-                #expect(calendarButton.accessibilityIdentifier() == "toggle-calendar-button")
+                #expect(outerButton === fixedOuter && trailingButton === fixedTrailing)
+                #expect(outerButton.image === (active == .assistant ? calendarImage : assistantImage))
+                #expect(trailingButton.image === (active == nil ? calendarImage : closeImage))
+                #expect(outerButton.action == outerAction && trailingButton.action == trailingAction)
                 #expect(outerSurface.presentation == .circle)
                 #expect(trailingSurface.presentation == (active == nil ? .circle : .sidebar))
                 #expect(outerButton.borderShape == .circle)
@@ -123,42 +124,6 @@ struct RightPanelToolbarTests {
         }
     }
 
-    @Test func capturedChatButtonKeepsItsActionAfterMovingToTrailingSlot() throws {
-        let controller = WorkspaceSplitController()
-        var chats = 0, calendars = 0
-        update(controller, active: nil, calendar: { calendars += 1 }, assistant: { chats += 1 })
-        let chat = try button(item(controller, "RightPanelSwitch")), originalImage = chat.image
-        update(controller, active: .assistant, calendar: { calendars += 1 }, assistant: { chats += 1 })
-        controller.setCalendarToolbar(column: true, visible: true)
-        #expect(try button(item(controller, "RightPanelToggle")) === chat)
-        chat.performClick(nil)
-        #expect(chats == 1 && calendars == 0 && chat.image === originalImage)
-        update(controller, active: .calendar, calendar: { calendars += 1 }, assistant: { chats += 1 })
-        #expect(try button(item(controller, "RightPanelSwitch")) === chat)
-        chat.performClick(nil)
-        #expect(chats == 2 && calendars == 0 && chat.image === originalImage)
-    }
-
-    @Test func closingChatPreservesItsButtonAndIconInsteadOfTurningItIntoCalendar() throws {
-        let controller = WorkspaceSplitController()
-        let trailing = try item(controller, "RightPanelToggle"), outer = try item(controller, "RightPanelSwitch")
-        update(controller, active: .assistant)
-        controller.setCalendarToolbar(column: true, visible: true)
-        let chatButton = try button(trailing), image = chatButton.image, action = chatButton.action
-        controller.beginCalendarHeaderTransition()
-        update(controller, active: nil)
-        // В тесте нет окна: носитель сразу занимает конечное место, без таймера и анимации.
-        #expect(try button(outer) === chatButton)
-        #expect(chatButton.image === image && chatButton.action == action)
-        #expect(chatButton.accessibilityIdentifier() == "toggle-assistant-button")
-        let heading = try #require(item(controller, "CalendarHeading").view)
-        #expect(heading.alphaValue == 0)
-        controller.setCalendarToolbar(column: false, visible: false)
-        controller.finishCalendarHeaderTransition(afterLayout: false)
-        #expect(try surface(outer).presentation == .circle && surface(trailing).presentation == .circle)
-        #expect(heading.alphaValue == 0)
-    }
-
     @Test func transitionsDoNotRevealHeadingBeforeLayoutOrRenameClosingChat() throws {
         let controller = WorkspaceSplitController()
         let heading = try #require(item(controller, "CalendarHeading").view)
@@ -175,46 +140,6 @@ struct RightPanelToolbarTests {
             update(controller, active: nil)
             #expect(label.stringValue == (active == .assistant ? "Помощник" : "Календарь"))
             controller.setCalendarToolbar(column: false, visible: false)
-        }
-    }
-
-    @Test func buttonPathKeepsEndpointsAndUsesPanelTimingWithoutOvershoot() {
-        let from = CGRect(x: 950, y: 8, width: 36, height: 36)
-        let to = CGRect(x: 600, y: 8, width: 36, height: 36)
-        let path = RightPanelButtonPath(start: from, end: to)
-        #expect(path.frame(at: -1) == from && path.frame(at: 0) == from)
-        #expect(path.frame(at: 1) == to && path.frame(at: 2) == to)
-        #expect(abs(path.frame(at: 0.5).minX - 775) < 0.001)
-        var previous = from.minX
-        for step in 0...100 {
-            let frame = path.frame(at: Double(step) / 100)
-            #expect(frame.minX <= previous + 0.001 && frame.minX >= to.minX)
-            #expect(frame.minY == 8 && frame.size == from.size)
-            previous = frame.minX
-        }
-        // Прерывание берёт текущую координату и сохраняет непрерывность обратного движения.
-        let middle = path.frame(at: 0.4)
-        let reversed = RightPanelButtonPath(start: middle, end: from)
-        #expect(reversed.frame(at: 0) == middle && reversed.frame(at: 1) == from)
-    }
-
-    @Test func motionWithoutWindowParksSameSemanticControlsAndLeavesNoRunningTransition() {
-        let chat = NSButton(), calendar = NSButton()
-        let chatSurface = WorkspaceToolbarButtonSurface(content: chat)
-        let calendarSurface = WorkspaceToolbarButtonSurface(content: calendar)
-        let outer = WorkspaceRightPanelSlot(), trailing = WorkspaceRightPanelSlot()
-        let motion = WorkspaceRightPanelButtonMotion(outer: outer, trailing: trailing,
-            assistant: chatSurface, calendar: calendarSurface)
-        for active in ([nil, .assistant, .calendar, nil, .assistant] as [RightPanel?]) {
-            motion.update(active: active, animate: true)
-            #expect(!motion.moving)
-            #expect(outer.surface === (active == .assistant ? calendarSurface : chatSurface))
-            #expect(trailing.surface === (active == .assistant ? chatSurface : calendarSurface))
-            #expect(outer.carrier?.superview === outer && trailing.carrier?.superview === trailing)
-            #expect(outer.surface?.presentation == .circle)
-            #expect(trailing.surface?.presentation == (active == nil ? .circle : .sidebar))
-            motion.cancel()
-            #expect(!motion.moving && chatSurface.contentView === chat && calendarSurface.contentView === calendar)
         }
     }
 

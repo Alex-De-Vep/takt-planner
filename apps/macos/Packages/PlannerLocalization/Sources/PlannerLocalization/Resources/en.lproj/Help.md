@@ -1,4 +1,4 @@
-# Planner Help
+# Takt Help
 
 ## Getting started
 
@@ -88,7 +88,7 @@
 
 ## Settings and shortcuts
 
-- Open Settings from the bottom of the folder sidebar or with `⌘,`. Change the interface language under **Account**. Your task and folder names stay as entered.
+- Open Settings from **Takt → Settings…** or with `⌘,`. Change the interface language under **Account**. Your task and folder names stay as entered.
 - The **Help** button at the bottom of the Settings sidebar opens this guide.
 - Planner follows the macOS light or dark appearance. Use System Settings to manage calendar and notification permissions.
 - `⌘N` creates a task. `⇧⌘N` creates a folder. `⇧⌘S` toggles the star. `⌘Enter` toggles completion of the selected task.

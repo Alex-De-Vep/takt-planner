@@ -29,14 +29,14 @@ def main():
         except subprocess.CalledProcessError:
             print(log_path.read_text()[-10000:])
             raise
-    source = BUILD / 'DerivedData/Build/Products/Debug/Planner.app'
+    source = BUILD / 'DerivedData/Build/Products/Debug/Takt.app'
     for language, appearance in [('ru', 'light'), ('ru', 'dark'), ('en', 'light')]:
-        app = BUILD / f'Tasks-{language}-{appearance}.app'
+        app = BUILD / f'Takt-{language}-{appearance}.app'
         run('/usr/bin/ditto', source, app)
         info = app / 'Contents/Info.plist'
         metadata = plistlib.loads(info.read_bytes())
         metadata.update(CFBundleIdentifier=f'local.planner.Showcase.{language}.{appearance}',
-                        CFBundleName='Tasks Showcase', CFBundleDisplayName='Tasks Showcase',
+                        CFBundleName='Takt Showcase', CFBundleDisplayName='Takt Showcase',
                         ShowcaseLanguage=language, ShowcaseAppearance=appearance)
         info.write_bytes(plistlib.dumps(metadata))
         run('/usr/bin/codesign', '--force', '--sign', '-', '--entitlements', entitlements, app)

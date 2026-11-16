@@ -52,25 +52,27 @@ for name, product_type, extension in (
 ):
     group = add(f"{name}-sources", "PBXFileSystemSynchronizedRootGroup", path=name, sourceTree="<group>")
     groups.append(group)
+    product_name = "Takt" if name == "Planner" else name
     product = add(f"{name}-product", "PBXFileReference", explicitFileType="wrapper.application" if name == "Planner" else "wrapper.cfbundle",
-                  includeInIndex=0, path=f"{name}.{extension}", sourceTree="BUILT_PRODUCTS_DIR")
+                  includeInIndex=0, path=f"{product_name}.{extension}", sourceTree="BUILT_PRODUCTS_DIR")
     products.append(product)
     settings = {
         "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.2.17", "CURRENT_PROJECT_VERSION": "67", "ARCHS": "arm64",
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.10", "CURRENT_PROJECT_VERSION": "94", "ARCHS": "arm64",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
-        settings.update(SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)", CODE_SIGN_ENTITLEMENTS="Planner/Planner.entitlements", ENABLE_APP_SANDBOX="YES",
+        settings.update(PRODUCT_NAME=product_name, PRODUCT_MODULE_NAME=name,
+                        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)", CODE_SIGN_ENTITLEMENTS="Planner/Planner.entitlements", ENABLE_APP_SANDBOX="YES",
                         INFOPLIST_FILE="Configuration/Planner-Info.plist",
                         ENABLE_HARDENED_RUNTIME="YES", ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME="AccentColor",
                         ASSETCATALOG_COMPILER_APPICON_NAME="TasksIcon",
-                        INFOPLIST_KEY_CFBundleDisplayName="Задачи",
+                        INFOPLIST_KEY_CFBundleDisplayName="Takt",
                         INFOPLIST_KEY_LSApplicationCategoryType="public.app-category.productivity",
-                        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Задачам нужен доступ к календарям для просмотра событий и планирования времени.",
+                        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Takt нужен доступ к календарям для просмотра событий и планирования времени.",
                         INFOPLIST_KEY_NSHumanReadableCopyright="", INFOPLIST_KEY_CFBundleDevelopmentRegion="ru")
     elif name == "PlannerTests":
-        settings.update(TEST_HOST="$(BUILT_PRODUCTS_DIR)/Planner.app/Contents/MacOS/Planner", BUNDLE_LOADER="$(TEST_HOST)")
+        settings.update(TEST_HOST="$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt", BUNDLE_LOADER="$(TEST_HOST)")
     else:
         settings.update(TEST_TARGET_NAME="Planner")
     phases = [add(f"{name}-{kind}", f"PBX{kind}BuildPhase", buildActionMask=2147483647, files=[], runOnlyForDeploymentPostprocessing=0)
@@ -85,7 +87,7 @@ for name, product_type, extension in (
     targets.append(add(f"{name}-target", "PBXNativeTarget", buildConfigurationList=configurations(name, settings),
                        buildPhases=phases, buildRules=[], dependencies=dependencies, fileSystemSynchronizedGroups=[group],
                        packageProductDependencies=[localization_product] + mlx_products if name == "Planner" else [],
-                       name=name, productName=name, productReference=product, productType=product_type))
+                       name=name, productName=product_name, productReference=product, productType=product_type))
 
 products_group = add("products", "PBXGroup", children=products, name="Products", sourceTree="<group>")
 main = add("main", "PBXGroup", children=groups + [products_group], sourceTree="<group>")
@@ -111,8 +113,8 @@ scheme_dir = directory / "xcshareddata/xcschemes"
 scheme_dir.mkdir(parents=True, exist_ok=True)
 
 def reference(name):
-    ext = "app" if name == "Planner" else "xctest"
-    return f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{identifier(name + "-target")}" BuildableName="{name}.{ext}" BlueprintName="{name}" ReferencedContainer="container:Planner.xcodeproj"/>'
+    filename = "Takt.app" if name == "Planner" else f"{name}.xctest"
+    return f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{identifier(name + "-target")}" BuildableName="{filename}" BlueprintName="{name}" ReferencedContainer="container:Planner.xcodeproj"/>'
 
 (scheme_dir / "Planner.xcscheme").write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
 <Scheme LastUpgradeVersion="2650" version="1.7">

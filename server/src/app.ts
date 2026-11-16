@@ -11,10 +11,11 @@ import { Database } from './db.js';
 import { ApiError } from './errors.js';
 import { installAuth } from './auth.js';
 import { installSync } from './sync.js';
+import { installNotes, MAX_NOTE_BYTES } from './notes.js';
 import { FileStore,installFiles,PART_BYTES } from './files.js';
 export async function buildApp(config:Config,db:Database){
  const app=Fastify({logger:config.test?false:{level:'info'},logController:new LogController({disableRequestLogging:true}),trustProxy:config.trustedProxyCIDRs.length?config.trustedProxyCIDRs:false,ajv:{customOptions:{removeAdditional:false,coerceTypes:false,useDefaults:false}},bodyLimit:4*1024*1024,requestTimeout:60000,connectionTimeout:15000,routerOptions:{maxParamLength:100}});
- await app.register(swagger,{refResolver:{buildLocalReference:(schema)=>String(schema.$id)},openapi:{info:{title:'Planner Server API',version:SERVER_VERSION},servers:[{url:config.publicBaseUrl}],components:{securitySchemes:{bearerAuth:{type:'http',scheme:'bearer'}}}}});
+ await app.register(swagger,{refResolver:{buildLocalReference:(schema)=>String(schema.$id)},openapi:{info:{title:'Takt Server API',version:SERVER_VERSION},servers:[{url:config.publicBaseUrl}],components:{securitySchemes:{bearerAuth:{type:'http',scheme:'bearer'}}}}});
  for(const schema of contractSchemas)app.addSchema(schema);
  app.addHook('onRoute',route=>{route.schema={...route.schema,...routeContract(String(route.method),route.url)};});
  app.addHook('onRequest',async request=>{
@@ -37,9 +38,11 @@ export async function buildApp(config:Config,db:Database){
    const code=error instanceof ApiError?error.code:status===429?'rate_limited':status===413?'request_too_large':status<500?'invalid_request':'server_unavailable';
    const message=error instanceof ApiError?error.message:status<500?'Некорректный запрос':'Сервер временно недоступен';
    if(status>=500)app.log.error({event:'request_failed',code,requestId:request.id});
-   const retryAfter=status===429?Math.max(1,Math.ceil(error instanceof ApiError?error.retryAfterSeconds??1:1)):undefined;
+   const retrySeconds=error instanceof ApiError?error.retryAfterSeconds:undefined;
+   const retryAfter=retrySeconds!==undefined||status===429?Math.max(1,Math.ceil(retrySeconds??1)):undefined;
+   const attemptsRemaining=error instanceof ApiError?error.attemptsRemaining:undefined;
    if(retryAfter!==undefined)reply.header('Retry-After',String(retryAfter));
-   reply.code(status).send({error:{code,message,requestId:request.id,...(retryAfter!==undefined?{retryAfterSeconds:retryAfter}:{})}});
+   reply.code(status).send({error:{code,message,requestId:request.id,...(retryAfter!==undefined?{retryAfterSeconds:retryAfter}:{}),...(attemptsRemaining!==undefined?{attemptsRemaining}:{})}});
  });
  const store=new FileStore(config.dataDir);await store.initialize();
  app.get('/health/live',async()=>({status:'ok',version:SERVER_VERSION}));
@@ -50,8 +53,8 @@ export async function buildApp(config:Config,db:Database){
      return {status:'ready',version:SERVER_VERSION};
    }catch{return reply.code(503).send({status:'unavailable'});}
  });
- app.get('/v1/config',async()=>({protocolVersion:PROTOCOL_VERSION,serverVersion:SERVER_VERSION,serverTime:new Date().toISOString(),registrationMode:config.publicRegistration?'open':'allowlist',limits:{maxFileBytes:config.maxFileBytes,accountQuotaBytes:config.quotaBytes,partBytes:PART_BYTES,maxBatchOperations:100,maxRequestBytes:4194304}}));
- const auth=await installAuth(app,db,config);installSync(app,db,auth);installFiles(app,db,auth,config,store);
+ app.get('/v1/config',async()=>({protocolVersion:PROTOCOL_VERSION,serverVersion:SERVER_VERSION,serverTime:new Date().toISOString(),registrationMode:config.publicRegistration?'open':'allowlist',limits:{maxFileBytes:config.maxFileBytes,accountQuotaBytes:config.quotaBytes,partBytes:PART_BYTES,maxBatchOperations:100,maxRequestBytes:4194304,maxNoteBytes:MAX_NOTE_BYTES}}));
+ const auth=await installAuth(app,db,config);installSync(app,db,auth);installFiles(app,db,auth,config,store);installNotes(app,db,auth,config);
  app.get('/v1/openapi.json',async()=>completeOpenAPI(app.swagger()));
  return {app,store,auth};
 }

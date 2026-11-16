@@ -134,7 +134,7 @@ final class PlannerNotifications {
         guard permission == .authorized else { return }
         do {
             try await client.add(PlannerNotification(id: "planner.test", title: preferences.translations["Уведомления работают"],
-                body: preferences.translations["Так будут выглядеть напоминания приложения «Задачи»."], trigger: .once(.now.addingTimeInterval(5))))
+                body: preferences.translations["Так будут выглядеть напоминания Takt."], trigger: .once(.now.addingTimeInterval(5))))
             lastError = nil
         } catch { lastError = error.localizedDescription }
     }

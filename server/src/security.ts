@@ -42,8 +42,14 @@ export async function rateLimitMany(db: Database, limits: {key:string;max:number
     ON CONFLICT(key) DO UPDATE SET count=CASE WHEN limits.expires_at<=now() THEN 1 ELSE limits.count+1 END,
     expires_at=CASE WHEN limits.expires_at<=now() THEN EXCLUDED.expires_at ELSE limits.expires_at END
     RETURNING key,count,GREATEST(1,ceil(extract(epoch FROM expires_at-now())))::integer AS wait`, [JSON.stringify(limits)]);
-  const exceeded=r.rows.filter(row=>row.count>limits.find(x=>x.key===row.key)!.max);
-  if(exceeded.length)throw new ApiError(429,'rate_limited','Слишком много попыток. Попробуйте позже',Math.max(...exceeded.map(x=>x.wait)));
+  const usage = r.rows.map(row => ({ remaining: limits.find(limit => limit.key === row.key)!.max - row.count, wait: Number(row.wait) }));
+  const exceeded = usage.filter(limit => limit.remaining < 0);
+  if (exceeded.length) {
+    throw new ApiError(429, 'rate_limited', 'Слишком много попыток. Попробуйте позже', Math.max(...exceeded.map(limit => limit.wait)), 0);
+  }
+  const attemptsRemaining = Math.min(...usage.map(limit => limit.remaining));
+  const wait = Math.max(0, ...usage.filter(limit => limit.remaining === 0).map(limit => limit.wait));
+  return { attemptsRemaining, retryAfterSeconds: wait || undefined };
 }
 export async function queueMail(tx: Tx, secret: string, to: string, subject: string, text: string, expiresAt?: string, userId?: string) {
   await tx.query('INSERT INTO jobs(id,kind,encrypted_payload,user_id) VALUES(gen_random_uuid(),$1,$2,$3)', ['mail',encrypt(secret,{to,subject,text,expiresAt}),userId??null]);

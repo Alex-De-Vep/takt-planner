@@ -22,6 +22,7 @@ struct SyncTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(true, forKey: "planner.welcome.v1")
         defaults.set(true, forKey: "planner.welcome.v2")
+        defaults.set(true, forKey: "planner.welcome.v3")
         let profile = signedIn ? SyncProfile(
             account: SyncAccount(id: UUID().syncID, email: "welcome@example.test", libraryId: UUID().syncID),
             sessionID: UUID().syncID

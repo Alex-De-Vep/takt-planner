@@ -30,7 +30,7 @@ async function main(){
    }finally{await db.close();}return;
  }
  if(command==='mail-test'){
-   try{const to=email(process.argv[3]);const smtp=nodemailer.createTransport({host:config.smtpHost,port:config.smtpPort,secure:config.smtpSecure,auth:config.smtpUser?{user:config.smtpUser,pass:config.smtpPassword}:undefined,connectionTimeout:10000,socketTimeout:20000});try{await smtp.sendMail({from:config.mailFrom,to,subject:'Проверка сервера Задачи',text:'Сервер успешно отправил это тестовое письмо.',disableFileAccess:true,disableUrlAccess:true});await recordMail(db,true);console.log('Тестовое письмо отправлено');}catch(error){await recordMail(db,false,error);throw error;}finally{smtp.close();}}finally{await db.close();}return;
+   try{const to=email(process.argv[3]);const smtp=nodemailer.createTransport({host:config.smtpHost,port:config.smtpPort,secure:config.smtpSecure,auth:config.smtpUser?{user:config.smtpUser,pass:config.smtpPassword}:undefined,connectionTimeout:10000,socketTimeout:20000});try{await smtp.sendMail({from:config.mailFrom,to,subject:'Проверка сервера Takt',text:'Сервер успешно отправил это тестовое письмо.',disableFileAccess:true,disableUrlAccess:true});await recordMail(db,true);console.log('Тестовое письмо отправлено');}catch(error){await recordMail(db,false,error);throw error;}finally{smtp.close();}}finally{await db.close();}return;
  }
  const controller=new AbortController();
  process.once('SIGTERM',()=>controller.abort());process.once('SIGINT',()=>controller.abort());

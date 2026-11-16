@@ -1,6 +1,7 @@
 import { uuidPattern } from './security.js';
 const str={type:'string'},bool={type:'boolean'},integer={type:'integer',minimum:0,maximum:Number.MAX_SAFE_INTEGER};
 const id={type:'string',pattern:uuidPattern},revision={type:'string',pattern:'^[0-9]+$'},time={type:'string',format:'date-time'},day={type:'string',format:'date'};
+const noteRevision={type:'string',pattern:'^[0-9a-f]{64}$'},noteData={type:'string',minLength:1,contentEncoding:'base64'};
 const nullable=(schema:any)=>({anyOf:[schema,{type:'null'}]});
 const ref=(name:string)=>({$ref:`${name}#`});
 const array=(items:any)=>({type:'array',items});
@@ -20,7 +21,7 @@ const entity=named('Entity',{oneOf:entities.map(e=>ref(e.$id))});
 // Semantic errors remain per-operation results in protocol 1, not a whole-batch HTTP 400.
 export const mutationSchema=named('Mutation',object({operationId:id,libraryId:id,deviceId:id,entityId:id,entityType:{enum:Object.keys(fields)},kind:{enum:['create','update','delete']},changes:{type:'object',minProperties:1,maxProperties:8,additionalProperties:object({value:{},version:ref('Stamp')})},deleteVersion:ref('Stamp')},['operationId','libraryId','deviceId','entityId','entityType','kind']));
 mutationSchema.description='Changes contain fields of the selected entity type: see TaskFields, FolderFields, ChecklistItemFields, AttachmentFields. Omission means unchanged; null clears nullable fields. Semantic errors are returned per operation.';
-const error=named('ErrorResponse',object({error:object({code:str,message:str,requestId:str,retryAfterSeconds:{type:'integer',minimum:1}},['code','message','requestId'])}));
+const error=named('ErrorResponse',object({error:object({code:str,message:str,requestId:str,retryAfterSeconds:{type:'integer',minimum:1},attemptsRemaining:integer},['code','message','requestId'])}));
 const ok=named('Ok',object({ok:{const:true}}));
 const tokens=object({accessToken:str,refreshToken:str,expiresIn:integer,tokenType:{const:'Bearer'}});
 const result={oneOf:[object({operationId:id,status:{enum:['applied','deleted']},entity:ref('Entity')}),object({operationId:nullable(id),status:{const:'rejected'},error:object({code:str,message:str})})]};
@@ -39,7 +40,10 @@ export const contractSchemas=[stampSchema,mutationSchema,...entities,entity,erro
  named('PartResponse',object({ok:{const:true},sha256:str})),named('CompleteResponse',object({ok:{const:true},attachment:ref('Entity')})),
  named('StorageResponse',object({quotaBytes:integer,maxFileBytes:integer,activeBytes:integer,retainedBytes:integer,reservedBytes:integer})),
  named('HealthResponse',object({status:str,version:str},['status'])),
- named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer})}))
+ named('NoteIndexResponse',object({notes:array(object({id,revision:noteRevision}))})),
+ named('NoteResponse',object({revision:noteRevision,data:noteData})),
+ named('NoteWriteResponse',object({revision:noteRevision})),
+ named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
 ];
 const email={type:'string',minLength:3,maxLength:254},password={type:'string',minLength:12,maxLength:128};
 const mutations={type:'array',minItems:1,maxItems:100,items:ref('Mutation')};
@@ -49,7 +53,8 @@ export const requestSchemas:Record<string,any>={
  '/v1/auth/refresh':object({refreshToken:{type:'string',minLength:32,maxLength:128}}),'/v1/auth/password-reset/request':object({email}),
  '/v1/auth/password-reset/confirm':object({challengeId:id,code:{type:'string',pattern:'^\\d{8}$'},newPassword:password}),
  '/v1/account':object({password}),'/v1/sync/mutations':object({mutations}),'/v1/library/imports':object({importId:id}),
- '/v1/library/imports/:id/mutations':object({mutations}),'/v1/attachments/:id/uploads':object({uploadId:id})
+ '/v1/library/imports/:id/mutations':object({mutations}),'/v1/attachments/:id/uploads':object({uploadId:id}),
+ '/v1/notes/:id':object({baseRevision:nullable(noteRevision),data:noteData})
 };
 const responses:Record<string,string>={
  '/health/live':'HealthResponse','/health/ready':'HealthResponse','/v1/config':'ConfigResponse',
@@ -59,12 +64,13 @@ const responses:Record<string,string>={
  '/v1/sync/snapshot':'SnapshotResponse','/v1/sync/changes':'ChangesResponse','/v1/sync/mutations':'MutationsResponse',
  '/v1/library/imports':'ImportResponse','/v1/library/imports/:id/mutations':'ImportBatchResponse','/v1/library/imports/:id/commit':'Ok',
  '/v1/attachments/:id/uploads':'UploadResponse','/v1/uploads/:id':'UploadStateResponse','/v1/uploads/:id/parts/:part':'PartResponse',
- '/v1/uploads/:id/complete':'CompleteResponse','/v1/storage':'StorageResponse'
+ '/v1/uploads/:id/complete':'CompleteResponse','/v1/storage':'StorageResponse','/v1/notes':'NoteIndexResponse','/v1/notes/:id':'NoteResponse'
 };
 export function isPublicRoute(path:string) {return path.startsWith('/health/')||path==='/v1/config'||path==='/v1/openapi.json'||(path.startsWith('/v1/auth/')&&path!=='/v1/auth/logout');}
 export function routeContract(method:string,path:string) {
  const response:Record<string,any>={};for(const status of [400,401,403,404,409,410,413,415,429,500,503])response[status]=ref('ErrorResponse');
  if(responses[path])response[200]=ref(responses[path]!);
+ if(path==='/v1/notes/:id'&&method==='PUT')response[200]=ref('NoteWriteResponse');
  if(path==='/health/ready')response[503]={anyOf:[ref('HealthResponse'),ref('ErrorResponse')]};
  if(path==='/v1/attachments/:id/content')response[200]={type:'string',format:'binary'};
  if(path==='/v1/openapi.json')response[200]={type:'object',additionalProperties:true};
@@ -80,7 +86,9 @@ export function completeOpenAPI(spec:any) {
  doc.paths['/v1/uploads/{id}/parts/{part}'].put.requestBody={required:true,content:{'application/octet-stream':{schema:{type:'string',format:'binary'}}}};
  for(const [path,methods]of Object.entries(doc.paths) as [string,any][])for(const op of Object.values(methods) as any[]) {
    if(!op.responses)continue;
-   if(op.responses['429'])op.responses['429'].headers={'Retry-After':{description:'Seconds until the exceeded limit permits retrying.',schema:{type:'integer',minimum:1}}};
+   const retryHeader={description:'Seconds until the exhausted limit permits retrying.',schema:{type:'integer',minimum:1}};
+   if(op.responses['429'])op.responses['429'].headers={'Retry-After':retryHeader};
+   if(path==='/v1/auth/login'&&op.responses['401'])op.responses['401'].headers={'Retry-After':retryHeader};
    if(path==='/v1/attachments/{id}/content')op.responses['200']={description:'Original file bytes; verify SHA-256 before installing into cache.',content:{'application/octet-stream':{schema:{type:'string',format:'binary'}}},headers:{'X-Content-SHA256':{schema:{type:'string'}},'Content-Disposition':{schema:{type:'string'}}}};
  }return doc;
 }

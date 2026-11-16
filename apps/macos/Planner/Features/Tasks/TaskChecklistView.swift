@@ -23,6 +23,7 @@ struct TaskChecklistView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(.bottom, 4)
             ForEach(items) { item in
+                let itemID = item.id
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .top, spacing: 8) {
                         Button { service.toggleChecklistItem(item) } label: {
@@ -40,7 +41,7 @@ struct TaskChecklistView: View {
                         .accessibilityIdentifier("complete-checklist-item-\(item.id)")
                         ChecklistTextEditor(taskID: task.id, itemID: item.id, store: editorStore, text: Binding(
                             get: { service.checklistTitle(for: item) },
-                            set: { service.renameChecklistItem(item, to: $0) }
+                            set: { service.editChecklistTitle(item, text: $0) }
                         ), requestFocus: Binding(get: { requestedFocusID == item.id }, set: { requested in
                             if !requested, requestedFocusID == item.id { requestedFocusID = nil }
                         }), isCompleted: item.isCompleted, placeholder: strings["Название подзадачи"],
@@ -48,7 +49,7 @@ struct TaskChecklistView: View {
                             focusChanged: { focused in
                                 if focused { focusedItemID = item.id }
                                 else if focusedItemID == item.id { focusedItemID = nil }
-                            })
+                            }, endEditing: { service.flushText(.checklist(itemID)) })
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 3)
                         .help(service.checklistTitle(for: item))
@@ -66,7 +67,7 @@ struct TaskChecklistView: View {
                     }
                     if service.checklistDrafts[item.id] != nil {
                         Button(strings["Повторить сохранение текста"]) {
-                            service.renameChecklistItem(item, to: service.checklistTitle(for: item))
+                            service.flushText(.checklist(item.id))
                         }.font(.caption)
                     }
                 }
@@ -105,7 +106,7 @@ struct TaskChecklistView: View {
         if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             // Enter на пустом пункте завершает ввод списка, не оставляя пустую подзадачу.
             if service.deleteChecklistItem(item) { focusedItemID = nil; requestedFocusID = nil }
-        } else if service.renameChecklistItem(item, to: title) {
+        } else if service.flushText(.checklist(item.id)) {
             addItem(item)
         }
     }

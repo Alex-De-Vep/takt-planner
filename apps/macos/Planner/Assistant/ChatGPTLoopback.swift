@@ -112,10 +112,10 @@ final class ChatGPTLoopback {
         let message: String
         if case .success? = result {
             status = "200 OK"
-            message = russian ? "Ответ получен. Вернитесь в приложение «Задачи»." : "Response received. Return to Tasks."
+            message = russian ? "Ответ получен. Вернитесь в Takt." : "Response received. Return to Takt."
         } else {
             status = "400 Bad Request"
-            message = russian ? "Вход не завершён. Вернитесь в приложение «Задачи»." : "Sign-in did not complete. Return to Tasks."
+            message = russian ? "Вход не завершён. Вернитесь в Takt." : "Sign-in did not complete. Return to Takt."
         }
         let body = Data(message.utf8)
         var response = Data("HTTP/1.1 \(status)\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\nContent-Length: \(body.count)\r\n\r\n".utf8)

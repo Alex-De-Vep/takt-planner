@@ -4,7 +4,8 @@ import SwiftData
 extension TaskService {
     func assistantTextSnapshot(_ task: PlannerTask) throws -> AssistantTextSnapshot {
         guard !task.isDeleted else { throw AssistantFailure(message: "Задача больше не существует.") }
-        guard titleDrafts[task.id] == nil, descriptionDrafts[task.id] == nil,
+        guard flushEditorText(taskID: task.id),
+              titleDrafts[task.id] == nil, descriptionDrafts[task.id] == nil,
               !task.orderedChecklistItems.contains(where: { checklistDrafts[$0.id] != nil }) else {
             throw AssistantFailure(message: "Сначала повторите сохранение черновика задачи.")
         }

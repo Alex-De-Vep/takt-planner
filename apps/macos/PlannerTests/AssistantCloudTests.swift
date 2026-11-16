@@ -39,8 +39,8 @@ import Testing
         #expect(GigaChatTrust.evaluate(chain: [root], host: "api.giga.chat", port: 443, anchor: anchor) == nil)
     }
 
-    @Test(arguments: [AssistantGateway?.none, .some(.deepSeek)])
-    func clearingHistoryKeepsCloudSelectionAcrossReopen(gateway: AssistantGateway?) throws {
+    @Test(arguments: [AssistantGateway?.none, .some(.deepSeek)], [false, true])
+    func freshConversationKeepsCloudSelectionAcrossReopen(gateway: AssistantGateway?, clearHistory: Bool) throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: "ClearChat-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = AssistantStore(url: directory.appending(path: "chat.json"))
@@ -55,14 +55,25 @@ import Testing
         thread.actions = [action]
         thread.cloud?.draftIDs = [action.id]
         thread.clarificationContext = context
+        thread.focusedDraftID = action.id
+        thread.focusedEventID = UUID()
+        thread.cloud?.historyStart = 1
         try store.save(.init(currentID: thread.id, threads: [AssistantThread(), thread]))
 
-        let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
-        service.clearHistory()
+        let service = AssistantService(store: store)
+        if clearHistory { service.clearHistory() }
+        else { service.newConversation() }
 
         let saved = try store.load()
         let cleared = try #require(saved.threads.first)
-        #expect(saved.threads.count == 1 && saved.currentID == cleared.id && cleared.id != thread.id)
+        #expect(saved.threads.count == (clearHistory ? 1 : 3))
+        #expect(saved.currentID == cleared.id && cleared.id != thread.id)
+        if !clearHistory {
+            let original = try #require(saved.threads.first { $0.id == thread.id })
+            #expect(original.messages.map(\.text) == ["Old history"])
+            #expect(original.draft == "Old draft" && original.actions.map(\.id) == [action.id])
+        }
+        #expect(cleared.focusedDraftID == nil && cleared.focusedEventID == nil)
         #expect(cleared.messages.isEmpty && cleared.actions.isEmpty && cleared.draft.isEmpty)
         #expect(cleared.clarificationContext == nil)
         #expect(cleared.usesCloudModel && cleared.cloud?.modelID == "test-model")
@@ -246,6 +257,27 @@ import Testing
             to: thread, drafts: ["draft_1": old.id], text: "Revise the draft", context: context, edit: nil)
         #expect(revised.actions.map(\.id) == [old.id])
         #expect(revised.actions.first?.proposal.key == old.proposal.key)
+    }
+
+    @Test func numberedDraftRemainsInFocusAfterAnOrdinaryReply() throws {
+        var thread = AssistantThread()
+        let first = AssistantAction(proposal: proposal(key: "first"), context: context)
+        let second = AssistantAction(proposal: proposal(key: "second"), context: context)
+        thread.actions = [first, second]
+
+        let revised = try AssistantService.cloudReply(.init(message: "Updated", actions: [proposal(key: "draft_2")]),
+            to: thread, drafts: ["draft_2": second.id], text: "Refine task 2", context: context, edit: nil)
+        #expect(revised.actions.map(\.id) == [first.id, second.id])
+        #expect(revised.messages.last?.resultActionID == second.id)
+        #expect(revised.focusedDraft?.id == second.id)
+        let next = try AssistantService.cloudReply(.init(message: "Yes"), to: revised, drafts: [:],
+            text: "Does that cover the review?", context: context, edit: nil)
+        #expect(next.messages.last?.resultActionID == nil)
+        #expect(next.focusedDraft?.id == second.id)
+        let request = try AssistantCloudRequest(thread: next, text: "Add another step", context: context,
+            edit: nil, modelID: "fixture")
+        #expect(request.drafts["draft_2"] == second.id)
+        #expect(String(decoding: request.body, as: UTF8.self).contains("focused_draft_key"))
     }
 
     @Test func pkceAndCallbackValidation() throws {
@@ -471,6 +503,29 @@ extension AssistantCloudTests {
         #expect(AssistantGateway.qwen.bases.count == 6)
         #expect(AssistantGatewayConnections.parseModelIDs("glm-5, glm-5,\n glm-4.7") == ["glm-5", "glm-4.7"])
         #expect(AssistantGatewayConnections.parseModelIDs("model with space").isEmpty)
+    }
+
+    @Test(arguments: [AssistantGateway?.none, .some(.liteLLM), .some(.claude), .some(.deepSeek)])
+    func attachedNoteIsOnlyInTheUserRequest(gateway: AssistantGateway?) throws {
+        let note = AssistantNoteContext(title: "Private note", text: "First line\nSecond line")
+        let thread = AssistantThread()
+        let request = try AssistantCloudRequest(thread: thread, text: "Summarize", context: context,
+                                               edit: nil, modelID: "test", gateway: gateway, supportsTools: false, note: note)
+        let body = try #require(JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+        let messages = try #require((body["messages"] ?? body["input"]) as? [[String: String]])
+        let user = try #require(messages.last)
+        #expect(user["role"] == "user")
+        let content = try #require(user["content"])
+        let json = try #require(content.split(separator: "\n", maxSplits: 1).last)
+        let payload = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        #expect(payload["message"] as? String == "Summarize")
+        #expect(payload["attached_note"] as? [String: String] == ["title": note.title, "text": note.text])
+        #expect(!messages.dropLast().contains { $0["content"]?.contains(note.title) == true })
+        #expect(!((body["system"] ?? body["instructions"]) as? String ?? "").contains(note.title))
+
+        let detached = try AssistantCloudRequest(thread: thread, text: "Follow up", context: context,
+                                                edit: nil, modelID: "test", gateway: gateway, supportsTools: false)
+        #expect(!String(decoding: detached.body, as: UTF8.self).contains(note.title))
     }
 
     @Test func directProviderWireFormatsContainOnlyPlannerTools() throws {

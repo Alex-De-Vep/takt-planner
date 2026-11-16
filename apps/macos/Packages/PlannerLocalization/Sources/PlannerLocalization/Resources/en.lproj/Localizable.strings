@@ -185,7 +185,7 @@
 "Напоминать проверить задачи" = "Remind me to review tasks";
 "Время напоминания" = "Reminder time";
 "Только по будням" = "Weekdays only";
-"Уведомления запрещены в macOS. Разрешите их для приложения «Задачи» в системных настройках." = "Notifications are disabled in macOS. Allow notifications for Tasks in System Settings.";
+"Уведомления запрещены в macOS. Разрешите их для Takt в системных настройках." = "Notifications are disabled in macOS. Allow notifications for Takt in System Settings.";
 "Разрешить уведомления" = "Allow notifications";
 "Открыть настройки уведомлений" = "Open notification settings";
 "Проверить уведомление" = "Test notification";
@@ -193,9 +193,9 @@
 "Не удалось настроить уведомления." = "Could not configure notifications.";
 "О сроке с указанным временем напомним в этот момент. Ежедневное напоминание предлагает проверить планы; оно выключено по умолчанию. Тестовое уведомление появится через 5 секунд." = "Deadlines with a time trigger a notification at that time. The daily reminder invites you to review your plans and is off by default. The test notification appears after 5 seconds.";
 "Пора проверить задачи" = "Time to review your tasks";
-"Откройте «Задачи», чтобы посмотреть планы и выбрать главное." = "Open Tasks to review your plans and choose what matters most.";
+"Откройте Takt, чтобы посмотреть планы и выбрать главное." = "Open Takt to review your plans and choose what matters most.";
 "Уведомления работают" = "Notifications are working";
-"Так будут выглядеть напоминания приложения «Задачи»." = "This is how reminders from Tasks will appear.";
+"Так будут выглядеть напоминания Takt." = "This is how reminders from Takt will appear.";
 "Напоминания" = "Alerts";
 "Уведомление" = "Notification";
 "Письмо" = "Email";
@@ -287,6 +287,7 @@
 "Во сколько запланировать событие?" = "What time should the event start?";
 "Проверьте длительность события." = "Check the event duration.";
 "Проверьте напоминание." = "Check the reminder.";
+"Напомнить за (мин)" = "Minutes before event";
 "Не удалось проверить ответ модели. Упростите запрос и повторите." = "Could not validate the model response. Simplify your request and try again.";
 "Сначала загрузите модель." = "Download the model first.";
 "Не найден список файлов модели." = "The model manifest is missing.";
@@ -313,7 +314,11 @@
 
 "Модель выгружена из-за нехватки памяти. Закройте лишние приложения и включите помощника снова." = "The model was unloaded due to memory pressure. Close other apps and enable the assistant again.";
 
-"Использовать текущую папку" = "Use the current folder";
+"Использовать папку" = "Use folder";
+"Использовать задачу" = "Use task";
+"Использовать заметку" = "Use note";
+"Заметка" = "Note";
+"Запрос с заметкой слишком большой. Сократите текст или уберите заметку." = "The request with the note is too large. Shorten the text or remove the note.";
 
 "Использовать выбранную задачу" = "Use the selected task";
 
@@ -468,7 +473,7 @@
 "Экспериментальный помощник предлагает задачи и подзадачи на устройстве. Доступен в отдельной сборке Preview." = "The experimental on-device assistant suggests tasks and subtasks. Available in a separate Preview build.";
 "Задачи на всех устройствах" = "Tasks across your devices";
 "Войдите в один аккаунт на своих устройствах. Правки сохраняются на Mac и отправляются, когда появляется связь." = "Use the same account on your devices. Edits are saved on your Mac and synced when you’re back online.";
-"Добро пожаловать в «Задачи»" = "Welcome to Planner";
+"Добро пожаловать в Takt" = "Welcome to Takt";
 "Планируйте день в своём ритме" = "Plan your day at your own pace";
 "Синхронизацию можно включить позже в настройках." = "You can turn on sync later in Settings.";
 "Продолжить на этом Mac" = "Continue on This Mac";
@@ -498,6 +503,9 @@
 "Пароль" = "Password";
 "От 12 до 128 символов." = "Use 12 to 128 characters.";
 "Отправить код снова" = "Resend Code";
+"Повторить через %@" = "Try again in %@";
+"Новый код через %@" = "Request a new code in %@";
+"Осталось попыток входа: %d" = "Sign-in attempts left: %d";
 "Забыли пароль?" = "Forgot Password?";
 "Вернуться ко входу" = "Back to Sign In";
 "Вход в аккаунт" = "Sign In to Your Account";
@@ -509,20 +517,21 @@
 "Сохранить пароль" = "Save Password";
 "Часть изменений отклонена сервером." = "The server rejected some changes.";
 "Сервер вернул неожиданные данные." = "The server returned unexpected data.";
-"Эта версия приложения несовместима с сервером." = "This version of Planner is incompatible with the server.";
+"Эта версия приложения несовместима с сервером." = "This version of Takt is incompatible with the server.";
 "Войдите в аккаунт повторно." = "Sign in to your account again.";
 "Правка превышает допустимый размер запроса." = "The change exceeds the server’s request size limit.";
 "Ответ относится к другой библиотеке." = "The response belongs to another library.";
 "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание." = "Set “Send the report” for 5:00 PM and get a reminder when it’s due.";
 "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30." = "Add “Meet with the team” tomorrow from 11:00 to 11:30 AM.";
 "Попросите помощника сократить описание задачи и проверьте правку перед сохранением." = "Ask the assistant to shorten a task description, then review the edit before saving it.";
+"Откройте свою папку и выберите «Заметки», чтобы сохранить идеи и списки." = "Open one of your folders and choose Notes to save ideas and lists.";
 "В сборке Preview попросите помощника сократить описание задачи и проверьте правку перед сохранением." = "In the Preview build, ask the assistant to shorten a task description and review the edit before saving it.";
 "Локальный ИИ" = "On-device AI";
 "Где хранить задачи" = "Where to store your tasks";
 "Подключить синхронизацию" = "Set Up Sync";
 "Синхронизация подключена" = "Sync is connected";
 "Показать приветствие" = "Show Welcome";
-"Справка по приложению" = "Planner Help";
+"Справка по приложению" = "Takt Help";
 "Справка" = "Help";
 "Разделы справки" = "Help Topics";
 "Справка недоступна" = "Help Is Unavailable";
@@ -593,3 +602,117 @@
 "Скопировать команду запуска" = "Copy Launch Command";
 "Остаток квоты Copilot" = "Remaining Copilot Quota";
 "Остаток квоты M Plan" = "Remaining M Plan Quota";
+
+"Начните общение с вашим ИИ-агентом" = "Start a conversation with your AI assistant";
+"Подключить модель" = "Connect a model";
+"Задачи чата · %d" = "Chat tasks · %d";
+"ИИ-помощник" = "AI assistant";
+"Применить" = "Apply";
+
+"На какую дату показать расписание?" = "What date should I show the agenda for?";
+"Показаны первые 20 событий." = "Showing the first 20 events.";
+"В этот период событий нет." = "There are no events in this period.";
+"События за выбранный период" = "Events in the selected period";
+"На какую дату или время перенести событие?" = "What date or time should I move the event to?";
+"Событие изменилось. Найдите его снова перед переносом." = "The event changed. Find it again before rescheduling.";
+"Событие изменилось. Найдите его снова в календаре." = "The event changed. Find it again in the calendar.";
+"Какое событие перенести? Укажите название или исходную дату." = "Which event should I move? Give its name or original date.";
+"Событие не найдено. Уточните название или исходную дату." = "I couldn't find the event. Specify its name or original date.";
+"Найдено слишком много событий. Уточните исходную дату или название." = "Too many events matched. Specify the original date or name.";
+"Какое из событий перенести?" = "Which event should I move?";
+"Укажите период до 31 дня." = "Choose a period of up to 31 days.";
+"Выберите задачу и включите «Использовать задачу»." = "Select a task and turn on ‘Use task’.";
+"Как назвать событие?" = "What should I call the event?";
+"На какую дату запланировать событие?" = "What date should I schedule the event for?";
+"В какой календарь добавить событие?" = "Which calendar should I add the event to?";
+"Проверьте событие перед созданием." = "Review the event before creating it.";
+"Для события на весь день укажите новую дату." = "Specify a new date for the all-day event.";
+"У события уже указаны эта дата и время." = "The event is already scheduled for that date and time.";
+"Подтвердите перенос события." = "Confirm the new date and time.";
+"Нет доступного календаря для переноса события." = "The calendar is unavailable for rescheduling.";
+"События · %d" = "Events · %d";
+"Карточки чата · %d" = "Chat cards · %d";
+"Перенесено" = "Rescheduled";
+"Перенести событие" = "Move event";
+"Создать событие" = "Create event";
+"Сохранить связь" = "Save task link";
+
+"Резервная копия" = "Backup";
+"Создать резервную копию…" = "Create Backup…";
+"Восстановить из файла…" = "Restore from File…";
+"Восстановить резервную копию?" = "Restore this backup?";
+"Восстановить на Mac" = "Restore on This Mac";
+"Файл содержит задачи, папки, подзадачи, связи с календарём, историю чата, черновики и настройки. Для экспорта и восстановления интернет не нужен. Файл не зашифрован." = "The file includes tasks, notes with images, folders, subtasks, calendar links, chat history, drafts, and preferences. Export and restore work offline. The file is not encrypted.";
+"Копия откроется как отдельная библиотека на этом Mac. Текущая база останется на диске. Чтобы загрузить задачи в облако, войдите и выберите перенос." = "The backup opens as a separate library on this Mac. Your current library stays on disk. To upload tasks to the cloud, sign in and choose to transfer them.";
+"Резервная копия сохранена." = "Backup saved.";
+"Резервная копия восстановлена на этом Mac." = "Backup restored on this Mac.";
+"Файл не является корректной резервной копией Takt." = "This file is not a valid Takt backup.";
+"Эта резервная копия требует более новой версии Takt." = "This backup requires a newer version of Takt.";
+"Резервная копия превышает 128 МиБ." = "The backup exceeds 128 MiB.";
+"Сначала сохраните открытые черновики." = "Save your open drafts first.";
+"Дождитесь завершения текущей операции и повторите." = "Wait for the current operation to finish and try again.";
+"Облачная библиотека изменилась. Локальные данные сохранены. Создайте резервную копию перед повторным подключением." = "The cloud library has changed. Your local data is still on this Mac. Create a backup before reconnecting.";
+"Копия сохранена без истории чата: история недоступна." = "Backup saved without chat history because the history is unavailable.";
+
+"Заметки" = "Notes";
+
+"Все заметки" = "All Notes";
+
+"Недавно удалённые" = "Recently Deleted";
+
+"Новая заметка" = "New Note";
+
+"Заметок: %d" = "Notes: %d";
+
+"Выберите заметку" = "Select a note";
+
+"Создайте заметку или откройте её из списка." = "Create a note or open one from the list.";
+
+"Не удалось сохранить заметки" = "Could not save notes";
+
+"Корзина пуста" = "Trash is empty";
+
+"Заметок пока нет" = "No notes yet";
+
+"Пустая заметка" = "Empty note";
+
+"Закрепить" = "Pin";
+
+"Открепить" = "Unpin";
+
+"В корзину" = "Move to Trash";
+
+"Заметка в корзине" = "This note is in Trash";
+
+"Экспорт заметки" = "Export note";
+
+"Добавить изображение" = "Add image";
+
+"Обычный текст" = "Body";
+
+"Жирный" = "Bold";
+
+"Курсив" = "Italic";
+
+"Список" = "List";
+
+"Чек-лист" = "Checklist";
+
+"Задачи и заметки из этой папки останутся во «Входящих»." = "Tasks and notes in this folder will move to Inbox.";
+
+"Заголовок" = "Heading";
+
+"Восстановить" = "Restore";
+
+"Заметки сохраняются на этом Mac" = "Notes are saved on this Mac";
+"Заметки синхронизируются с аккаунтом" = "Notes sync with your account";
+
+"Нумерованный список" = "Numbered list";
+
+"Добавить ссылку" = "Add link";
+
+"Выберите папку для заметки" = "Choose a folder for the note";
+
+"Задачи останутся во «Входящих», а заметки — в разделе «Все заметки»." = "Tasks will remain in Inbox, and notes in All Notes.";
+
+"Задач: %d, заметок: %d" = "Tasks: %d, notes: %d";

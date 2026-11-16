@@ -4,6 +4,8 @@ import SwiftUI
 enum CalendarPanelLayout {
     static let minimumWidth: CGFloat = 320
     static let maximumWidth: CGFloat = 1200
+    static let assistantMinimumWidth: CGFloat = 360
+    static let assistantMaximumWidth: CGFloat = 520
     static let defaultWidth: CGFloat = 340
     // Внешний зазор справа одинаков у отдельной колонки и накладной панели.
     static let outerInset: CGFloat = 8
@@ -13,7 +15,11 @@ enum CalendarPanelLayout {
                               calendarPlacement: .closed, preferredHeadingWidth: preferredHeadingWidth).minimumMainWidth
     }
     static func isColumn(width: CGFloat, sidebarVisible: Bool, fullScreen: Bool = false) -> Bool {
-        width >= minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: fullScreen) + minimumWidth + outerInset
+        isColumn(width: width, minimumMainWidth: minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: fullScreen))
+    }
+    static func isColumn(width: CGFloat, minimumMainWidth: CGFloat) -> Bool {
+        // Обе панели остаются в одном режиме при той же ширине окна.
+        width >= minimumMainWidth + max(minimumWidth, assistantMinimumWidth) + outerInset
     }
     static func panelWidth(_ preferred: CGFloat) -> CGFloat { min(maximumWidth, max(minimumWidth, preferred)) }
     static func overlayWidth(_ preferred: CGFloat, windowWidth: CGFloat) -> CGFloat {
@@ -47,6 +53,7 @@ final class WorkspaceContainerController: NSViewController {
     private var animatingOverlay = false
     private var columnLayoutScheduled = false
     private var isDismantled = false
+    private var openAfterClosing: (() -> Void)?
 
     override func loadView() {
         let root = WorkspaceContainerView()
@@ -78,33 +85,70 @@ final class WorkspaceContainerController: NSViewController {
         }
         workspace.calendarWidthChanged = { [weak self] width in
             guard let self else { return }
+            let panel = self.panel
             self.preferredWidth = width
             self.appliedWidth = width
-            DispatchQueue.main.async { [weak self] in self?.widthChanged?(width) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.visible, self.panel == panel, self.openAfterClosing == nil else { return }
+                self.widthChanged?(width)
+            }
         }
-        workspace.calendarVisibilityChanged = { [weak self] visible in self?.visibilityChanged?(visible) }
+        workspace.calendarVisibilityChanged = { [weak self] visible in
+            guard let self, self.openAfterClosing == nil else { return }
+            self.visibilityChanged?(visible)
+        }
+        workspace.calendarDidClose = { [weak self] in self?.finishPanelSwitch() }
     }
 
     func update(calendar: AnyView, visible: Bool, width: Double, sidebarVisible: Bool, panel: RightPanel? = .calendar,
                 minimumWidth: CGFloat = CalendarPanelLayout.minimumWidth, maximumWidth: CGFloat = CalendarPanelLayout.maximumWidth,
-                widthChanged: @escaping (Double) -> Void, visibilityChanged: @escaping (Bool) -> Void) {
+                widthChanged: @escaping (Double) -> Void, visibilityChanged: @escaping (Bool) -> Void,
+                updateToolbar: @escaping (RightPanel?) -> Void = { _ in }) {
         _ = view
-        calendarHost.updateContent(calendar)
-        let switching = self.visible && visible && self.panel != panel
-        let animate = (self.visible != visible || switching) && view.window != nil
-        self.panel = panel
-        self.visible = visible; minimumPanelWidth = minimumWidth; maximumPanelWidth = maximumWidth
-        preferredWidth = min(maximumWidth, max(minimumWidth, width))
-        self.sidebarVisible = sidebarVisible; self.widthChanged = widthChanged
+        self.sidebarVisible = sidebarVisible
+        self.widthChanged = widthChanged
         self.visibilityChanged = visibilityChanged
-        if switching && animate && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            // При смене календаря и чата меняется и ширина той же панели — без мгновенного setPosition.
-            NSAnimationContext.runAnimationGroup { context in
-                PlannerMotion.configure(context)
-                context.allowsImplicitAnimation = true
-                layoutColumns(animate: true)
-            }
-        } else { layoutColumns(animate: animate) }
+        let present: () -> Void = { [weak self] in
+            self?.presentPanel(calendar, visible: visible, panel: panel, width: width,
+                               minimumWidth: minimumWidth, maximumWidth: maximumWidth, updateToolbar: updateToolbar)
+        }
+        if openAfterClosing != nil {
+            // Новый запрос во время закрытия заменяет ожидающую панель.
+            openAfterClosing = present
+        } else if self.visible, visible, self.panel != panel, placement != .closed,
+                  view.window != nil, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            // Содержимое, ширина и кнопки уходящей панели сохраняются до конца закрытия.
+            openAfterClosing = present
+            self.visible = false
+            workspace.holdRightPanelToolbar()
+            layoutColumns(animate: true)
+        } else {
+            present()
+        }
+    }
+
+    private func presentPanel(_ content: AnyView, visible: Bool, panel: RightPanel?, width: Double,
+                              minimumWidth: CGFloat, maximumWidth: CGFloat, updateToolbar: (RightPanel?) -> Void) {
+        let animate = self.visible != visible && view.window != nil
+        if !visible { workspace.releaseRightPanelToolbar() }
+        self.panel = panel
+        self.visible = visible
+        minimumPanelWidth = minimumWidth
+        maximumPanelWidth = maximumWidth
+        preferredWidth = min(maximumWidth, max(minimumWidth, width))
+        calendarHost.updateContent(content)
+        updateToolbar(visible ? panel : nil)
+        layoutColumns(animate: animate)
+    }
+
+    private func finishPanelSwitch() {
+        guard openAfterClosing != nil else { return }
+        // Завершаем текущий layout до запуска следующего раскрытия.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.isDismantled, let present = self.openAfterClosing else { return }
+            self.openAfterClosing = nil
+            present()
+        }
     }
 
     private func scheduleColumnLayout() {
@@ -129,7 +173,7 @@ final class WorkspaceContainerController: NSViewController {
         let minimumMain = max(header.minimumMainWidth,
             CalendarPanelLayout.minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: header.fullScreen,
                                                 preferredHeadingWidth: header.preferredHeadingWidth))
-        let column = visible && bounds.width >= minimumMain + minimumPanelWidth + CalendarPanelLayout.outerInset
+        let column = visible && CalendarPanelLayout.isColumn(width: bounds.width, minimumMainWidth: minimumMain)
         let width = column ? min(preferredWidth, bounds.width - CalendarPanelLayout.outerInset - minimumMain)
             : min(preferredWidth, max(0, bounds.width - 2 * CalendarPanelLayout.outerInset))
 
@@ -161,6 +205,7 @@ final class WorkspaceContainerController: NSViewController {
             calendarHost.view.isHidden = false
             if needsAttachment || placement != .column || abs(appliedWidth - width) >= 1
                 || appliedMinimumWidth != minimumPanelWidth || appliedMaximumWidth != maximumPanelWidth {
+                if placement != .column { workspace.moveHeldRightPanelToolbar(column: true, width: width) }
                 workspace.attachCalendarSidebar(calendarHost, width: width, animate: animate, minimumWidth: minimumPanelWidth, maximumWidth: maximumPanelWidth)
                 appliedWidth = width
                 appliedMinimumWidth = minimumPanelWidth; appliedMaximumWidth = maximumPanelWidth
@@ -172,7 +217,10 @@ final class WorkspaceContainerController: NSViewController {
             appliedWidth = width
             let opening = placement != .overlay
             placement = .overlay
-            if opening { workspace.beginCalendarHeaderTransition() }
+            if opening {
+                workspace.beginCalendarHeaderTransition()
+                workspace.moveHeldRightPanelToolbar(column: false, width: width)
+            }
             workspace.setCalendarToolbar(column: false, visible: true, overlayWidth: width)
             let frame = NSRect(x: bounds.width - width, y: 0, width: width, height: bounds.height)
             if opening {
@@ -229,6 +277,7 @@ final class WorkspaceContainerController: NSViewController {
     func detachWindow() {
         // После демонтажа отложенный layout не должен снова устанавливать подложку.
         isDismantled = true
+        openAfterClosing = nil
         headerBackdrop.removeFromSuperview()
         workspace.detachWindow()
     }
@@ -242,7 +291,9 @@ final class WorkspaceContainerController: NSViewController {
             divider.frame = dividerFrame
             calendarHost.view.isHidden = hide
             animatingOverlay = false
+            if !hide { workspace.releaseRightPanelToolbar() }
             workspace.finishCalendarHeaderTransition(afterLayout: false)
+            if hide { finishPanelSwitch() }
             return
         }
         animatingOverlay = true
@@ -257,7 +308,9 @@ final class WorkspaceContainerController: NSViewController {
                 guard let self, generation == self.animationGeneration else { return }
                 self.animatingOverlay = false
                 if hide && !self.visible { self.calendarHost.view.isHidden = true }
+                if !hide { self.workspace.releaseRightPanelToolbar() }
                 self.workspace.finishCalendarHeaderTransition(afterLayout: true)
+                if hide { self.finishPanelSwitch() }
             }
         }
     }

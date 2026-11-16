@@ -89,7 +89,7 @@ private final class SyncRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendab
 }
 
 actor SyncHTTP {
-    static let production = URL(string: "https://planner-server.tail037e91.ts.net")!
+    static let production = URL(string: "https://takt-server.tail037e91.ts.net")!
     private let origin: URL
     private let session: URLSession
     private let store: any SyncCredentialStore
@@ -214,7 +214,7 @@ actor SyncHTTP {
             throw SyncHTTPFailure(status: http.statusCode, problem: SyncAPIError(
                 code: problem?.code ?? "http_\(http.statusCode)",
                 message: problem?.message ?? "Сервер вернул ошибку \(http.statusCode).",
-                requestId: problem?.requestId, retryAfterSeconds: delay))
+                requestId: problem?.requestId, retryAfterSeconds: delay, attemptsRemaining: problem?.attemptsRemaining))
         }
         return try decoder.decode(T.self, from: data)
     }

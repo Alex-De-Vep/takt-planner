@@ -5,6 +5,9 @@ import AppKit
 final class WorkspaceCalendarHeadingView: NSView {
     private let label = NSTextField(labelWithString: "")
     private var width: NSLayoutConstraint!
+    var holdsWidth = false {
+        didSet { if !holdsWidth && oldValue { width.constant = preferredWidth } }
+    }
 
     var preferredWidth: CGFloat {
         ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font!]).width) + 16
@@ -35,6 +38,6 @@ final class WorkspaceCalendarHeadingView: NSView {
         label.setAccessibilityIdentifier(accessibilityIdentifier)
         guard label.stringValue != title else { return }
         label.stringValue = title
-        width.constant = preferredWidth
+        if !holdsWidth { width.constant = preferredWidth }
     }
 }

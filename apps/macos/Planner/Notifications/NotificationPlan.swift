@@ -53,7 +53,7 @@ struct PlannerNotification: Equatable, Sendable {
         let days: [Int?] = schedule.reviewWeekdaysOnly ? (2...6).map { Optional($0) } : [nil]
         return days.map { weekday in
             Self(id: reviewPrefix + (weekday.map(String.init) ?? "daily"), title: strings["Пора проверить задачи"],
-                 body: strings["Откройте «Задачи», чтобы посмотреть планы и выбрать главное."],
+                 body: strings["Откройте Takt, чтобы посмотреть планы и выбрать главное."],
                  trigger: .daily(hour: schedule.reviewMinutes / 60, minute: schedule.reviewMinutes % 60, weekday: weekday))
         }
     }

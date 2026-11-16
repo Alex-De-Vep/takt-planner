@@ -8,7 +8,7 @@ VERSION=json.loads((SOURCE/'package.json').read_text())['version']
 DIST=ROOT/'dist'
 DIST.mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='planner-delivery-',dir=ROOT/'.build') as temporary:
-    package=Path(temporary)/f'PlannerServer-{VERSION}'
+    package=Path(temporary)/f'TaktServer-{VERSION}'
     app=package/'app'
     app.mkdir(parents=True)
     excluded={'node_modules','dist','data','backups','__pycache__','.env'}
@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='planner-delivery-',dir=ROOT/'.build') a
         shutil.copy2(ROOT/name,app/name)
     readme=(app/'README.md').read_text().replace('(../docs/windows-server-setup.ru.md)','(docs/windows-server-setup.ru.md)')
     (app/'README.md').write_text(readme)
-    (package/'INSTALL-WINDOWS.md').write_text(f'''# Planner Server {VERSION} для Windows
+    (package/'INSTALL-WINDOWS.md').write_text(f'''# Takt Server {VERSION} для Windows
 
 Если уже установлена 0.1.0, сначала прочтите `app/docs/UPGRADE-WINDOWS.ru.md`. Распакуйте новую поставку в отдельную папку и запускайте её `Update-Server.ps1 -InstallRoot C:\\PlannerServer` оттуда. Существующие конфигурация, тома и публичный адрес сохраняются. Перед обновлением нужны отдельный резервный носитель и проверка восстановления.
 
@@ -41,14 +41,14 @@ with tempfile.TemporaryDirectory(prefix='planner-delivery-',dir=ROOT/'.build') a
     for p in sorted(app.rglob('*')):
         if p.is_file():files.append({'path':p.relative_to(app).as_posix(),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'size':p.stat().st_size})
     (app/'SHA256SUMS.json').write_text(json.dumps({'version':VERSION,'files':files},ensure_ascii=False,indent=2)+'\n')
-    result=DIST/f'PlannerServer-{VERSION}-Windows.zip'
+    result=DIST/f'TaktServer-{VERSION}-Windows.zip'
     with zipfile.ZipFile(result,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
         for p in sorted(package.rglob('*')):
             if p.is_file():archive.write(p,p.relative_to(package.parent))
     with zipfile.ZipFile(result) as archive:
         assert archive.testzip() is None
         for f in files:
-            content=archive.read(f'PlannerServer-{VERSION}/app/'+f['path'])
+            content=archive.read(f'TaktServer-{VERSION}/app/'+f['path'])
             assert hashlib.sha256(content).hexdigest()==f['sha256']
         for name in archive.namelist():
             assert not any(part in {'node_modules','data','backups','.env'} for part in Path(name).parts),name

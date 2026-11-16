@@ -19,6 +19,7 @@ struct TaskDetailView: View {
     @State private var unavailableLinks: Set<UUID> = []
 
     var body: some View {
+        let taskID = task.id
         VStack(spacing: 0) {
             // Название папки и меню вынесены в шапку окна: здесь начинаются действия самой задачи.
             HStack(spacing: 10) {
@@ -43,20 +44,21 @@ struct TaskDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 24)
                         PlainTextTaskEditor(taskID: task.id, isTitle: true, store: editorStore,
-                            text: Binding(get: { service.titleDrafts[task.id] ?? task.title }, set: { service.rename(task, to: $0) }),
+                            text: Binding(get: { service.title(for: task) }, set: { service.editTitle(task, text: $0) }),
                             requestFocus: $titleFocused, placeholder: strings["Название задачи"],
-                            submit: { descriptionFocused = true }, toggleCompleted: { service.toggleCompleted(task) })
+                            submit: { descriptionFocused = true }, toggleCompleted: { service.toggleCompleted(task) },
+                            endEditing: { service.flushText(.title(taskID)) })
                             .id(task.id.uuidString + ".title")
                         PlainTextTaskEditor(taskID: task.id, isTitle: false, store: editorStore,
-                            text: Binding(get: { service.description(for: task) }, set: { service.updateDescription(task, text: $0) }),
+                            text: Binding(get: { service.description(for: task) }, set: { service.editDescription(task, text: $0) }),
                             requestFocus: $descriptionFocused, placeholder: strings["Описание задачи"],
                             toggleCompleted: { service.toggleCompleted(task) },
-                            minimumHeight: task.orderedChecklistItems.isEmpty ? nil : 44)
+                            minimumHeight: task.orderedChecklistItems.isEmpty ? nil : 44,
+                            endEditing: { service.flushText(.description(taskID)) })
                             .id(task.id.uuidString + ".description")
                         if service.descriptionDrafts[task.id] != nil || service.titleDrafts[task.id] != nil {
                             Button(strings["Повторить сохранение текста"]) {
-                                if let title = service.titleDrafts[task.id] { service.rename(task, to: title) }
-                                service.updateDescription(task, text: service.description(for: task))
+                                service.flushEditorText(taskID: task.id)
                             }
                         }
                         if !task.orderedChecklistItems.isEmpty {

@@ -32,7 +32,7 @@ internal class GatewayOAuth(private val request: GatewayRequest = providerReques
         val grant = browserGrant("/auth/openrouter/$state", state, open) { redirect ->
             url("https://openrouter.ai/auth", mapOf(
                 "callback_url" to redirect, "code_challenge" to challenge(verifier),
-                "code_challenge_method" to "S256", "state" to state, "key_label" to "Tasks for Android",
+                "code_challenge_method" to "S256", "state" to state, "key_label" to "Takt for Android",
             ))
         }
         return withContext(Dispatchers.IO) {
@@ -55,7 +55,7 @@ internal class GatewayOAuth(private val request: GatewayRequest = providerReques
                 "client_id" to "dynamic_agent_client", "ext_agent_host_id" to hostId, "response_type" to "code",
                 "redirect_uri" to callback, "scope" to "openid profile email offline_access resource.invoke $PlanScope",
                 "resource" to Resource, "state" to state, "nonce" to nonce, "code_challenge_method" to "S256",
-                "code_challenge" to challenge(verifier), "agent_name_hint" to "Tasks",
+                "code_challenge" to challenge(verifier), "agent_name_hint" to "Takt",
             ))
         }
         val id = grant.clientId?.takeIf { it.isNotBlank() && it.length <= 256 && it != "dynamic_agent_client" }
@@ -179,7 +179,7 @@ private suspend fun browserGrant(
                     }
                     return@use
                 } ?: return@use
-                replyToBrowser(it.getOutputStream(), "Return to Tasks to finish connecting.")
+                replyToBrowser(it.getOutputStream(), "Return to Takt to finish connecting.")
                 return@withContext grant
             }
         }

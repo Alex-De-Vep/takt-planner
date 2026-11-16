@@ -26,7 +26,7 @@ try {
         $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory $script:AppRoot
         if ($kind -eq 'Start') { $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity }
         else { $trigger = New-ScheduledTaskTrigger -Daily -At $time }
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Planner Server: runs as the signed-in owner; secrets remain in protected server.env.' -Force | Out-Null
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Takt Server: runs as the signed-in owner; secrets remain in protected server.env.' -Force | Out-Null
     }
     Write-Host ('Installed own-user startup and daily full-checked backup at ' + $BackupTime + ' local Windows time.')
     Write-Host 'Owner login and Docker Desktop remain required. Enable Docker startup at login and disable Resource Saver and sleep separately.'

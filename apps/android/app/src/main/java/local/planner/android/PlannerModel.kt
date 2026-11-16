@@ -2,6 +2,7 @@ package local.planner.android
 
 import android.app.Application
 import android.os.Build
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +20,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
+internal enum class AccountAction { SignIn, RequestCode, ConfirmCode }
+
+internal data class AccountActionKey(val origin: String, val email: String, val action: AccountAction)
+
+internal data class AccountLimit(val retryAt: Long = 0, val attemptsRemaining: Int? = null)
+
 internal data class CloudState(
     val savedProfile: Profile? = null,
     val firstSyncPending: Boolean = false,
@@ -26,6 +33,7 @@ internal data class CloudState(
     val closing: Boolean = false,
     val busy: Boolean = false,
     val message: Int? = null,
+    val accountLimits: Map<AccountActionKey, AccountLimit> = emptyMap(),
 )
 
 internal class PlannerModel(application: Application) : AndroidViewModel(application) {
@@ -84,13 +92,18 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     fun login(server: String, email: String, password: String) {
         val origin = origin(server) ?: return
-        cloudAction { sync.login(origin, email, password, Build.MODEL.orEmpty()) }
+        val key = AccountActionKey(origin, email.trim().lowercase(), AccountAction.SignIn)
+        cloudAction(accountAction = { key }) { sync.login(origin, email, password, Build.MODEL.orEmpty()) }
     }
 
     fun requestCode(server: String, email: String, password: String, request: AccountRequest, done: (String) -> Unit) {
         val origin = origin(server) ?: return
         var challenge = ""
-        cloudAction({ done(challenge) }) { challenge = sync.challenge(origin, request, email, password) }
+        val key = AccountActionKey(origin, email.trim().lowercase(), AccountAction.RequestCode)
+        cloudAction(done = {
+            recordAccountLimit(key, AccountLimit(retryAt = SystemClock.elapsedRealtime() + 60_000L))
+            done(challenge)
+        }, accountAction = { key }) { challenge = sync.challenge(origin, request, email, password) }
     }
 
     fun confirmCode(
@@ -98,9 +111,14 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         reset: Boolean, done: () -> Unit,
     ) {
         val origin = origin(server) ?: return
-        cloudAction(done) {
+        val address = email.trim().lowercase()
+        var action = AccountAction.ConfirmCode
+        cloudAction(done, accountAction = { AccountActionKey(origin, address, action) }) {
             sync.confirm(origin, challenge, code, password, reset)
-            if (!reset) sync.login(origin, email, password, Build.MODEL.orEmpty(), initializeEmpty = true)
+            if (!reset) {
+                action = AccountAction.SignIn
+                sync.login(origin, email, password, Build.MODEL.orEmpty(), initializeEmpty = true)
+            }
         }
     }
 
@@ -120,7 +138,16 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         null
     }
 
-    private fun cloudAction(done: () -> Unit = {}, closing: Boolean = false, work: () -> Unit) {
+    private fun recordAccountLimit(key: AccountActionKey, limit: AccountLimit) {
+        val moment = SystemClock.elapsedRealtime()
+        val active = cloud.value.accountLimits.filterValues { it.retryAt > moment || it.attemptsRemaining != null }
+        _cloud.value = cloud.value.copy(accountLimits = active + (key to limit))
+    }
+
+    private fun cloudAction(
+        done: () -> Unit = {}, closing: Boolean = false,
+        accountAction: (() -> AccountActionKey)? = null, work: () -> Unit,
+    ) {
         if (!network.tryLock()) return
         _cloud.value = cloud.value.copy(busy = true, closing = closing, message = null)
         viewModelScope.launch {
@@ -129,16 +156,25 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 nextSync = 0
                 failures = 0
                 loadConnection()
+                accountAction?.invoke()?.let { key ->
+                    _cloud.value = cloud.value.copy(accountLimits = cloud.value.accountLimits - key)
+                }
                 done()
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 failures = (failures + 1).coerceAtMost(6)
-                val delay = (failure as? ServerFailure)?.retryAfter ?: (2L shl failures)
-                nextSync = System.currentTimeMillis() + delay.coerceIn(1, 900) * 1000
+                val serverFailure = failure as? ServerFailure
+                val retryAfter = serverFailure?.retryAfter?.takeIf { it > 0 }
+                nextSync = System.currentTimeMillis() + (retryAfter ?: (2L shl failures)).coerceIn(1, 900) * 1000
                 loadConnection()
+                val key = accountAction?.invoke()
+                if (key != null) {
+                    val retryAt = retryAfter?.let { SystemClock.elapsedRealtime() + it.coerceAtMost(86_400) * 1000 } ?: 0
+                    recordAccountLimit(key, AccountLimit(retryAt, serverFailure?.attemptsRemaining))
+                }
                 _cloud.value = cloud.value.copy(
-                    message = cloudError(failure),
-                    needsLibrary = (failure as? ServerFailure)?.code == "library_not_initialized",
+                    message = if (key != null && retryAfter != null && serverFailure?.status == 429) null else cloudError(failure),
+                    needsLibrary = serverFailure?.code == "library_not_initialized",
                 )
             } finally {
                 _cloud.value = cloud.value.copy(busy = false, closing = false)

@@ -23,7 +23,7 @@ struct NotificationSettingsSection: View {
                     .accessibilityIdentifier("review-weekdays-toggle")
             }
             if notifications.permission == .denied {
-                Text(strings["Уведомления запрещены в macOS. Разрешите их для приложения «Задачи» в системных настройках."])
+                Text(strings["Уведомления запрещены в macOS. Разрешите их для Takt в системных настройках."])
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             } else if notifications.permission == .notDetermined {
                 Button(strings["Разрешить уведомления"]) { notifications.synchronize(requestPermission: true) }

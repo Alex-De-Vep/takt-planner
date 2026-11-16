@@ -290,11 +290,22 @@ final class SyncRepository {
     }
 
     func applySnapshot(_ snapshot: SyncSnapshot) throws {
-        guard snapshot.protocolVersion == 1, snapshot.libraryId == libraryID, snapshot.initialized,
+        guard snapshot.protocolVersion == 1, snapshot.libraryId == libraryID,
               let revision = Int64(snapshot.cursor), revision >= 0,
               snapshot.entities.allSatisfy({ (Int64($0.revision) ?? -1) >= 0 && (Int64($0.revision) ?? -1) <= revision }) else {
             throw SyncProblem.invalidResponse
         }
+        if let previous = checkpoint.cursor.flatMap(Int64.init), revision < previous {
+            throw SyncProblem.libraryReset
+        }
+        // Server snapshots retain tombstones. Missing known records indicate a different
+        // database generation, even when the new revision has caught up to the old one.
+        let incomingIDs = Set(snapshot.entities.map(\.id))
+        let known = try context.fetch(FetchDescriptor<Replica>())
+        if known.contains(where: { !incomingIDs.contains($0.entityID) }) {
+            throw SyncProblem.libraryReset
+        }
+        guard snapshot.initialized else { throw SyncProblem.invalidResponse }
         do {
             let pending = Set(try queue().map(\.entityID))
             let live = Set(snapshot.entities.filter { !$0.deleted }.map(\.id))
@@ -307,10 +318,6 @@ final class SyncRepository {
             }
             let removedTasks = Set(obsolete.compactMap { $0.1.kind == .task ? UUID(uuidString: $0.1.id) : nil })
             for (model, _) in obsolete { context.delete(model) }
-            let incomingIDs = Set(snapshot.entities.map(\.id))
-            for row in try context.fetch(FetchDescriptor<Replica>()) where !incomingIDs.contains(row.entityID) {
-                context.delete(row)
-            }
             context.processPendingChanges()
             let ordered = snapshot.entities.sorted { $0.type.order < $1.type.order }
             try apply(ordered, cursor: snapshot.cursor, removedTasks: removedTasks, rebase: true)

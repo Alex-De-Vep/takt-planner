@@ -18,7 +18,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.net.ssl.HttpsURLConnection
 
 internal const val MAX_BATCH_BYTES = 4 * 1024 * 1024
-internal const val DEFAULT_ORIGIN = "https://planner-server.tail037e91.ts.net"
+internal const val DEFAULT_ORIGIN = "https://takt-server.tail037e91.ts.net"
 
 internal data class Snapshot(
     val protocolVersion: Int,
@@ -30,7 +30,7 @@ internal data class Snapshot(
 
 internal data class Change(val revision: String, val entity: Entity)
 internal data class Changes(val libraryId: String, val changes: List<Change>, val nextCursor: String, val hasMore: Boolean)
-internal data class Problem(val code: String)
+internal data class Problem(val code: String, val retryAfterSeconds: Long? = null, val attemptsRemaining: Int? = null)
 internal data class MutationResult(val operationId: String?, val status: String, val entity: Entity?, val error: Problem?)
 private data class Results(val results: List<MutationResult>)
 private data class ErrorBody(val error: Problem?)
@@ -45,7 +45,12 @@ internal enum class AccountRequest(val path: String) {
     Reset("/v1/auth/password-reset/request"),
 }
 
-internal class ServerFailure(val status: Int, val code: String, val retryAfter: Long? = null) : IOException(code)
+internal class ServerFailure(
+    val status: Int,
+    val code: String,
+    val retryAfter: Long? = null,
+    val attemptsRemaining: Int? = null,
+) : IOException(code)
 
 internal fun serverOrigin(address: String): String {
     val uri = URI(address.trim())
@@ -111,7 +116,8 @@ internal class HttpsTransport : Transport {
                 if (count > 0) String(buffer, 0, count) else ""
             }
             val error = runCatching { json.fromJson(response, ErrorBody::class.java)?.error }.getOrNull()
-            throw ServerFailure(status, error?.code ?: "http_error", connection.getHeaderField("Retry-After")?.toLongOrNull())
+            val retryAfter = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: error?.retryAfterSeconds
+            throw ServerFailure(status, error?.code ?: "http_error", retryAfter, error?.attemptsRemaining)
         } finally {
             connection.disconnect()
         }

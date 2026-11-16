@@ -12,11 +12,7 @@ import Testing
             checklist: [.init(id: UUID(), title: "Собрать материалы", isCompleted: true)])
         var edit = AssistantTextEdit(target: .savedTask, before: before)
         try edit.propose(.init(title: "Подготовить презентацию проекта", description: "Цель: понятно представить проект.\n\nПлан: выстроить структуру, подготовить слайды и проверить формулировки.\n\nРезультат: готовая презентация.", checklist: ["Составить структуру", "Проверить слайды"]))
-        let root = VStack(alignment: .leading, spacing: 12) {
-            AssistantTextToolsButton(title: "Доработать текст", commands: ["Расписать задачу"], enabled: true, perform: { _ in })
-                .fixedSize()
-            AssistantTextEditCard(edit: edit, busy: false, active: true, update: { _ in }, refine: {}, apply: {}, cancel: {}, refresh: {}, open: {})
-        }
+        let root = AssistantTextEditCard(edit: edit, busy: false, apply: {}, refresh: {})
             .environment(\.translations, Translations(language: dark ? .english : .russian))
             .tint(PlannerStyle.accent).padding(16).frame(width: 360).background(Color(nsColor: .windowBackgroundColor))
         let host = NSHostingView(rootView: root)

@@ -1,5 +1,5 @@
 /* Название приложения в Finder, Dock и системных меню macOS. */
-"CFBundleDisplayName" = "Задачи";
-"CFBundleName" = "Задачи";
+"CFBundleDisplayName" = "Takt";
+"CFBundleName" = "Takt";
 
-"NSCalendarsFullAccessUsageDescription" = "Задачам нужен доступ к календарям для просмотра событий и планирования времени.";
+"NSCalendarsFullAccessUsageDescription" = "Takt нужен доступ к календарям для просмотра событий и планирования времени.";

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Design/AppIcon/tasks-icon-preview.png" width="112" alt="Tasks app icon">
+  <img src="Design/AppIcon/tasks-icon-preview.png" width="112" alt="Takt app icon">
 </p>
 <h1 align="center">Takt</h1>
 <p align="center">Your tasks, their next steps, and time to work on them.</p>
@@ -42,9 +42,9 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 
 **macOS 26 or later and Apple Silicon.**
 
-Source version **0.2.17 (build 67)** · [Release history](docs/releases).
+Source version **0.3.10 (build 94)** · [Release history](docs/releases).
 
-Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Tasks** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
+Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Takt** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
 
 **Signing:** this build uses an ad-hoc signature. It is not Developer ID signed or notarized by Apple. Gatekeeper may restrict opening a download on another Mac. You can build the app in Xcode if macOS does not allow the downloaded package to open. The project does not require disabling system security.
 
@@ -70,7 +70,7 @@ Open [the Android project](apps/android/) in Android Studio or build a debug APK
 
 ## Getting started
 
-Open **Help → Planner Help** in the app or read the [complete guide](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
+Open **Help → Takt Help** in the app or read the [complete guide](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Press **⌘N** to create a task. Enter its title, then press **Return** to move to the description. Star it for today, add subtasks with the checklist button, or open the calendar using the rightmost toolbar button.
 

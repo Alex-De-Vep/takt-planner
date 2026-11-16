@@ -112,12 +112,46 @@ final class TaskEditorFocusUITests: XCTestCase {
         attachWindow(app, name: "Выделение после возвращения к задаче")
         for identifier in ["task-title-field", "task-description-field"] {
             let editor = field(identifier, in: app)
-            positionInMiddle(editor, in: app)
+            if identifier == "task-description-field" {
+                app.typeKey(.escape, modifierFlags: [])
+                app.typeKey(.return, modifierFlags: [])
+                positionInMiddle(nil, in: app)
+            } else {
+                positionInMiddle(editor, in: app)
+            }
             app.typeText("т")
             expect("Начало тконец", in: editor)
             app.typeText("е")
             expect("Начало теконец", in: editor)
         }
+    }
+
+    func testTaskTextSurvivesFocusChangesAndQuit() {
+        let app = launchPreparedApp()
+        let title = field("task-title-field", in: app)
+        let description = field("task-description-field", in: app)
+        title.coordinate(withNormalizedOffset: CGVector(dx: 0.04, dy: 0.35)).click()
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("Последняя правка")
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
+        app.typeKey("a", modifierFlags: .command)
+        app.typeText("Описание после выхода")
+        app.buttons["add-checklist-item-button"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let item = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "checklist-title-")).firstMatch
+        XCTAssertTrue(item.waitForExistence(timeout: 3))
+        app.typeText("Последний шаг")
+        app.typeKey("q", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 8))
+
+        app.launch()
+        let row = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "task-row-"))
+            .containing(.staticText, identifier: "Последняя правка").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5)).click()
+        expect("Последняя правка", in: title)
+        expect("Описание после выхода", in: description)
+        expect("Последний шаг", in: item)
     }
 
     private func launchPreparedApp() -> XCUIApplication {
@@ -132,14 +166,16 @@ final class TaskEditorFocusUITests: XCTestCase {
         XCTAssertTrue(field("task-title-field", in: app).waitForExistence(timeout: 3))
         app.typeText("Начало конец")
         expect("Начало конец", in: field("task-title-field", in: app))
-        field("task-description-field", in: app).coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.03)).click()
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey(.return, modifierFlags: [])
         app.typeText("Начало конец")
         expect("Начало конец", in: field("task-description-field", in: app))
+        app.typeKey(.escape, modifierFlags: [])
         return app
     }
 
-    private func positionInMiddle(_ editor: XCUIElement, in app: XCUIApplication) {
-        editor.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.03)).click()
+    private func positionInMiddle(_ editor: XCUIElement?, in app: XCUIApplication) {
+        editor?.coordinate(withNormalizedOffset: CGVector(dx: 0.03, dy: 0.03)).click()
         app.typeKey(.upArrow, modifierFlags: .command)
         for _ in 0..<7 { app.typeKey(.rightArrow, modifierFlags: []) }
     }

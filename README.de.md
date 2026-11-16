@@ -42,9 +42,9 @@ Takt vereint Aufgaben, Tagesplanung und Kalender auf macOS und Android. Auf dem 
 
 **macOS 26 oder neuer auf Apple Silicon.**
 
-Quellcode-Version **0.2.17 (Build 67)** · [Versionsverlauf](docs/releases).
+Quellcode-Version **0.3.10 (Build 94)** · [Versionsverlauf](docs/releases).
 
-Lade ein DMG aus [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases) herunter. Öffne es, ziehe **Tasks** nach **Programme** und wirf das Image aus. Beende die App, bevor du eine frühere Version ersetzt.
+Lade ein DMG aus [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases) herunter. Öffne es, ziehe **Takt** nach **Programme** und wirf das Image aus. Beende die App, bevor du eine frühere Version ersetzt.
 
 Die App ist ad hoc signiert. Gatekeeper kann das Öffnen eines Downloads auf einem anderen Mac einschränken. In diesem Fall kannst du die App in Xcode selbst bauen.
 
@@ -70,7 +70,7 @@ Der Client läuft ab **Android 8.0**. Er bietet Aufgabenlisten, Teilaufgaben, Fr
 
 ## Erste Schritte auf macOS
 
-Öffne **Help → Planner Help** in der App oder lies die [vollständige englische Anleitung](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
+Öffne **Help → Takt Help** in der App oder lies die [vollständige englische Anleitung](apps/macos/Packages/PlannerLocalization/Sources/PlannerLocalization/Resources/en.lproj/Help.md).
 
 Drücke **⌘N**, um eine Aufgabe anzulegen. Gib einen Titel ein und wechsle mit **Return** zur Beschreibung. Markiere die Aufgabe mit einem Stern, füge über die Checklisten-Schaltfläche Teilaufgaben hinzu oder öffne den Kalender über die rechte Schaltfläche in der Symbolleiste.
 

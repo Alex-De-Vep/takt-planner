@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Собирает обновление «Задач» с локальным ИИ для Mac M1+ и проверяет установочный образ."""
+"""Собирает Takt для Mac с Apple Silicon и проверяет установочный образ."""
 from pathlib import Path
 import hashlib
 import json
+import os
 import plistlib
 import shutil
 import subprocess
@@ -13,7 +14,9 @@ REPO_ROOT = MACOS_ROOT.parents[1]
 BUILD = MACOS_ROOT / '.build'
 DIST = REPO_ROOT / 'dist'
 DERIVED = BUILD / 'AIReleaseDerivedData'
-APP_NAME = 'Задачи.app'
+DISPLAY_NAME = 'Takt'
+APP_NAME = f'{DISPLAY_NAME}.app'
+SIGNING_IDENTITY = os.environ.get('PLANNER_RELEASE_SIGNING_IDENTITY', '-')
 
 
 def run(*args, **kwargs):
@@ -23,15 +26,15 @@ def run(*args, **kwargs):
 def verify(app):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
-    assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == 'Задачи'
-    assert metadata['CFBundleShortVersionString'] == '0.2.17'
-    assert metadata['CFBundleVersion'] == '67'
+    assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == DISPLAY_NAME
+    assert metadata['CFBundleShortVersionString'] == '0.3.10'
+    assert metadata['CFBundleVersion'] == '94'
     assert metadata['LSMinimumSystemVersion'] == '26.0'
-    for language, expected in [('ru', 'Задачи'), ('en', 'Tasks')]:
+    for language in ('ru', 'en'):
         localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
                         app / 'Contents/Resources' / f'{language}.lproj/InfoPlist.strings', capture_output=True)
         names = json.loads(localized.stdout)
-        assert names['CFBundleDisplayName'] == names['CFBundleName'] == expected
+        assert names['CFBundleDisplayName'] == names['CFBundleName'] == DISPLAY_NAME
     executable = app / 'Contents/MacOS' / metadata['CFBundleExecutable']
     architectures = run('/usr/bin/lipo', '-archs', executable, capture_output=True, text=True).stdout.strip()
     assert architectures == 'arm64', architectures
@@ -83,10 +86,10 @@ def main():
     with tempfile.TemporaryDirectory(prefix='ai-release-', dir=BUILD) as tmp:
         stage = Path(tmp) / 'image'; stage.mkdir()
         app = stage / APP_NAME
-        run('/usr/bin/ditto', DERIVED / 'Build/Products/Release/Planner.app', app)
+        run('/usr/bin/ditto', DERIVED / 'Build/Products/Release' / APP_NAME, app)
         info_path = app / 'Contents/Info.plist'
         metadata = plistlib.loads(info_path.read_bytes())
-        metadata['CFBundleDisplayName'] = metadata['CFBundleName'] = 'Задачи'
+        metadata['CFBundleDisplayName'] = metadata['CFBundleName'] = DISPLAY_NAME
         info_path.write_bytes(plistlib.dumps(metadata))
         for name in ('LICENSE', 'NOTICE'):
             shutil.copy2(REPO_ROOT / name, app / 'Contents/Resources' / name)
@@ -97,14 +100,15 @@ def main():
             for license_file in checkout.glob('LICENSE*'):
                 if license_file.is_file(): notices.append(checkout.name + '\n' + license_file.read_text(errors='replace'))
         (app / 'Contents/Resources/ThirdPartyLicenses.txt').write_text('\n\n'.join(notices))
-        run('/usr/bin/codesign', '--force', '--sign', '-', '--timestamp=none', '--options', 'runtime',
+        run('/usr/bin/codesign', '--force', '--sign', SIGNING_IDENTITY, '--timestamp=none', '--options', 'runtime',
             '--entitlements', MACOS_ROOT / 'Planner/Planner.entitlements', '--generate-entitlement-der', app)
         metadata = verify(app)
         (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)
         (stage / 'Прочитайте перед установкой.txt').write_text(
-            'Задачи — обновление с локальным помощником\n\n'
+            'Takt — обновление с помощником\n\n'
             'Требуется Mac с Apple M1 или новее и macOS 26+. Только arm64.\n'
-            'Закройте «Задачи» через ⌘Q, затем замените приложение в Программах.\n'
+            'Закройте приложение через ⌘Q, затем замените его в Программах.\n'
+            'Если предыдущая версия называется «Задачи», уберите её из Программ после установки Takt.\n'
             'Идентификатор и библиотека прежние: ваши папки, задачи и настройки открываются автоматически.\n'
             'Помощник создаёт задачи и дорабатывает их текст только после подтверждения предложений.\n'
             'Доработка новой задачи меняет черновик: создание остаётся отдельным действием.\n'
@@ -113,9 +117,10 @@ def main():
             'Локальная модель работает на Mac. Облачные модели подключаются в настройках помощника.\n'
             'Перед созданием задач и событий проверьте предложения.\n'
             'При разрешении EventKit события сохраняются в настоящие системные календари.\n'
-            'Сборка подписана ad-hoc, без Developer ID и нотариализации.\n', encoding='utf-8')
-        image = Path(tmp) / ('Tasks-' + metadata['CFBundleShortVersionString'] + '-macOS-arm64.dmg')
-        run('/usr/bin/hdiutil', 'create', '-volname', 'Задачи', '-srcfolder', stage, '-format', 'UDZO', image)
+            + ('Сборка подписана ad-hoc и не нотариализована.\n' if SIGNING_IDENTITY == '-' else
+               'Сборка подписана локальным сертификатом и не нотариализована.\n'), encoding='utf-8')
+        image = Path(tmp) / (DISPLAY_NAME + '-' + metadata['CFBundleShortVersionString'] + '-macOS-arm64.dmg')
+        run('/usr/bin/hdiutil', 'create', '-volname', DISPLAY_NAME, '-srcfolder', stage, '-format', 'UDZO', image)
         run('/usr/bin/hdiutil', 'verify', image)
         mount = Path(tmp) / 'mounted'; mount.mkdir()
         run('/usr/bin/hdiutil', 'attach', '-readonly', '-nobrowse', '-noautoopen', '-mountpoint', mount, image)

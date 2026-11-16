@@ -4,7 +4,7 @@ import PlannerLocalization
 /// Нативное окно настроек macOS, доступное через меню приложения и ⌘,.
 struct SettingsView: View {
     private enum Pane: String, CaseIterable {
-        case general, notifications, calendar
+        case general, backup, notifications, calendar
         #if canImport(MLXLLM)
         case assistant
         #endif
@@ -16,6 +16,7 @@ struct SettingsView: View {
             #else
             case .general: ("Аккаунт", "person.crop.circle")
             #endif
+            case .backup: ("Резервная копия", "externaldrive")
             case .notifications: ("Уведомления", "bell")
             case .calendar: ("Календарь", "calendar")
             #if canImport(MLXLLM)
@@ -36,6 +37,7 @@ struct SettingsView: View {
     #if canImport(MLXLLM)
     let assistant: AssistantService
     #endif
+    let restoreBackup: (PlannerBackup) throws -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -75,6 +77,12 @@ struct SettingsView: View {
     @ViewBuilder private var detail: some View {
         switch selection ?? .general {
         case .general: general
+        case .backup:
+            #if canImport(MLXLLM)
+            BackupSettingsSection(preferences: preferences, service: service, assistant: assistant, restore: restoreBackup)
+            #else
+            BackupSettingsSection(preferences: preferences, service: service, assistant: nil, restore: restoreBackup)
+            #endif
         case .notifications:
             NotificationSettingsSection(preferences: preferences, notifications: notifications)
         case .calendar: calendarSettings

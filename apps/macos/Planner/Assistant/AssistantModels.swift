@@ -63,6 +63,7 @@ struct AssistantResponse: Codable, Sendable {
     var questions: [AssistantQuestion]?
     var actions: [AssistantProposal]?
     var textEdit: AssistantTextChange? = nil
+    var calendarRequest: AssistantCalendarRequest? = nil
 }
 enum AssistantActionStatus: String, Codable { case pending, applying, created, failed, needsReview }
 struct AssistantAction: Codable, Identifiable {
@@ -76,6 +77,11 @@ struct AssistantAction: Codable, Identifiable {
     var createdEventID: String?
     var createdEventExternalID: String?
     var linked = false
+    var calendarMove: AssistantCalendarMove? = nil
+
+    var isEditable: Bool {
+        [.pending, .failed].contains(status) && createdTaskID == nil && createdEventID == nil
+    }
 }
 struct AssistantMessage: Codable, Identifiable {
     enum Role: String, Codable { case user, assistant }
@@ -85,7 +91,19 @@ struct AssistantMessage: Codable, Identifiable {
     var questions: [AssistantQuestion] = []
     var createdAt = Date()
     var cloudUsage: AssistantCloudUsage? = nil
+    var resultActionID: UUID? = nil
+    var resultEditID: UUID? = nil
+    var taskLookup: AssistantTaskLookup? = nil
+    var calendarAgenda: [AssistantCalendarItem]? = nil
+    var calendarSelection: AssistantCalendarSelection? = nil
+    var calendarAccessRequired: Bool? = nil
+    var calendarTimeZoneID: String? = nil
 }
+struct AssistantTaskLookup: Codable {
+    let request: String
+    let taskIDs: [UUID]
+}
+
 struct AssistantThread: Codable, Identifiable {
     var id = UUID()
     var title = "Новый разговор"
@@ -96,10 +114,27 @@ struct AssistantThread: Codable, Identifiable {
     var createdAt = Date()
     var textEdits: [AssistantTextEdit]? = nil
     var activeTextEditID: UUID? = nil
+    var focusedDraftID: UUID? = nil
+    var focusedEventID: UUID? = nil
     var cloud: AssistantCloudThread? = nil
     var localModelSelected: Bool? = nil
     // При возврате на Mac новые предложения не заменяют карточки, уже показанные в диалоге.
     var protectedLocalActionIDs: Set<UUID>? = nil
+
+    var visibleActions: [AssistantAction] { actions.filter { $0.status != .created } }
+    var numberedTaskDrafts: [AssistantAction] { actions.filter { $0.proposal.kind == .task } }
+
+    var focusedDraft: AssistantAction? {
+        numberedTaskDrafts.first { $0.id == focusedDraftID && [.pending, .failed].contains($0.status) }
+    }
+
+    var focusedEvent: AssistantAction? {
+        actions.first { $0.id == focusedEventID && $0.proposal.kind == .event && [.pending, .failed].contains($0.status) }
+    }
+
+    func taskDraftNumber(_ id: UUID) -> Int? {
+        numberedTaskDrafts.firstIndex { $0.id == id }.map { $0 + 1 }
+    }
 
     var usesCloudModel: Bool { cloud != nil && localModelSelected != true }
 
@@ -114,6 +149,8 @@ struct AssistantThread: Codable, Identifiable {
                 || (gateway == nil && accountID != nil && cloud?.accountID != nil && cloud?.accountID != accountID)))
         if switchingProvider {
             activeTextEditID = nil
+            focusedDraftID = nil
+            focusedEventID = nil
             clarificationContext = nil
         }
         if let id {

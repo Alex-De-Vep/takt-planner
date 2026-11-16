@@ -9,16 +9,19 @@ final class SyncEngine {
     private(set) var pending = 0
     let repository: SyncRepository
     private let api: SyncHTTP
+    private let notes: NoteStore?
     private var timer: Task<Void, Never>?
     private var scheduled: Task<Void, Never>?
     private var running = false
+    private var followUp = false
     private var stopped = false
     private var blockedUntil = Date.distantPast
     private var transientFailures = 0
 
-    init(repository: SyncRepository, api: SyncHTTP) {
+    init(repository: SyncRepository, api: SyncHTTP, notes: NoteStore? = nil) {
         self.repository = repository
         self.api = api
+        self.notes = notes
         pending = (try? repository.counts().pending) ?? 0
     }
 
@@ -35,6 +38,7 @@ final class SyncEngine {
 
     func stop() {
         stopped = true
+        notes?.syncEnabled = false
         timer?.cancel()
         scheduled?.cancel()
         timer = nil
@@ -44,7 +48,10 @@ final class SyncEngine {
     func wake(after delay: Duration = .zero) {
         pending = (try? repository.counts().pending) ?? pending
         guard !stopped else { return }
-        if running { return }
+        if running {
+            followUp = true
+            return
+        }
         scheduled?.cancel()
         scheduled = Task { [weak self] in
             do { try await Task.sleep(for: delay) } catch { return }
@@ -56,7 +63,13 @@ final class SyncEngine {
         guard !stopped, !running, Date() >= blockedUntil else { return }
         running = true
         status = .syncing
-        defer { running = false }
+        defer {
+            running = false
+            if followUp {
+                followUp = false
+                wake(after: .seconds(2))
+            }
+        }
         do {
             try await synchronize()
             transientFailures = 0
@@ -64,7 +77,7 @@ final class SyncEngine {
             pending = counts.pending
             status = counts.failed > 0 ? .failed("Часть изменений отклонена сервером.") :
                 (counts.pending == 0 ? .upToDate : .waiting)
-            if counts.pending > counts.failed { Task { [weak self] in self?.wake(after: .seconds(2)) } }
+            if counts.pending > counts.failed { followUp = true }
         } catch is CancellationError {
             return
         } catch SyncProblem.signInRequired {
@@ -92,6 +105,7 @@ final class SyncEngine {
         let config: SyncConfig = try await api.publicRequest("/v1/config")
         try checkActive()
         guard config.protocolVersion == 1 else { throw SyncProblem.incompatibleProtocol }
+        notes?.syncEnabled = config.limits.maxNoteBytes != nil
         if let server = SyncWire.date(config.serverTime) {
             repository.serverClockOffset = server.timeIntervalSinceNow
         }
@@ -110,6 +124,10 @@ final class SyncEngine {
             try repository.accept(result, sent: send)
         }
         try await pull()
+        if let notes, let limit = config.limits.maxNoteBytes {
+            let retry = try await NoteSync(store: notes, api: api).synchronize(maxBytes: limit, checkActive: checkActive)
+            if retry { followUp = true }
+        }
     }
 
     private func pull() async throws {

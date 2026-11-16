@@ -1,5 +1,6 @@
 package local.planner.android
 
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +23,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -34,6 +37,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class AccountForm { SignIn, Register, Verify, Reset, ResetCode }
@@ -160,7 +165,26 @@ private fun AccountDialog(initial: AccountForm, cloud: CloudState, model: Planne
         AccountForm.Verify -> R.string.verify_and_sign_in
         AccountForm.ResetCode -> R.string.save
     }
-    val enabled = !cloud.busy && email.isNotBlank() && when (mode) {
+    val primaryAction = when (mode) {
+        AccountForm.SignIn -> AccountAction.SignIn
+        AccountForm.Register, AccountForm.Reset -> AccountAction.RequestCode
+        AccountForm.Verify, AccountForm.ResetCode -> AccountAction.ConfirmCode
+    }
+    val address = email.trim().lowercase()
+    val primaryLimit = cloud.accountLimits[AccountActionKey(server, address, primaryAction)]
+    val codeDeadline = cloud.accountLimits[AccountActionKey(server, address, AccountAction.RequestCode)]?.retryAt ?: 0L
+    val deadline = maxOf(primaryLimit?.retryAt ?: 0L, codeDeadline)
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    LaunchedEffect(deadline) {
+        now = SystemClock.elapsedRealtime()
+        while (now < deadline) {
+            delay(minOf(1000L, deadline - now))
+            now = SystemClock.elapsedRealtime()
+        }
+    }
+    val primaryWait = ((primaryLimit?.retryAt ?: 0L) - now).coerceAtLeast(0)
+    val codeWait = (codeDeadline - now).coerceAtLeast(0)
+    val enabled = !cloud.busy && primaryWait == 0L && email.isNotBlank() && when (mode) {
         AccountForm.SignIn -> password.isNotBlank()
         AccountForm.Register -> validPassword
         AccountForm.Reset -> true
@@ -185,17 +209,17 @@ private fun AccountDialog(initial: AccountForm, cloud: CloudState, model: Planne
                     PlannerTextField(email, { email = it }, placeholder = R.string.email,
                         singleLine = true, enabled = !cloud.busy, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 }
-                if (confirming) {
-                    PlannerTextField(code, { code = it.filter { digit -> digit in '0'..'9' }.take(8) },
-                        placeholder = R.string.email_code, singleLine = true, enabled = !cloud.busy,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                }
                 if (mode != AccountForm.Reset) {
                     PlannerTextField(password, { password = it },
                         placeholder = if (mode == AccountForm.ResetCode) R.string.new_password else R.string.password,
                         singleLine = true, enabled = !cloud.busy, visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         supportingText = if (mode != AccountForm.SignIn) ({ Text(stringResource(R.string.password_rules)) }) else null)
+                }
+                if (confirming) {
+                    PlannerTextField(code, { code = it.filter { digit -> digit in '0'..'9' }.take(8) },
+                        placeholder = R.string.email_code, singleLine = true, enabled = !cloud.busy,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 }
                 if (mode == AccountForm.SignIn) {
                     TextButton(onClick = {
@@ -205,17 +229,25 @@ private fun AccountDialog(initial: AccountForm, cloud: CloudState, model: Planne
                     }, enabled = !cloud.busy) { Text(stringResource(R.string.forgot_password)) }
                 }
                 if (mode == AccountForm.Verify || cloud.message == R.string.email_not_verified) {
-                    TextButton(onClick = { startChallenge(AccountRequest.Resend, AccountForm.Verify) }, enabled = !cloud.busy) {
+                    TextButton(onClick = { startChallenge(AccountRequest.Resend, AccountForm.Verify) }, enabled = !cloud.busy && codeWait == 0L) {
                         Text(stringResource(R.string.resend_code))
                     }
                 }
                 if (mode == AccountForm.ResetCode) {
-                    TextButton(onClick = { startChallenge(AccountRequest.Reset, AccountForm.ResetCode) }, enabled = !cloud.busy) {
+                    TextButton(onClick = { startChallenge(AccountRequest.Reset, AccountForm.ResetCode) }, enabled = !cloud.busy && codeWait == 0L) {
                         Text(stringResource(R.string.resend_code))
                     }
                 }
                 if (cloud.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 cloud.message?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+                val remaining = primaryLimit?.attemptsRemaining
+                if (mode == AccountForm.SignIn && primaryWait == 0L && remaining != null && remaining in 1..3) {
+                    Text(stringResource(R.string.sign_in_attempts_left, remaining))
+                }
+                if (primaryWait > 0) Text(stringResource(R.string.account_retry_in, formatAccountWait(primaryWait)))
+                if (primaryAction != AccountAction.RequestCode && codeWait > 0) {
+                    Text(stringResource(R.string.account_resend_in, formatAccountWait(codeWait)))
+                }
             }
         },
         confirmButton = {
@@ -235,4 +267,9 @@ private fun AccountDialog(initial: AccountForm, cloud: CloudState, model: Planne
         },
         dismissButton = { TextButton(onClick = close, enabled = !cloud.busy) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+private fun formatAccountWait(milliseconds: Long): String {
+    val seconds = (milliseconds + 999) / 1000
+    return String.format(Locale.ROOT, "%02d:%02d", seconds / 60, seconds % 60)
 }
