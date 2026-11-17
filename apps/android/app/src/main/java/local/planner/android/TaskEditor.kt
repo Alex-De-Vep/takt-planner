@@ -3,6 +3,7 @@ package local.planner.android
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -104,15 +105,6 @@ internal fun TaskEditor(
             TopAppBar(
                 title = { Text(stringResource(if (task == null) R.string.new_task else R.string.task_details)) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, onClick = navigateBack) },
-                actions = {
-                    if (task != null) {
-                        ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, enabled = !draft.saving) {
-                            val go = { finish(); openChat(task.id) }
-                            if (draft.dirty) model.saveTask(draft, go) else go()
-                        }
-                        ActionIcon(R.drawable.ic_delete, R.string.delete_task, enabled = !draft.saving) { action = "delete" }
-                    }
-                },
             )
         },
         bottomBar = {
@@ -152,7 +144,10 @@ internal fun TaskEditor(
                 )
                 val accent = MaterialTheme.colorScheme.primary
                 val inactive = MaterialTheme.colorScheme.onSurfaceVariant
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     IconToggleButton(draft.focused, { draft.focused = it }, enabled = !draft.saving) {
                         Glyph(
                             if (draft.focused) R.drawable.ic_star else R.drawable.ic_star_outline,
@@ -168,6 +163,18 @@ internal fun TaskEditor(
                     if (!showDescription) {
                         ActionIcon(R.drawable.ic_list, R.string.add_description, inactive, enabled = !draft.saving) {
                             addingDescription = true
+                        }
+                    }
+                    if (task != null) {
+                        ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, inactive, enabled = !draft.saving) {
+                            val go = {
+                                finish()
+                                openChat(task.id)
+                            }
+                            if (draft.dirty) model.saveTask(draft, go) else go()
+                        }
+                        ActionIcon(R.drawable.ic_delete, R.string.delete_task, inactive, enabled = !draft.saving) {
+                            action = "delete"
                         }
                     }
                 }
