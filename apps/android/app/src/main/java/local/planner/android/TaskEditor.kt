@@ -120,28 +120,31 @@ internal fun TaskEditor(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box {
-                    TextButton(onClick = { folderMenu = true }, enabled = !draft.saving) {
-                        Glyph(R.drawable.ic_folder)
-                        Text(sectionName(activeLocation, library), Modifier.padding(start = 8.dp))
-                    }
-                    DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
-                        (listOf("inbox", "week", "month") + library.folders.map(Entity::id)).forEach { key ->
-                            DropdownMenuItem(text = { Text(sectionName(key, library)) }, onClick = {
-                                draft.location = key
-                                folderMenu = false
-                            })
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box {
+                        TextButton(onClick = { folderMenu = true }, enabled = !draft.saving) {
+                            Glyph(R.drawable.ic_folder)
+                            Text(sectionName(activeLocation, library), Modifier.padding(start = 8.dp))
+                        }
+                        DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
+                            (listOf("inbox", "week", "month") + library.folders.map(Entity::id)).forEach { key ->
+                                DropdownMenuItem(text = { Text(sectionName(key, library)) }, onClick = {
+                                    draft.location = key
+                                    folderMenu = false
+                                })
+                            }
                         }
                     }
+                    PlannerTextField(
+                        draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(task == null),
+                        placeholder = R.string.task_title, enabled = !draft.saving,
+                        textStyle = MaterialTheme.typography.headlineSmall,
+                    )
                 }
-                PlannerTextField(
-                    draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(task == null),
-                    placeholder = R.string.task_title, singleLine = true, enabled = !draft.saving,
-                    textStyle = MaterialTheme.typography.headlineSmall,
-                )
                 val accent = MaterialTheme.colorScheme.primary
                 val inactive = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(

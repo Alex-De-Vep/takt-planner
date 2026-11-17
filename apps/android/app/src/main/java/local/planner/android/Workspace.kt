@@ -348,7 +348,6 @@ private fun TaskRow(
                         task.text("title").orEmpty().ifBlank { stringResource(R.string.untitled) },
                         style = MaterialTheme.typography.titleMedium,
                         textDecoration = if (task.completed) TextDecoration.LineThrough else null,
-                        maxLines = 3, overflow = TextOverflow.Ellipsis,
                     )
                     task.text("description")?.trim()?.takeIf(String::isNotEmpty)?.let { description ->
                         Text(description, style = MaterialTheme.typography.bodyMedium,
