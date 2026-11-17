@@ -278,6 +278,7 @@
     <string name="note_edit_text_hint">Создать редактируемую текстовую копию? Оригинал сохранит форматирование и изображения.</string>
     <string name="note_create_text_copy">Создать текстовую копию</string>
     <string name="notes_format_unsupported">Обновите сервер Takt, чтобы синхронизировать заметки с оформлением.</string>
+    <string name="note_formatting">Форматирование текста</string>
     <string name="note_bold">Жирный</string>
     <string name="note_italic">Курсив</string>
     <string name="note_underline">Подчеркнуть</string>

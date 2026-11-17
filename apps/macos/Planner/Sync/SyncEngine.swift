@@ -27,6 +27,8 @@ final class SyncEngine {
 
     func start() {
         guard timer == nil, !stopped else { return }
+        // New notes can be created before the first configuration request finishes.
+        notes?.awaitingCloudNoteFormat = true
         wake()
         timer = Task { [weak self] in
             while !Task.isCancelled {
@@ -39,6 +41,7 @@ final class SyncEngine {
     func stop() {
         stopped = true
         notes?.syncEnabled = false
+        notes?.awaitingCloudNoteFormat = false
         notes?.sharedFormatLimit = nil
         timer?.cancel()
         scheduled?.cancel()
@@ -109,6 +112,7 @@ final class SyncEngine {
         notes?.syncEnabled = config.limits.maxNoteBytes != nil
         notes?.sharedFormatLimit = (config.limits.maxNoteFormatVersion ?? 0) >= SharedNoteText.currentVersion
             ? config.limits.maxNoteBytes : nil
+        notes?.awaitingCloudNoteFormat = false
         if let server = SyncWire.date(config.serverTime) {
             repository.serverClockOffset = server.timeIntervalSinceNow
         }

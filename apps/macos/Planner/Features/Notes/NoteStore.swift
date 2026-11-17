@@ -57,6 +57,7 @@ final class NoteStore {
     private(set) var error: String?
     private(set) var unreadable = false
     var syncEnabled = false
+    var awaitingCloudNoteFormat = false
     var sharedFormatLimit: Int?
     private var remoteEdits: [UUID: UUID] = [:]
     @ObservationIgnored let voice: NoteVoiceRecording
@@ -98,7 +99,9 @@ final class NoteStore {
     @discardableResult func create(folder: String) -> UUID? {
         guard !unreadable else { return nil }
         var note = PlannerNote()
-        if sharedFormatLimit != nil { note.richText = SharedNoteText(spans: []) }
+        if awaitingCloudNoteFormat || sharedFormatLimit != nil {
+            note.richText = SharedNoteText(spans: [])
+        }
         note.folder = folder
         notes.insert(note, at: 0)
         dirty = true

@@ -21,28 +21,30 @@ import android.view.Gravity
 import android.widget.EditText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.io.ByteArrayOutputStream
 import java.util.Base64
@@ -55,7 +57,7 @@ private const val NOTE_BODY_SIZE = 16
 private const val SPAN_FLAGS = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
 
 @Composable
-internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean) {
+internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, actions: @Composable RowScope.() -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editor by remember { mutableStateOf<EditText?>(null) }
@@ -79,26 +81,10 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean) {
     val accent = MaterialTheme.colorScheme.primary.toArgb()
 
     Column {
-        if (editable) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                NoteFormatButton("B", R.string.note_bold, bold = true) {
-                    editor?.toggleRange({ it is StyleSpan && it.style == Typeface.BOLD }, { StyleSpan(Typeface.BOLD) })
-                }
-                NoteFormatButton("I", R.string.note_italic, italic = true) {
-                    editor?.toggleRange({ it is StyleSpan && it.style == Typeface.ITALIC }, { StyleSpan(Typeface.ITALIC) })
-                }
-                NoteFormatButton("U", R.string.note_underline) {
-                    editor?.toggleRange({ it is UnderlineSpan }, { UnderlineSpan() })
-                }
-                NoteFormatButton("H", R.string.note_heading, bold = true) {
-                    editor?.toggleRange({ it is RelativeSizeSpan }, { RelativeSizeSpan(1.5f) })
-                }
-                NoteFormatButton("•", R.string.note_list) { editor?.prefixParagraph("• ") }
-                NoteFormatButton("1.", R.string.note_numbered_list) { editor?.prefixParagraph("1. ") }
-                NoteFormatButton("☐", R.string.note_checklist) { editor?.prefixParagraph("☐ ") }
-                ActionIcon(R.drawable.ic_link, R.string.note_link) { addLink = true }
-                ActionIcon(R.drawable.ic_image, R.string.note_image) { imagePicker.launch("image/*") }
-            }
+        if (draft.original?.document?.deletedAt == null) Row(verticalAlignment = Alignment.CenterVertically) {
+            NoteFormatMenu(editor = editor, enabled = editable,
+                addLink = { addLink = true }, addImage = { imagePicker.launch("image/*") })
+            actions()
         }
         AndroidView(
             modifier = Modifier.fillMaxWidth(),
@@ -152,12 +138,55 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean) {
 }
 
 @Composable
-private fun NoteFormatButton(label: String, description: Int, bold: Boolean = false, italic: Boolean = false, run: () -> Unit) {
-    val name = stringResource(description)
-    TextButton(onClick = run, modifier = Modifier.semantics { contentDescription = name }) {
-        Text(label, fontWeight = if (bold) FontWeight.Bold else null, fontStyle = if (italic) FontStyle.Italic else null)
+private fun NoteFormatMenu(editor: EditText?, enabled: Boolean, addLink: () -> Unit, addImage: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = stringResource(R.string.note_formatting)
+    Box {
+        IconButton(
+            onClick = { expanded = true },
+            enabled = enabled && editor != null,
+            modifier = Modifier.semantics { contentDescription = label },
+        ) {
+            Text("Aa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
+            val edit = editor ?: return@DropdownMenu
+            val entries: List<Pair<Int, () -> Unit>> = listOf(
+                R.string.note_bold to { edit.toggleTypeface(Typeface.BOLD) },
+                R.string.note_italic to { edit.toggleTypeface(Typeface.ITALIC) },
+                R.string.note_underline to {
+                    edit.toggleRange({ it is UnderlineSpan }, { UnderlineSpan() })
+                },
+                R.string.note_heading to {
+                    edit.toggleRange({ it is RelativeSizeSpan }, { RelativeSizeSpan(1.5f) })
+                },
+                R.string.note_list to { edit.prefixParagraph("• ") },
+                R.string.note_numbered_list to { edit.prefixParagraph("1. ") },
+                R.string.note_checklist to { edit.prefixParagraph("☐ ") },
+                R.string.note_link to addLink,
+                R.string.note_image to addImage,
+            )
+            entries.forEach { (title, apply) ->
+                val icon = when (title) {
+                    R.string.note_link -> R.drawable.ic_link
+                    R.string.note_image -> R.drawable.ic_image
+                    else -> null
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(title)) },
+                    leadingIcon = icon?.let { { Glyph(it) } },
+                    onClick = {
+                        expanded = false
+                        apply()
+                    },
+                )
+            }
+        }
     }
 }
+
+private fun EditText.toggleTypeface(style: Int) =
+    toggleRange({ it is StyleSpan && it.style == style }, { StyleSpan(style) })
 
 private class NoteImageSpan(context: Context, val png: String, bitmap: Bitmap) : ImageSpan(
     BitmapDrawable(context.resources, bitmap).apply {
