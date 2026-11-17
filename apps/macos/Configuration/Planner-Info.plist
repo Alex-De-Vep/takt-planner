@@ -18,6 +18,8 @@
             </dict>
         </dict>
     </dict>
+    <key>TaktWidgetAppGroup</key>
+    <string>$(PLANNER_WIDGET_APP_GROUP)</string>
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>

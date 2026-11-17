@@ -63,6 +63,7 @@ final class AppRuntime {
             open(CloudLibrary(container: container, service: TaskService(context: container.mainContext)))
         } catch {
             startupError = error.localizedDescription
+            if service == nil { TodayWidgetPublisher.publish(from: nil) }
         }
     }
 
@@ -85,7 +86,12 @@ final class AppRuntime {
         assistant?.stop()
         assistant = AssistantService(store: store)
         container = library.container
+        service?.didSaveTasks = nil
         service = library.service
+        library.service.didSaveTasks = { [weak taskService = library.service] in
+            if let taskService { TodayWidgetPublisher.publish(from: taskService.context) }
+        }
+        TodayWidgetPublisher.publish(from: library.service.context)
         startupError = nil
     }
 
@@ -167,7 +173,10 @@ struct PlannerApp: App {
             launchContent
                 .onAppear { terminationDelegate.runtime = runtime }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { runtime.cloud.engine?.wake() }
+                    if phase == .active {
+                        runtime.cloud.engine?.wake()
+                        TodayWidgetPublisher.publish(from: runtime.service?.context)
+                    }
                 }
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)

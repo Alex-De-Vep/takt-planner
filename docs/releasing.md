@@ -14,39 +14,39 @@
 ```sh
 xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
   -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
-python3 apps/macos/scripts/build_release.py
+PLANNER_RELEASE_SIGNING_IDENTITY='<certificate fingerprint>' python3 apps/macos/scripts/build_release.py
 ```
 
 Скрипт собирает Release для Apple Silicon (`arm64`), проверяет локализованные имена, ресурсы ИИ-помощника, сертификат GigaChat, подпись и разрешения. Затем он упаковывает DMG и проверяет его содержимое после монтирования только для чтения. Тесты и приложение не запускаются.
 
 В образ и в ресурсы приложения включаются `LICENSE` и `NOTICE`. Демонстрационные данные не входят в Release. Результаты находятся в `dist/`.
 
-По умолчанию используется подпись ad-hoc без нотариализации. Для локальных обновлений на Mac можно задать `PLANNER_RELEASE_SIGNING_IDENTITY` с отпечатком действующего сертификата Apple Development из `security find-identity -v -p codesigning`. Используйте одну команду разработчика и сохраняйте идентификатор приложения между обновлениями, чтобы macOS могла узнавать приложение при обращении к Связке ключей. При переходе с ad-hoc на сертификат macOS может запросить доступ к существующим записям. Для публичного распространения применяйте Developer ID и нотариализацию.
+Сборка с виджетом «Сегодня» требует сертификат Apple. Для тестового обновления на Mac задайте `PLANNER_RELEASE_SIGNING_IDENTITY` с отпечатком сертификата Apple Development из `security find-identity -v -p codesigning`. Используйте ту же команду разработчика и идентификатор приложения, чтобы macOS узнавала приложение при обращении к Связке ключей. Для локальной подписи ad-hoc соберите приложение с `--without-widget`. Для публичного распространения применяйте Developer ID и нотариализацию.
 
 ## GitHub Release
 
-В [Releases](https://github.com/Alex-De-Vep/takt-planner/releases) создайте выпуск с тегом версии на проверенном коммите. Для подготовленного выпуска используйте `v0.2.17`, отметку **pre-release** и заголовок «Такт 0.2.17 / Takt 0.2.17». Сначала сохраните черновик и проверьте список файлов.
+В [Releases](https://github.com/Alex-De-Vep/takt-planner/releases) создайте черновик с тегом версии на проверенном коммите. Для подготовленного выпуска используйте `v0.3.26`, отметку **pre-release** и заголовок «Такт 0.3.26 / Takt 0.3.26». Проверьте список файлов перед публикацией.
 
 Вложите только:
 
-- `Tasks-0.2.17-macOS-arm64.dmg`
-- `Tasks-0.2.17-macOS-arm64.dmg.sha256`
-- `Takt-0.1.0-Android-debug.apk`
-- `Takt-0.1.0-Android-debug.apk.sha256`
+- `Takt-0.3.26-macOS-arm64.dmg`
+- `Takt-0.3.26-macOS-arm64.dmg.sha256`
+- `Takt-0.1.1-Android-debug.apk`
+- `Takt-0.1.1-Android-debug.apk.sha256`
 
 Android APK — тестовая сборка с debug-подписью для установки из файла. Для Google Play или другого магазина подготовьте release-сборку с постоянным ключом владельца. Существующий тестовый APK обновляется только APK с той же подписью.
 
 Android собирается из папки `apps/android/` командой `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug`. Результат находится в `app/build/outputs/apk/debug/app-debug.apk`. Проверьте подпись через `apksigner verify --verbose --print-certs` и сохраните SHA-256 рядом с установщиком.
 
-Текст этого выпуска находится в [docs/releases/v0.2.17.md](releases/v0.2.17.md). Исходные архивы GitHub создаст из тега. Бинарные сборки хранятся во вложениях релиза. Для исправлений опубликованного выпуска используйте новую версию и новый тег.
+Текст этого выпуска находится в [docs/releases/v0.3.26.md](releases/v0.3.26.md). Исходные архивы GitHub создаст из тега. Бинарные сборки хранятся во вложениях релиза. Для исправлений опубликованного выпуска используйте новую версию и новый тег.
 
 ## Проверка загрузки
 
 После скачивания DMG и файла контрольной суммы в одну папку:
 
 ```sh
-shasum -a 256 -c Tasks-0.2.17-macOS-arm64.dmg.sha256
-shasum -a 256 -c Takt-0.1.0-Android-debug.apk.sha256
+shasum -a 256 -c Takt-0.3.26-macOS-arm64.dmg.sha256
+shasum -a 256 -c Takt-0.1.1-Android-debug.apk.sha256
 ```
 
 Контрольная сумма проверяет целостность файла, но не заменяет подпись Developer ID или нотариализацию.
