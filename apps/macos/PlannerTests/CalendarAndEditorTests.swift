@@ -1,5 +1,4 @@
 import AppKit
-import EventKit
 import Foundation
 import SwiftData
 import SwiftUI
@@ -254,16 +253,11 @@ struct CalendarAndEditorTests {
         #expect(service.resolve(identifier: "new", externalIdentifier: "shared") == nil)
     }
 
-    @Test func occurrenceDateAloneDoesNotBlockEditingAnExistingOneOffEvent() throws {
-        // Объект только в памяти: личное хранилище EventKit не создаётся и не читается.
-        let source = RecurrenceEventStub()
-        source.originalDate = date(25)
-        #expect(source.occurrenceDate != nil)
-        #expect(!EventKitAdapter.isRecurring(source))
-
+    @Test func oneOffEventWithoutRecurrenceFlagsCanBeEdited() throws {
         let store = FakeCalendarStore(), service = CalendarService(store: store)
         var original = event("existing")
-        original.recurring = EventKitAdapter.isRecurring(source)
+        original.recurring = EventKitAdapter.isRecurring(hasRecurrenceRules: false, isDetached: false)
+        #expect(!original.recurring)
         store.values = [original]
         var draft = EventDraft(event: original)
         draft.title = "Изменённое событие"
@@ -272,10 +266,8 @@ struct CalendarAndEditorTests {
         #expect(saved.identifier == original.identifier && saved.title == draft.title && saved.notes == draft.notes)
         #expect(store.values.count == 1 && store.saves == 1)
 
-        source.repeats = true
-        #expect(EventKitAdapter.isRecurring(source))
-        source.repeats = false; source.detached = true
-        #expect(EventKitAdapter.isRecurring(source))
+        #expect(EventKitAdapter.isRecurring(hasRecurrenceRules: true, isDetached: false))
+        #expect(EventKitAdapter.isRecurring(hasRecurrenceRules: false, isDetached: true))
     }
 
     @Test func externallyRemovedOrReadOnlyEventsAreNeverRecreated() throws {
@@ -383,16 +375,6 @@ struct CalendarAndEditorTests {
         #expect(container.workspace.splitViewItems[3].viewController === calendarController)
         #expect(container.workspace.splitViewItems.prefix(3).map { ObjectIdentifier($0.viewController) } == original)
     }
-}
-
-/// Подмена признаков события без EKEventStore, календарей пользователя и запросов разрешения.
-private final class RecurrenceEventStub: EKEvent {
-    var repeats = false
-    var detached = false
-    var originalDate: Date?
-    override var hasRecurrenceRules: Bool { repeats }
-    override var isDetached: Bool { detached }
-    override var occurrenceDate: Date! { originalDate }
 }
 
 @MainActor
