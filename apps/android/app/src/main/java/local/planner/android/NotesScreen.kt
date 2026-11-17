@@ -173,12 +173,14 @@ private fun NoteRow(note: NoteSummary, library: Library, model: PlannerModel) {
         Modifier.fillMaxWidth().clickable { model.openNote(note.id, null) }.padding(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             if (note.pinned) Glyph(R.drawable.ic_pin, stringResource(R.string.note_pinned),
                 MaterialTheme.colorScheme.primary)
-            Text(note.title.ifBlank { stringResource(R.string.untitled_note) },
-                Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            Text(
+                note.title.ifBlank { stringResource(R.string.untitled_note) },
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+            )
         }
         if (note.preview.isNotBlank()) {
             Text(note.preview, maxLines = 2, overflow = TextOverflow.Ellipsis,
@@ -277,33 +279,37 @@ internal fun NoteEditor(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 draft.error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
-                Box {
-                    TextButton(onClick = { folders = true }, enabled = editing && library.folders.isNotEmpty()) {
-                        Glyph(R.drawable.ic_folder)
-                        Text(currentFolder?.text("name") ?: stringResource(R.string.note_missing_folder),
-                            Modifier.padding(start = 8.dp))
-                    }
-                    DropdownMenu(expanded = folders, onDismissRequest = { folders = false }) {
-                        DropdownMenuItem(text = { Text(stringResource(R.string.note_missing_folder)) }, onClick = {
-                            draft.folder = NOTE_WITHOUT_FOLDER
-                            folders = false
-                        })
-                        library.folders.forEach { folder ->
-                            DropdownMenuItem(text = { Text(folder.text("name").orEmpty()) }, onClick = {
-                                draft.folder = noteFolder(folder.id)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box {
+                        TextButton(onClick = { folders = true }, enabled = editing && library.folders.isNotEmpty()) {
+                            Glyph(R.drawable.ic_folder)
+                            Text(currentFolder?.text("name") ?: stringResource(R.string.note_missing_folder),
+                                Modifier.padding(start = 8.dp))
+                        }
+                        DropdownMenu(expanded = folders, onDismissRequest = { folders = false }) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.note_missing_folder)) }, onClick = {
+                                draft.folder = NOTE_WITHOUT_FOLDER
                                 folders = false
                             })
+                            library.folders.forEach { folder ->
+                                DropdownMenuItem(text = { Text(folder.text("name").orEmpty()) }, onClick = {
+                                    draft.folder = noteFolder(folder.id)
+                                    folders = false
+                                })
+                            }
                         }
                     }
+                    PlannerTextField(
+                        draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(original == null),
+                        placeholder = R.string.note_title, enabled = !draft.saving, readOnly = !editing,
+                        textStyle = MaterialTheme.typography.headlineSmall,
+                    )
                 }
-                PlannerTextField(draft.title, { draft.title = it },
-                    Modifier.fillMaxWidth().focusOnEntry(original == null), placeholder = R.string.note_title,
-                    singleLine = true, enabled = !draft.saving, readOnly = !editing,
-                    textStyle = MaterialTheme.typography.headlineSmall)
                 if (!removed) Row(verticalAlignment = Alignment.CenterVertically) {
                     if (voice.clip == null) {
                         ActionIcon(R.drawable.ic_waveform, R.string.voice_start, enabled = editing) {
