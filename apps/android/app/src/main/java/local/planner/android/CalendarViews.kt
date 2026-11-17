@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
@@ -70,10 +71,14 @@ internal data class CalendarDates(val start: LocalDate, val endExclusive: LocalD
 
 @Composable
 internal fun CalendarPeriodNavigation(
-    view: CalendarView, date: LocalDate, range: CalendarDates, select: (LocalDate) -> Unit, pickDate: () -> Unit,
+    view: CalendarView, date: LocalDate, today: LocalDate, range: CalendarDates,
+    select: (LocalDate) -> Unit, pickDate: () -> Unit,
 ) {
     val locale = LocalConfiguration.current.locales[0]
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val colors = MaterialTheme.colorScheme
+    val currentDay = view == CalendarView.Day && date == today
+    val todayLabel = stringResource(R.string.today)
     val title = when (view) {
         CalendarView.Month -> date.format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
             .replaceFirstChar { it.titlecase(locale) }
@@ -87,8 +92,18 @@ internal fun CalendarPeriodNavigation(
         IconButton(onClick = { select(view.move(date, -1)) }) {
             Box(Modifier.rotate(if (rtl) 180f else 0f)) { Glyph(R.drawable.ic_back, stringResource(R.string.calendar_previous)) }
         }
-        TextButton(onClick = pickDate, modifier = Modifier.weight(1f)) {
-            Text(title, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleSmall)
+        TextButton(onClick = pickDate, modifier = Modifier.weight(1f).semantics {
+            if (currentDay) stateDescription = todayLabel
+        }) {
+            Text(
+                title,
+                Modifier.then(
+                    if (currentDay) Modifier.background(colors.primary, RoundedCornerShape(12.dp)) else Modifier,
+                ).padding(horizontal = 10.dp, vertical = 4.dp),
+                color = if (currentDay) colors.onPrimary else colors.primary,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.titleSmall,
+            )
         }
         IconButton(onClick = { select(view.move(date, 1)) }) {
             Box(Modifier.rotate(if (rtl) 0f else 180f)) { Glyph(R.drawable.ic_back, stringResource(R.string.calendar_next)) }
@@ -138,24 +153,35 @@ private fun CalendarDayCell(
     val colors = MaterialTheme.colorScheme
     val label = dateLabel(day, FormatStyle.FULL)
     val description = if (hasEvents) stringResource(R.string.calendar_date_with_events, label) else label
+    val todayLabel = stringResource(R.string.today)
     val textColor = when {
+        today -> colors.onPrimary
         selected -> colors.onPrimaryContainer
-        today -> colors.primary
         muted -> colors.onSurfaceVariant
         else -> colors.onSurface
     }
     Box(
         modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).then(
             if (selected) Modifier.background(colors.primaryContainer) else Modifier,
-        ).selectable(selected, onClick = select).semantics { contentDescription = description },
+        ).selectable(selected, onClick = select).semantics {
+            contentDescription = description
+            if (today) stateDescription = todayLabel
+        },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(
-                day.dayOfMonth.toString(), Modifier.clearAndSetSemantics {},
-                color = textColor, fontWeight = if (selected || today) FontWeight.SemiBold else null,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            Box(
+                Modifier.size(28.dp).then(
+                    if (today) Modifier.background(colors.primary, CircleShape) else Modifier,
+                ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    day.dayOfMonth.toString(), Modifier.clearAndSetSemantics {},
+                    color = textColor, fontWeight = if (selected || today) FontWeight.SemiBold else null,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Box(Modifier.size(4.dp).then(
                 if (hasEvents) Modifier.background(if (selected) colors.onPrimaryContainer else colors.primary, CircleShape)
                 else Modifier,

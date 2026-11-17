@@ -128,7 +128,6 @@ internal fun CalendarScreen(
     }
 
     Heading(stringResource(R.string.events)) {
-        if (canRead) TextButton(onClick = { selectDate(today) }) { Text(stringResource(R.string.today)) }
         ActionIcon(R.drawable.ic_settings, R.string.calendars, onClick = filters)
     }
     if (!canRead) {
@@ -141,7 +140,7 @@ internal fun CalendarScreen(
         return
     }
     FolderTabs(CalendarView.entries, view, { view = it }) { stringResource(it.label) }
-    CalendarPeriodNavigation(view, date, range, selectDate) { datePicker = true }
+    CalendarPeriodNavigation(view, date, today, range, selectDate) { datePicker = true }
     if (datePicker) PickDate(date, { datePicker = false }) { selectDate(it); datePicker = false }
     page?.fold(onSuccess = { data ->
         CalendarAgenda(view, range, date, today, zone, data, selectDate, open)
