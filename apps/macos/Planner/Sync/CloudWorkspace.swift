@@ -136,8 +136,8 @@ final class CloudWorkspace {
         let engine = SyncEngine(repository: repo, api: api, notes: service.notes)
         self.engine = engine
         activeAPI = api
-        service.syncQueued = { [weak engine] in engine?.wake(after: .seconds(2)) }
-        service.notes.syncQueued = { [weak engine] in engine?.wake(after: .seconds(2)) }
+        service.syncQueued = { [weak engine] in engine?.wakeTasks(after: .seconds(2)) }
+        service.notes.syncQueued = { [weak engine] in engine?.wakeNotes(after: .seconds(2)) }
         engine.start()
     }
 

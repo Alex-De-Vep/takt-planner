@@ -100,3 +100,18 @@
 Заголовки клиента `X-Forwarded-For` принимаются только через явно настроенную доверенную цепочку прокси; IP не используется как удостоверение личности. Лимит защищённых запросов учитывается по подтверждённому аккаунту, refresh — по сессии, публичных запросов — по IP. Лимиты почты и авторизации по адресу остаются включёнными. Один запрос учитывается один раз, даже если маршрут повторно получает авторизованную личность.
 
 OpenAPI 0.1.1 содержит именованные схемы ответов, ошибок, сущностей, меток версий и полей. `Mutation.changes.value` остаётся семантически зависимым от типа сущности и имени поля: схемы `TaskFields`, `FolderFields`, `ChecklistItemFields`, `AttachmentFields` задают значения. Неправильные значения отдельных операций возвращаются в `results`, сохраняя поведение протокола 1. Для удалённого неизвестного UUID `fields` может быть пустым. `fileReady` в ответе создания вложения может отсутствовать (считать `false`); в снимках он присутствует.
+
+### Live note changes
+
+When `GET /v1/config` returns `limits.noteEventsVersion: 1`, authenticated clients
+can open `GET /v1/notes/events` with the same bearer token as the notes API.
+The `text/event-stream` response sends `ready` when the subscription is active
+and `notes.changed` after a changed note commits in the same library from
+another session. Both events have an empty JSON object as their data.
+Keep-alive comments carry no changes. Configure reverse proxies to flush
+streamed chunks and allow idle periods longer than 10 seconds.
+
+Clients should check the normal note index on each `ready` and after
+`notes.changed`. Events are not replayed. On disconnect, resume periodic
+checks and reconnect with backoff. A stream closes on token expiry or
+session revocation. Only one connection per session is kept open.

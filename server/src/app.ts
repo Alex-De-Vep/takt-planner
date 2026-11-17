@@ -53,7 +53,7 @@ export async function buildApp(config:Config,db:Database){
      return {status:'ready',version:SERVER_VERSION};
    }catch{return reply.code(503).send({status:'unavailable'});}
  });
- app.get('/v1/config',async()=>({protocolVersion:PROTOCOL_VERSION,serverVersion:SERVER_VERSION,serverTime:new Date().toISOString(),registrationMode:config.publicRegistration?'open':'allowlist',limits:{maxFileBytes:config.maxFileBytes,accountQuotaBytes:config.quotaBytes,partBytes:PART_BYTES,maxBatchOperations:100,maxRequestBytes:4194304,maxNoteBytes:MAX_NOTE_BYTES,maxNoteFormatVersion:NOTE_FORMAT_VERSION}}));
+ app.get('/v1/config',async()=>({protocolVersion:PROTOCOL_VERSION,serverVersion:SERVER_VERSION,serverTime:new Date().toISOString(),registrationMode:config.publicRegistration?'open':'allowlist',limits:{maxFileBytes:config.maxFileBytes,accountQuotaBytes:config.quotaBytes,partBytes:PART_BYTES,maxBatchOperations:100,maxRequestBytes:4194304,maxNoteBytes:MAX_NOTE_BYTES,maxNoteFormatVersion:NOTE_FORMAT_VERSION,noteEventsVersion:1}}));
  const auth=await installAuth(app,db,config);installSync(app,db,auth);installFiles(app,db,auth,config,store);installNotes(app,db,auth,config);
  app.get('/v1/openapi.json',async()=>completeOpenAPI(app.swagger()));
  return {app,store,auth};

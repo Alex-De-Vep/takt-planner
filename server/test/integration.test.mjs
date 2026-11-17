@@ -236,3 +236,72 @@ test('backup verification rejects symlinked files and directories escaping the s
  await writeFile(join(stage,'manifest.json'),JSON.stringify({formatVersion:1,backupId:randomUUID(),files:[{path:'database.dump',size:4,sha256:hash('dump')},{path:'blobs/'+blobId,size:3,sha256:hash('abc')}]}));
  await assert.rejects(()=>verifyBackup(root,stage));
 });
+
+test('note event stream signals committed writes to other sessions in the same library', { timeout: 30_000 }, async () => {
+  const writer = await account();
+  const reader = await login();
+  const other = await account('bob@example.test');
+  const { app: eventApp } = await buildApp(config, db);
+  const abort = new AbortController();
+  try {
+    const origin = await eventApp.listen({ host: '127.0.0.1', port: 0 });
+    const endpoint = origin + '/v1/notes/events';
+    assert.equal((await fetch(endpoint)).status, 401);
+    assert.equal((await api('GET', '/v1/config')).json().limits.noteEventsVersion, 1);
+    async function subscribe(identity) {
+      const response = await fetch(endpoint, {
+        headers: { authorization: 'Bearer ' + identity.accessToken },
+        signal: abort.signal
+      });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('content-type'), /^text\/event-stream/);
+      const decoder = new TextDecoder();
+      const stream = response.body.getReader();
+      let buffer = '';
+      async function next() {
+        while (!buffer.includes('\n\n')) {
+          const { value, done } = await stream.read();
+          if (done) return null;
+          buffer += decoder.decode(value, { stream: true });
+        }
+        const position = buffer.indexOf('\n\n');
+        const frame = buffer.slice(0, position);
+        buffer = buffer.slice(position + 2);
+        return frame;
+      }
+      assert.equal(await next(), 'event: ready\ndata: {}');
+      return next;
+    }
+
+    const [nextReader, nextWriter, nextOther] = await Promise.all(
+      [reader, writer, other].map(subscribe)
+    );
+    // Two heartbeats span the API server's 15-second socket timeout.
+    for (let i = 0; i < 2; i++) {
+      for (const frame of await Promise.all([nextReader(), nextWriter(), nextOther()])) {
+        assert.equal(frame, ': keep-alive');
+      }
+    }
+
+    // The HTTP API and the event stream use separate app instances.
+    const url = '/v1/notes/' + randomUUID();
+    const note = { baseRevision: null, data: Buffer.from('First version').toString('base64') };
+    const first = await api('PUT', url, note, writer);
+    assert.equal(first.statusCode, 200);
+    assert.equal(await nextReader(), 'event: notes.changed\ndata: {}');
+    assert.equal((await api('GET', url, undefined, reader)).json().revision, first.json().revision);
+
+    assert.equal((await api('PUT', url, note, writer)).statusCode, 200);
+    assert.equal((await api('PUT', url, { ...note, data: 'eA==' }, writer)).statusCode, 409);
+
+    for (const [identity, next] of [[reader, nextReader], [writer, nextWriter], [other, nextOther]]) {
+      assert.equal((await api('POST', '/v1/auth/logout', {}, identity)).statusCode, 200);
+      // Additional frames here would leak the writer's own event, another account's event,
+      // or a signal for the idempotent/rejected writes above.
+      assert.equal(await next(), null);
+    }
+  } finally {
+    abort.abort();
+    await eventApp.close();
+  }
+});
