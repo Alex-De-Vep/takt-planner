@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 umask 077
 
-version=0.1.3
-previous=0.1.2
+version=0.1.4
+previous=0.1.3
 root=/opt/takt-server
 install_dir="$root/app"
 env_file="$root/config/server.env"
@@ -21,6 +21,11 @@ ready_version() {
         python3 -c 'import json,sys; health=json.load(sys.stdin); print(health["version"] if health["status"]=="ready" else "")'
 }
 
+check_config() {
+    curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3030/v1/config |
+        python3 -c 'import json,sys;c=json.load(sys.stdin);assert c["protocolVersion"]==1 and c["serverVersion"]==sys.argv[1] and c["limits"]["maxNoteFormatVersion"]==1' "$version"
+}
+
 if [[ $EUID != 0 ]]; then
     echo "Run this upgrade with sudo." >&2
     exit 1
@@ -30,8 +35,7 @@ flock -n 9
 
 running=$(ready_version)
 if [[ $running == "$version" ]]; then
-    tailscale funnel --bg http://127.0.0.1:3030
-    tailscale funnel status
+    check_config
     exit
 fi
 if [[ $running != "$previous" || $candidate == "$install_dir" ]]; then
@@ -109,10 +113,7 @@ compose exec -T api node dist/main.js maintenance off
 maintenance=0
 compose up -d --no-build --pull never --no-deps --wait --wait-timeout 90 api worker
 [[ $(ready_version) == "$version" ]]
-curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3030/v1/config |
-    python3 -c 'import json,sys;c=json.load(sys.stdin);assert c["protocolVersion"]==1 and c["serverVersion"]=="0.1.3" and c["limits"]["maxNoteBytes"]>0'
+check_config
 
 trap - EXIT INT TERM
 printf 'Takt Server %s is ready. Upgrade backup: %s\n' "$version" "$backup"
-tailscale funnel --bg http://127.0.0.1:3030
-tailscale funnel status
