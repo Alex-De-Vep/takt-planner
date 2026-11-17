@@ -1427,6 +1427,11 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 9007199254740991
+              },
+              "taskEventsVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             },
             "required": [
@@ -5872,7 +5877,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Authenticated stream of note change signals.",
+            "description": "Authenticated stream of note and task change signals.",
             "content": {
               "text/event-stream": {
                 "schema": {

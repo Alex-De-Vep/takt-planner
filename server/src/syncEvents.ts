@@ -5,15 +5,17 @@ import type { Database, Tx } from './db.js';
 import { fail } from './errors.js';
 
 export const NOTES_CHANGED = 'takt_notes_changed';
+export const TASKS_CHANGED = 'takt_tasks_changed';
+type ChangeEvent = 'notes.changed' | 'tasks.changed';
 const SESSION_CLOSED = 'takt_note_session_closed';
 
 interface Subscription {
   libraryId: Identity['libraryId'];
   close(): void;
-  changed(): void;
+  changed(event: ChangeEvent): void;
 }
 
-export function installNoteEvents(app: FastifyInstance, db: Database, auth: AuthService) {
+export function installSyncEvents(app: FastifyInstance, db: Database, auth: AuthService) {
   const subscriptions = new Map<string, Subscription>();
   let listener: Tx | undefined;
   let connecting: Promise<void> | undefined;
@@ -34,18 +36,19 @@ export function installNoteEvents(app: FastifyInstance, db: Database, auth: Auth
       if (listener !== client || !payload) return;
       if (channel === SESSION_CLOSED) {
         subscriptions.get(payload)?.close();
-      } else if (channel === NOTES_CHANGED) {
+      } else if (channel === NOTES_CHANGED || channel === TASKS_CHANGED) {
+        const event = channel === NOTES_CHANGED ? 'notes.changed' : 'tasks.changed';
         const [libraryId, sessionId] = payload.split(':');
         for (const [subscribedSession, subscription] of subscriptions) {
           if (subscription.libraryId === libraryId && subscribedSession !== sessionId) {
-            subscription.changed();
+            subscription.changed(event);
           }
         }
       }
     });
     try {
-      await client.query(`LISTEN ${NOTES_CHANGED}; LISTEN ${SESSION_CLOSED}`);
-      if (stopping || listener !== client) throw new Error('Note listener disconnected');
+      await client.query(`LISTEN ${NOTES_CHANGED}; LISTEN ${TASKS_CHANGED}; LISTEN ${SESSION_CLOSED}`);
+      if (stopping || listener !== client) throw new Error('Sync listener disconnected');
     } catch (error) {
       disconnect();
       throw error;
@@ -80,8 +83,8 @@ export function installNoteEvents(app: FastifyInstance, db: Database, auth: Auth
     };
     const subscription: Subscription = {
       libraryId: identity.libraryId,
-      changed() {
-        if (active && !closed) send('event: notes.changed\ndata: {}\n\n');
+      changed(event) {
+        if (active && !closed) send(`event: ${event}\ndata: {}\n\n`);
       },
       close() {
         if (closed) return;

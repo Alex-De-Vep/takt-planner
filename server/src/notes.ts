@@ -4,7 +4,7 @@ import type { Config } from './config.js';
 import type { Database } from './db.js';
 import { fail, requireValue } from './errors.js';
 import { digest } from './security.js';
-import { installNoteEvents, NOTES_CHANGED } from './noteEvents.js';
+import { NOTES_CHANGED } from './syncEvents.js';
 import { lockLibrary } from './sync.js';
 
 export const NOTE_FORMAT_VERSION = 1;
@@ -31,7 +31,6 @@ function noteFormat(bytes: Buffer): number {
 }
 
 export function installNotes(app: FastifyInstance, db: Database, auth: AuthService, config: Config) {
-  installNoteEvents(app, db, auth);
   app.get('/v1/notes', async request => {
     const identity = await auth.authenticate(request);
     const result = await db.pool.query('SELECT id,revision FROM notes WHERE library_id=$1 ORDER BY id', [identity.libraryId]);

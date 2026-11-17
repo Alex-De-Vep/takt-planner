@@ -1,14 +1,15 @@
-enum NoteStreamEvent: String, Sendable {
+enum SyncStreamEvent: String, Sendable {
     case ready
-    case changed = "notes.changed"
+    case notesChanged = "notes.changed"
+    case tasksChanged = "tasks.changed"
 }
 
-struct NoteStreamParser {
+struct SyncStreamParser {
     private var line: [UInt8] = []
-    private var event: NoteStreamEvent?
+    private var event: SyncStreamEvent?
     private var hasData = false
 
-    mutating func append(_ byte: UInt8) throws -> NoteStreamEvent? {
+    mutating func append(_ byte: UInt8) throws -> SyncStreamEvent? {
         guard byte == 10 else {
             guard line.count < 1024 else { throw SyncProblem.invalidResponse }
             line.append(byte)
@@ -29,7 +30,7 @@ struct NoteStreamParser {
         switch field.first {
         case "event" where field.count == 2:
             let value = field[1]
-            event = NoteStreamEvent(rawValue: String(value.first == " " ? value.dropFirst() : value))
+            event = SyncStreamEvent(rawValue: String(value.first == " " ? value.dropFirst() : value))
         case "data":
             hasData = true
         default:

@@ -5,6 +5,7 @@ import type { Identity,AuthService } from './auth.js';
 import { fail,requireValue,ApiError } from './errors.js';
 import { canonical,compareStamp,validateMutation,type Mutation,type Entity,type Stamp } from './protocol.js';
 import { digest,uuid } from './security.js';
+import { TASKS_CHANGED } from './syncEvents.js';
 export const emptyFields=(type:string):Record<string,any>=>type==='task'?{description:'',completedAt:null,focusDay:null,deadline:null,planning:null}:{};
 export async function lockLibrary(tx:Tx,identity:Identity) {
  const r=await tx.query('SELECT l.* FROM libraries l JOIN users u ON u.id=l.owner_id WHERE l.id=$1 AND l.owner_id=$2 AND u.deleted_at IS NULL FOR UPDATE OF l',[identity.libraryId,identity.userId]);
@@ -15,12 +16,16 @@ export async function readEntity(tx:Tx,lib:string,id:string) {
  const r=await tx.query('SELECT e.*,EXISTS(SELECT 1 FROM attachment_files a WHERE a.library_id=e.library_id AND a.attachment_id=e.id) AS file_ready FROM entities e WHERE e.library_id=$1 AND e.id=$2',[lib,id]);
  return r.rowCount?entityRow(r.rows[0]):null;
 }
-export async function publish(tx:Tx,lib:string,entity:Entity) {
+export async function publish(tx:Tx,identity:Identity,entity:Entity) {
+ const lib=identity.libraryId;
  const rev=await tx.query('UPDATE libraries SET revision=revision+1 WHERE id=$1 RETURNING revision',[lib]);
  entity.revision=String(rev.rows[0].revision);
  await tx.query(`INSERT INTO entities(library_id,id,type,fields,versions,deleted,revision) VALUES($1,$2,$3,$4,$5,$6,$7)
  ON CONFLICT(library_id,id) DO UPDATE SET fields=EXCLUDED.fields,versions=EXCLUDED.versions,deleted=EXCLUDED.deleted,revision=EXCLUDED.revision,updated_at=now()`,[lib,entity.id,entity.type,JSON.stringify(entity.fields),JSON.stringify(entity.versions),entity.deleted,entity.revision]);
- await tx.query('INSERT INTO changes(library_id,revision,entity) VALUES($1,$2,$3)',[lib,entity.revision,JSON.stringify(entity)]);
+ // PostgreSQL delivers the signal only after commit and folds identical signals within a transaction.
+ await tx.query(`WITH published AS (
+   INSERT INTO changes(library_id,revision,entity) VALUES($1,$2,$3) RETURNING library_id
+ ) SELECT pg_notify($4, $5) FROM published`,[lib,entity.revision,JSON.stringify(entity),TASKS_CHANGED,`${lib}:${identity.sessionId}`]);
  return entity;
 }
 export async function applyMutation(tx:Tx,identity:Identity,m:Mutation) {
@@ -34,14 +39,14 @@ export async function applyMutation(tx:Tx,identity:Identity,m:Mutation) {
  else if(m.kind==='delete') {
    e=current??{id:m.entityId,type:m.entityType,fields:{},versions:{},deleted:false,revision:'0'};
    e.deleted=true;e.versions.deleted=m.deleteVersion!;
-   await publish(tx,identity.libraryId,e);
+   await publish(tx,identity,e);
    if(e.type==='task') {
      const children=await tx.query("SELECT * FROM entities WHERE library_id=$1 AND fields->>'taskId'=$2 AND deleted=false",[identity.libraryId,e.id]);
-     for(const row of children.rows) {const child=entityRow(row);child.deleted=true;child.versions.deleted=m.deleteVersion!;await publish(tx,identity.libraryId,child);}
+     for(const row of children.rows) {const child=entityRow(row);child.deleted=true;child.versions.deleted=m.deleteVersion!;await publish(tx,identity,child);}
    }
    if(e.type==='folder') {
      const children=await tx.query("SELECT * FROM entities WHERE library_id=$1 AND type='task' AND fields->'placement'->>'folderId'=$2 AND deleted=false",[identity.libraryId,e.id]);
-     for(const row of children.rows) {const task=entityRow(row);task.fields.placement={kind:'inbox'};await publish(tx,identity.libraryId,task);}
+     for(const row of children.rows) {const task=entityRow(row);task.fields.placement={kind:'inbox'};await publish(tx,identity,task);}
    }
  } else {
    if(!current && m.kind==='update')fail(404,'not_found','Сущность не найдена');
@@ -63,7 +68,7 @@ export async function applyMutation(tx:Tx,identity:Identity,m:Mutation) {
      }
      e.fields[key]=value;e.versions[key]=field.version;changed=true;
    }
-   if(changed)await publish(tx,identity.libraryId,e);
+   if(changed)await publish(tx,identity,e);
  }
  const result={operationId:m.operationId,status:e.deleted?'deleted':'applied',entity:e};
  await tx.query('INSERT INTO operations(library_id,id,request_hash,result) VALUES($1,$2,$3,$4)',[identity.libraryId,m.operationId,fingerprint,JSON.stringify(result)]);

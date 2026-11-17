@@ -194,22 +194,22 @@ actor SyncHTTP {
         }
     }
 
-    func watchNoteEvents(_ receive: @Sendable (NoteStreamEvent) async -> Void) async throws {
+    func watchSyncEvents(_ receive: @Sendable (SyncStreamEvent) async -> Void) async throws {
         let token = try await validAccess()
         do {
-            try await readNoteEvents(bearer: token, receive: receive)
+            try await readSyncEvents(bearer: token, receive: receive)
         } catch let failure as SyncHTTPFailure where failure.status == 401 {
             if accessToken == token { expiry = .distantPast }
             let refreshed = try await validAccess()
             do {
-                try await readNoteEvents(bearer: refreshed, receive: receive)
+                try await readSyncEvents(bearer: refreshed, receive: receive)
             } catch let retry as SyncHTTPFailure where retry.status == 401 {
                 throw SyncProblem.signInRequired
             }
         }
     }
 
-    private func readNoteEvents(bearer: String, receive: @Sendable (NoteStreamEvent) async -> Void) async throws {
+    private func readSyncEvents(bearer: String, receive: @Sendable (SyncStreamEvent) async -> Void) async throws {
         var request = try makeRequest("/v1/notes/events", method: "GET", bearer: bearer)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         let (bytes, response) = try await eventSession.bytes(for: request)
@@ -218,7 +218,7 @@ actor SyncHTTP {
         guard http.statusCode == 200 else { throw Self.httpFailure(http) }
         guard http.mimeType == "text/event-stream" else { throw SyncProblem.invalidResponse }
 
-        var parser = NoteStreamParser()
+        var parser = SyncStreamParser()
         for try await byte in bytes {
             if let event = try parser.append(byte) {
                 try Task.checkCancellation()

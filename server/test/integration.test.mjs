@@ -237,7 +237,7 @@ test('backup verification rejects symlinked files and directories escaping the s
  await assert.rejects(()=>verifyBackup(root,stage));
 });
 
-test('note event stream signals committed writes to other sessions in the same library', { timeout: 30_000 }, async () => {
+test('note and task stream signals committed writes to other sessions in the same library', { timeout: 30_000 }, async () => {
   const writer = await account();
   const reader = await login();
   const other = await account('bob@example.test');
@@ -247,7 +247,9 @@ test('note event stream signals committed writes to other sessions in the same l
     const origin = await eventApp.listen({ host: '127.0.0.1', port: 0 });
     const endpoint = origin + '/v1/notes/events';
     assert.equal((await fetch(endpoint)).status, 401);
-    assert.equal((await api('GET', '/v1/config')).json().limits.noteEventsVersion, 1);
+    const limits = (await api('GET', '/v1/config')).json().limits;
+    assert.equal(limits.noteEventsVersion, 1);
+    assert.equal(limits.taskEventsVersion, 1);
     async function subscribe(identity) {
       const response = await fetch(endpoint, {
         headers: { authorization: 'Bearer ' + identity.accessToken },
@@ -293,6 +295,31 @@ test('note event stream signals committed writes to other sessions in the same l
 
     assert.equal((await api('PUT', url, note, writer)).statusCode, 200);
     assert.equal((await api('PUT', url, { ...note, data: 'eA==' }, writer)).statusCode, 409);
+
+    // A failed import may publish one mutation internally before rolling it back.
+    const firstTask = task(writer);
+    const importId = randomUUID();
+    assert.equal((await api('POST', '/v1/library/imports', { importId }, writer)).statusCode, 200);
+    const invalid = task(writer);
+    invalid.changes.placement.value = { kind: 'folder', folderId: randomUUID() };
+    invalid.operationId = 'ffffffff-ffff-4fff-afff-ffffffffffff';
+    for (const field of Object.values(invalid.changes)) field.version.operationId = invalid.operationId;
+    assert.equal((await api('POST', `/v1/library/imports/${importId}/mutations`,
+      { mutations: [firstTask, invalid] }, writer)).statusCode, 200);
+    assert.equal((await api('POST', `/v1/library/imports/${importId}/commit`, {}, writer)).statusCode, 409);
+
+    await initialize(writer, [firstTask, task(writer)]);
+    assert.equal(await nextReader(), 'event: tasks.changed\ndata: {}');
+    const edit = operation(writer, 'task', firstTask.entityId, { title: 'Updated task' }, 'update', Date.now());
+    assert.equal((await send(writer, [edit]))[0].status, 'applied');
+    assert.equal(await nextReader(), 'event: tasks.changed\ndata: {}');
+    const page = (await api('GET', '/v1/sync/changes?cursor=2', undefined, reader)).json();
+    assert.equal(page.changes.length, 1);
+    assert.equal(page.changes[0].entity.fields.title, 'Updated task');
+
+    await send(writer, [edit]);
+    const stale = operation(writer, 'task', firstTask.entityId, { title: 'Stale task' }, 'update', Date.now() - 60_000);
+    await send(writer, [stale]);
 
     for (const [identity, next] of [[reader, nextReader], [writer, nextWriter], [other, nextOther]]) {
       assert.equal((await api('POST', '/v1/auth/logout', {}, identity)).statusCode, 200);

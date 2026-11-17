@@ -9,6 +9,7 @@ final class SyncEngine {
         let rawValue: Int
         static let tasks = Work(rawValue: 1)
         static let notes = Work(rawValue: 2)
+        static let configuration = Work(rawValue: 4)
         static let all: Work = [.tasks, .notes]
     }
 
@@ -22,9 +23,10 @@ final class SyncEngine {
     private var running = false
     private var queued: Work = []
     private var runAt: Date?
-    private var noteLimit: Int?
-    private var noteEvents: Task<Void, Never>?
-    private var noteStreamReady = false
+    private var limits: SyncConfig.Limits?
+    private var eventTask: Task<Void, Never>?
+    private var streamReady = false
+    private var streamedWork: Work = []
     private var stopped = false
     private var blockedUntil = Date.distantPast
     private var transientFailures = 0
@@ -44,7 +46,7 @@ final class SyncEngine {
         timer = Task { [weak self] in
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
-                self?.wakeTasks()
+                self?.poll()
             }
         }
     }
@@ -54,9 +56,9 @@ final class SyncEngine {
         notes?.syncEnabled = false
         notes?.awaitingCloudNoteFormat = false
         notes?.sharedFormatLimit = nil
-        noteEvents?.cancel()
-        noteEvents = nil
-        noteStreamReady = false
+        eventTask?.cancel()
+        eventTask = nil
+        streamReady = false
         timer?.cancel()
         scheduled?.cancel()
         timer = nil
@@ -64,15 +66,21 @@ final class SyncEngine {
     }
 
     func wake(after delay: Duration = .zero) {
-        enqueue(.all, after: delay)
+        enqueue([.all, .configuration], after: delay)
     }
 
     func wakeTasks(after delay: Duration = .zero) {
-        enqueue(noteStreamReady ? .tasks : .all, after: delay)
+        enqueue(.tasks, after: delay)
     }
 
     func wakeNotes(after delay: Duration = .zero) {
         enqueue(.notes, after: delay)
+    }
+
+    func poll() {
+        let available: Work = notes == nil ? .tasks : .all
+        let missing = available.subtracting(streamReady ? streamedWork : [])
+        if !missing.isEmpty { enqueue(missing.union(.configuration), after: .zero) }
     }
 
     private func enqueue(_ work: Work, after delay: Duration) {
@@ -108,11 +116,7 @@ final class SyncEngine {
             schedule()
         }
         do {
-            if work.contains(.tasks) || (work.contains(.notes) && notes != nil && noteLimit == nil) {
-                try await synchronize(includeNotes: work.contains(.notes))
-            } else if work.contains(.notes) {
-                try await syncNotes()
-            }
+            try await synchronize(work)
             transientFailures = 0
             let counts = try repository.counts()
             pending = counts.pending
@@ -151,24 +155,41 @@ final class SyncEngine {
     }
 
     /// Используется и рабочим расписанием, и приёмкой на двух независимых хранилищах.
-    func synchronize(includeNotes: Bool = true) async throws {
+    func synchronize() async throws {
+        try await synchronize([.all, .configuration])
+    }
+
+    private func synchronize(_ work: Work) async throws {
+        if work.contains(.configuration) || limits == nil { try await loadConfiguration() }
+        guard let limits else { throw SyncProblem.invalidResponse }
+        if work.contains(.tasks) { try await syncTasks(limits: limits) }
+        if work.contains(.notes) { try await syncNotes() }
+    }
+
+    private func loadConfiguration() async throws {
         let config: SyncConfig = try await api.publicRequest("/v1/config")
         try checkActive()
         guard config.protocolVersion == 1 else { throw SyncProblem.incompatibleProtocol }
-        noteLimit = config.limits.maxNoteBytes
-        notes?.syncEnabled = noteLimit != nil
+        limits = config.limits
+        notes?.syncEnabled = config.limits.maxNoteBytes != nil
         notes?.sharedFormatLimit = (config.limits.maxNoteFormatVersion ?? 0) >= SharedNoteText.currentVersion
             ? config.limits.maxNoteBytes : nil
         notes?.awaitingCloudNoteFormat = false
-        if timer != nil {
-            configureNoteEvents(enabled: notes != nil && noteLimit != nil && config.limits.noteEventsVersion == 1)
+        streamedWork = []
+        if config.limits.taskEventsVersion == 1 { streamedWork.insert(.tasks) }
+        if notes != nil, config.limits.maxNoteBytes != nil, config.limits.noteEventsVersion == 1 {
+            streamedWork.insert(.notes)
         }
+        if timer != nil { configureEvents(enabled: !streamedWork.isEmpty) }
         if let server = SyncWire.date(config.serverTime) {
             repository.serverClockOffset = server.timeIntervalSinceNow
         }
+    }
 
+    private func syncTasks(limits: SyncConfig.Limits) async throws {
         try await pull()
-        let batches = try SyncWire.batches(repository.pendingOperations(), limits: config.limits)
+        var sentChanges = false
+        let batches = try SyncWire.batches(repository.pendingOperations(), limits: limits)
         for batch in batches {
             try checkActive()
             // Удаление, полученное между проходами, может убрать ожидающие операции.
@@ -179,42 +200,42 @@ final class SyncEngine {
                                                                       body: SyncHTTP.payload(SyncBatch(mutations: send)))
             try checkActive()
             try repository.accept(result, sent: send)
+            sentChanges = true
         }
-        try await pull()
-        if includeNotes { try await syncNotes() }
+        if sentChanges { try await pull() }
     }
 
     private func syncNotes() async throws {
-        guard let notes, let noteLimit else { return }
+        guard let notes, let noteLimit = limits?.maxNoteBytes else { return }
         let retry = try await NoteSync(store: notes, api: api).synchronize(maxBytes: noteLimit, checkActive: checkActive)
         if retry { enqueue(.notes, after: .seconds(2)) }
     }
 
-    private func configureNoteEvents(enabled: Bool) {
+    private func configureEvents(enabled: Bool) {
         guard enabled else {
-            noteEvents?.cancel()
-            noteEvents = nil
-            noteStreamReady = false
+            eventTask?.cancel()
+            eventTask = nil
+            streamReady = false
             return
         }
-        guard noteEvents == nil else { return }
+        guard eventTask == nil else { return }
 
         let api = self.api
-        noteEvents = Task { [weak self] in
+        eventTask = Task { [weak self] in
             var backoff = 1
             while !Task.isCancelled {
                 let started = ContinuousClock.now
                 var retryAfter = 0
                 do {
-                    try await api.watchNoteEvents { [weak self] event in
-                        await self?.receiveNoteEvent(event)
+                    try await api.watchSyncEvents { [weak self] event in
+                        await self?.receiveSyncEvent(event)
                     }
                 } catch let failure as SyncHTTPFailure {
                     retryAfter = failure.problem.retryAfterSeconds ?? 0
                 } catch SyncProblem.signInRequired {
                     if !Task.isCancelled {
-                        self?.noteStreamReady = false
-                        self?.noteEvents = nil
+                        self?.streamReady = false
+                        self?.eventTask = nil
                         self?.status = .signIn
                     }
                     return
@@ -223,7 +244,7 @@ final class SyncEngine {
                 }
 
                 guard !Task.isCancelled else { return }
-                self?.noteStreamReady = false
+                self?.streamReady = false
                 if ContinuousClock.now - started >= .seconds(30) { backoff = 1 }
                 do { try await Task.sleep(for: .seconds(max(backoff, retryAfter))) } catch { return }
                 backoff = min(backoff * 2, 60)
@@ -231,14 +252,17 @@ final class SyncEngine {
         }
     }
 
-    private func receiveNoteEvent(_ event: NoteStreamEvent) {
+    private func receiveSyncEvent(_ event: SyncStreamEvent) {
         guard !stopped, !Task.isCancelled else { return }
         switch event {
-        case .ready where !noteStreamReady:
-            noteStreamReady = true
-            wakeNotes()
-        case .changed where noteStreamReady:
+        case .ready where !streamReady:
+            streamReady = true
+            // Refresh capabilities and catch up on changes made before the subscription.
+            wake()
+        case .notesChanged where streamReady && streamedWork.contains(.notes):
             wakeNotes(after: .milliseconds(250))
+        case .tasksChanged where streamReady && streamedWork.contains(.tasks):
+            wakeTasks(after: .milliseconds(250))
         default:
             break
         }
