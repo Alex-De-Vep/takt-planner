@@ -23,19 +23,27 @@ final class WorkspaceListTransitions {
     private var boundsObserver: NSObjectProtocol?
     private var ghosts: [CALayer] = []
     private var cover: CALayer?
+    private var keepTopForNote: UUID?
 
-    static func prepare(in host: NSView, scope: WorkspaceListScope) {
+    static func prepare(in host: NSView, scope: WorkspaceListScope, animated: Bool, newTopNote: UUID?) {
         var prepared = Set<ObjectIdentifier>()
         func visit(_ view: NSView) {
             if let probe = view as? WorkspaceRowSelectionSync.Probe, let transitions = probe.nativeFocus?.transitions,
-               transitions.scope == scope, prepared.insert(ObjectIdentifier(transitions)).inserted { transitions.prepare() }
+               transitions.scope == scope, prepared.insert(ObjectIdentifier(transitions)).inserted {
+                transitions.prepare(animated: animated, newTopNote: newTopNote)
+            }
             for child in view.subviews { visit(child) }
         }
         visit(host)
     }
 
-    private func prepare() {
-        guard cover == nil, let table, !table.visibleRect.isEmpty else { return }
+    private func prepare(animated: Bool, newTopNote: UUID?) {
+        guard let table, !table.visibleRect.isEmpty else { return }
+        if let newTopNote, table.numberOfRows > 0,
+           keepTopForNote != nil || table.visibleRect.minY <= table.rect(ofRow: 0).minY + 1 {
+            keepTopForNote = newTopNote
+        }
+        guard animated, cover == nil else { return }
         // Удерживаем прежний кадр до завершения нативного diff: конечная геометрия не мелькает перед переходом.
         settled = capture(visibleRows(), images: true, presentation: true)
         let cover = CALayer()
@@ -74,6 +82,7 @@ final class WorkspaceListTransitions {
     }
 
     func update(ids: [UUID], scope: WorkspaceListScope, animated: Bool) {
+        if self.scope != scope || ids.isEmpty { keepTopForNote = nil }
         if !animated { pending = nil; removeAnimations() }
         if self.ids != ids || self.scope != scope {
             pending = animated && self.scope == scope ? Change(previous: settled, ids: ids) : nil
@@ -116,6 +125,12 @@ final class WorkspaceListTransitions {
     private func reconcile() {
         guard let table, table.window != nil else { return }
         table.layoutSubtreeIfNeeded()
+        // При вставке над видимой строкой AppKit сохраняет её на экране и может обрезать новую первую заметку.
+        if let keepTopForNote, ids.first == keepTopForNote, table.numberOfRows == ids.count {
+            self.keepTopForNote = nil
+            table.scroll(NSPoint(x: table.visibleRect.minX, y: table.bounds.minY))
+            table.layoutSubtreeIfNeeded()
+        }
         let rows = visibleRows()
         // Во время diff могут ещё встречаться уходящие представления. Их не принимаем за новый набор.
         guard Set(rows.keys).isSubset(of: Set(ids)) else { return }
@@ -216,6 +231,7 @@ final class WorkspaceListTransitions {
     }
 
     func detach() {
+        keepTopForNote = nil
         pending = nil
         removeAnimations()
         settled.removeAll()

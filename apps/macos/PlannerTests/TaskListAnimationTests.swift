@@ -74,6 +74,52 @@ struct TaskListAnimationTests {
         #expect(table.selectedRow == table.row(for: selectedProbe))
     }
 
+    @Test func syncedNoteIsFullyVisibleWhenListIsAtTop() async throws {
+        let fixture = try AnimationFixture()
+        defer { fixture.close() }
+        let store = NoteStore()
+        for _ in 0..<12 { _ = store.create(folder: "inbox") }
+        let first = try #require(store.notes.first?.id)
+        fixture.updateNotes(store, selected: first, sortByDate: true)
+        let probe = try #require(await fixture.waitForProbe(for: first))
+        try await Task.sleep(for: .milliseconds(250))
+        let table = try #require(probe.nativeFocus?.table)
+        try #require(table.visibleRect.minY <= table.rect(ofRow: 0).minY + 1)
+
+        let incoming = PlannerNote(title: "Новая заметка с телефона")
+        try store.applyRemote(incoming, revision: NoteStore.digest(NoteStore.wireData(incoming)))
+        fixture.updateNotes(store, selected: first, sortByDate: true)
+        try await Task.sleep(for: .milliseconds(500))
+
+        let current = try #require(fixture.probe(for: incoming.id))
+        let row = table.rect(ofRow: table.row(for: current))
+        #expect(table.visibleRect.minY <= row.minY + 1)
+        #expect(table.visibleRect.maxY >= row.maxY - 1)
+    }
+
+    @Test func syncedNoteDoesNotJumpToTopWhileReadingFurtherDown() async throws {
+        let fixture = try AnimationFixture()
+        defer { fixture.close() }
+        let store = NoteStore()
+        for _ in 0..<16 { _ = store.create(folder: "inbox") }
+        let first = try #require(store.notes.first?.id)
+        fixture.updateNotes(store, sortByDate: true)
+        let probe = try #require(await fixture.waitForProbe(for: first))
+        try await Task.sleep(for: .milliseconds(250))
+        let table = try #require(probe.nativeFocus?.table)
+        table.scrollRowToVisible(12)
+        try await Task.sleep(for: .milliseconds(250))
+        let offset = table.visibleRect.minY
+        try #require(offset > 100)
+
+        let incoming = PlannerNote(title: "Новая заметка с телефона")
+        try store.applyRemote(incoming, revision: NoteStore.digest(NoteStore.wireData(incoming)))
+        fixture.updateNotes(store, sortByDate: true)
+        try await Task.sleep(for: .milliseconds(500))
+
+        #expect(table.visibleRect.minY >= offset - 1)
+    }
+
     @Test func rapidInsertionsFinishAtTheCorrectPosition() async throws {
         let fixture = try AnimationFixture()
         defer { fixture.close() }
@@ -127,12 +173,13 @@ struct TaskListAnimationTests {
             active: snapshot.activeTasks.map(\.id), completed: []),
             transaction: Transaction(animation: animated ? .easeInOut(duration: 0.26) : nil), host: host.view)
     }
-    func updateNotes(_ store: NoteStore, selected: UUID? = nil) {
+    func updateNotes(_ store: NoteStore, selected: UUID? = nil, sortByDate: Bool = false) {
+        let notes = sortByDate ? store.notes.sorted { $0.updatedAt > $1.updatedAt } : store.notes
         let scope = WorkspaceListScope.notes(.folder, folder: .inbox, search: "")
-        let list = NoteListView(store: store, notes: store.notes, folders: [], selection: .constant(selected),
+        let list = NoteListView(store: store, notes: notes, folders: [], selection: .constant(selected),
             trash: false, createdNoteID: selected, scope: scope, create: {})
         content.update(AnyView(list), key: WorkspaceListAnimationKey(scope: scope,
-            active: store.notes.map(\.id), completed: []),
+            active: notes.map(\.id), completed: []),
             transaction: Transaction(animation: .easeInOut(duration: 0.26)), host: host.view)
     }
     func probe(for id: UUID) -> WorkspaceRowSelectionSync.Probe? {
