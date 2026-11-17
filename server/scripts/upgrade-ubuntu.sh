@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 umask 077
 
-version=0.1.4
-previous=0.1.3
+version=0.1.5
+previous=0.1.4
 root=/opt/takt-server
 install_dir="$root/app"
 env_file="$root/config/server.env"
@@ -23,7 +23,7 @@ ready_version() {
 
 check_config() {
     curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3030/v1/config |
-        python3 -c 'import json,sys;c=json.load(sys.stdin);assert c["protocolVersion"]==1 and c["serverVersion"]==sys.argv[1] and c["limits"]["maxNoteFormatVersion"]==1' "$version"
+        python3 -c 'import json,sys;c=json.load(sys.stdin);assert c["protocolVersion"]==1 and c["serverVersion"]==sys.argv[1] and c["limits"]["maxNoteFormatVersion"]==1 and c["limits"]["noteEventsVersion"]==1' "$version"
 }
 
 if [[ $EUID != 0 ]]; then
