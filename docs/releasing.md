@@ -25,7 +25,7 @@ PLANNER_RELEASE_SIGNING_IDENTITY='<certificate fingerprint>' python3 apps/macos/
 
 ## GitHub Release
 
-В [Releases](https://github.com/Alex-De-Vep/takt-planner/releases) создайте черновик с тегом версии на проверенном коммите. Для подготовленного выпуска используйте `v0.3.26`, отметку **pre-release** и заголовок «Такт 0.3.26 / Takt 0.3.26». Проверьте список файлов перед публикацией.
+В [Releases](https://github.com/Alex-De-Vep/takt-planner/releases) создайте черновик с тегом версии на проверенном коммите. Для подготовленного выпуска используйте `v0.3.26`, отметку **pre-release** и заголовок «Takt 0.3.26». Проверьте список файлов перед публикацией.
 
 Вложите только:
 
