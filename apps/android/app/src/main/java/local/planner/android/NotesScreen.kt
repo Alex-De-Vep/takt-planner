@@ -344,17 +344,24 @@ internal fun NoteEditor(
                     Text(stringResource(R.string.note_formatted_preview), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 }
-                if (sharedEditor) {
-                    SharedNoteEditor(draft, editable = editing && sharedFormat)
-                } else if (formatted || removed) {
-                    SelectionContainer {
-                        Text(draft.text.replace("\uFFFC", ""), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                val voiceCard: @Composable () -> Unit = {
+                    if (!removed) {
+                        NoteVoiceControls(draft, model, editable = editing && !formatted && (!sharedEditor || sharedFormat))
                     }
-                } else {
-                    PlannerTextField(draft.text, { draft.text = it }, Modifier.fillMaxWidth(), placeholder = R.string.note_text,
-                        minLines = 4, enabled = !draft.saving, readOnly = !editing)
                 }
-                if (!removed) NoteVoiceControls(draft, model, editable = editing && !formatted && (!sharedEditor || sharedFormat))
+                if (sharedEditor) {
+                    SharedNoteEditor(draft, editable = editing && sharedFormat, beforeBody = voiceCard)
+                } else {
+                    voiceCard()
+                    if (formatted || removed) {
+                        SelectionContainer {
+                            Text(draft.text.replace("\uFFFC", ""), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                        }
+                    } else {
+                        PlannerTextField(draft.text, { draft.text = it }, Modifier.fillMaxWidth(), placeholder = R.string.note_text,
+                            minLines = 4, enabled = !draft.saving, readOnly = !editing)
+                    }
+                }
             }
         }
     }

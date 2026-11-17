@@ -62,7 +62,7 @@ private const val NOTE_BODY_SIZE = 16
 private const val SPAN_FLAGS = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
 
 @Composable
-internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean) {
+internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, beforeBody: @Composable () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editor by remember { mutableStateOf<EditText?>(null) }
@@ -94,6 +94,7 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean) {
                 addImage = { imagePicker.launch("image/*") },
             )
         }
+        beforeBody()
         AndroidView(
             modifier = Modifier.fillMaxWidth(),
             factory = { ctx ->

@@ -263,8 +263,10 @@
     <string name="chat_remove_note">Remove note from context</string>
     <string name="voice_start">Record voice</string>
     <string name="voice_stop">Stop</string>
-    <string name="voice_timer">Recording · %1$s</string>
-    <string name="voice_clip">Voice recording · %1$s</string>
+    <string name="voice_recording">Voice recording</string>
+    <string name="voice_recording_filename">Takt recording.m4a</string>
+    <string name="voice_save_copy">Save a copy</string>
+    <string name="voice_copy_error">Could not save a copy of the recording.</string>
     <string name="voice_note_title">Voice note</string>
     <string name="voice_permission">Allow microphone access in Android settings to record.</string>
     <string name="voice_start_error">Could not start recording.</string>
@@ -278,9 +280,13 @@
     <string name="voice_transcribing">Transcribing…</string>
     <string name="voice_transcript">Transcript</string>
     <string name="voice_transcript_error">Could not transcribe. Check the model and try again.</string>
-    <string name="voice_transcribe_connect">Connect LiteLLM or OpenRouter in Chat to transcribe recordings.</string>
+    <string name="voice_remote_cleanup_error">The temporary upload could not be removed from GigaChat.</string>
     <string name="voice_transcribe_send">Send this audio to %1$s for transcription?</string>
     <string name="voice_model">Transcription model</string>
+    <string name="voice_model_unset">Choose a provider and a model</string>
+    <string name="voice_models_empty">No transcription models were returned.</string>
+    <string name="voice_clear_model">Clear transcription model</string>
+    <string name="voice_manual_model">Transcription model ID in LiteLLM</string>
     <string name="voice_insert">Insert into note</string>
     <string name="note_edit_text">Edit text</string>
     <string name="note_edit_text_hint">Create an editable text copy. The original note will keep its formatting and images.</string>

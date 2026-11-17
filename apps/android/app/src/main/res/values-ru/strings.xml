@@ -263,8 +263,10 @@
     <string name="chat_remove_note">Убрать заметку из контекста</string>
     <string name="voice_start">Записать голос</string>
     <string name="voice_stop">Остановить</string>
-    <string name="voice_timer">Запись · %1$s</string>
-    <string name="voice_clip">Голосовая запись · %1$s</string>
+    <string name="voice_recording">Голосовая запись</string>
+    <string name="voice_recording_filename">Запись Takt.m4a</string>
+    <string name="voice_save_copy">Сохранить копию</string>
+    <string name="voice_copy_error">Не удалось сохранить копию записи.</string>
     <string name="voice_note_title">Голосовая заметка</string>
     <string name="voice_permission">Разрешите доступ к микрофону в настройках Android.</string>
     <string name="voice_start_error">Не удалось начать запись.</string>
@@ -278,9 +280,13 @@
     <string name="voice_transcribing">Расшифровка…</string>
     <string name="voice_transcript">Расшифровка</string>
     <string name="voice_transcript_error">Не удалось расшифровать. Проверьте модель и повторите попытку.</string>
-    <string name="voice_transcribe_connect">Подключите LiteLLM или OpenRouter в «Чате», чтобы расшифровывать записи.</string>
+    <string name="voice_remote_cleanup_error">Не удалось удалить временный файл из GigaChat.</string>
     <string name="voice_transcribe_send">Отправить эту запись в %1$s для расшифровки?</string>
     <string name="voice_model">Модель для расшифровки</string>
+    <string name="voice_model_unset">Выберите провайдера и модель</string>
+    <string name="voice_models_empty">Сервис не вернул модели для расшифровки.</string>
+    <string name="voice_clear_model">Сбросить модель расшифровки</string>
+    <string name="voice_manual_model">Идентификатор модели расшифровки в LiteLLM</string>
     <string name="voice_insert">Вставить в заметку</string>
     <string name="note_edit_text">Редактировать текст</string>
     <string name="note_edit_text_hint">Создать редактируемую текстовую копию? Оригинал сохранит форматирование и изображения.</string>

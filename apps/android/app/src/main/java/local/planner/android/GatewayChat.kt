@@ -41,6 +41,7 @@ internal data class SavedGateway(
 
 private data class GatewayVault(
     val profiles: Map<GatewayProvider, GatewayConnection>, val selected: GatewayProvider?,
+    val transcription: TranscriptionSelection? = null,
 )
 internal data class NoteChatContext(val title: String, val text: String)
 
@@ -67,6 +68,7 @@ internal data class ChatState(
     val workspace: String = "", val model: String = "",
     val provider: GatewayProvider? = null, val profiles: Map<GatewayProvider, SavedGateway> = emptyMap(),
     val catalog: List<GatewayModel> = emptyList(), val candidateProvider: GatewayProvider? = null,
+    val candidateTranscription: Boolean = false, val transcription: TranscriptionSelection? = null,
     val busy: Boolean = false, val authorizing: Boolean = false, val message: Int? = null,
     val lines: List<ChatLine> = emptyList(), val questions: List<ChatQuestion> = emptyList(),
     val proposals: List<ChatProposal> = emptyList(),
@@ -210,9 +212,11 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
     private val vault = CredentialVault("planner.litellm.v1")
     private val providers = ProviderGateway()
     private val gateway = GatewayChat(providers = providers)
+    private val transcriber = VoiceTranscriber(providers, wav = { makeVoiceWave(it, context.cacheDir) })
     private val oauth = GatewayOAuth()
     private var profiles: Map<GatewayProvider, GatewayConnection> = emptyMap()
     private var selected: GatewayProvider? = null
+    private var transcription: TranscriptionSelection? = null
     private var candidate: GatewayCandidate? = null
     private var operation: Job? = null
     private val _state = MutableStateFlow(ChatState())
@@ -223,6 +227,7 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         operation?.cancel()
         profiles = emptyMap()
         selected = null
+        transcription = null
         candidate = null
         _state.value = ChatState(workspace = workspace)
         if (workspace.isNotEmpty() && preferences.contains(workspace)) operate {
@@ -235,7 +240,10 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
                 }
             }
             profiles = stored.profiles
-            selected = stored.selected?.takeIf { it in profiles }
+            selected = stored.selected?.takeIf { profiles[it]?.model?.isNotBlank() == true }
+            transcription = stored.transcription?.takeIf {
+                it.provider in transcriptionProviders && it.provider in profiles && validTranscriptionModel(it.id)
+            }
             updateProfiles(clearHistory = false)
         }
     }
@@ -243,11 +251,14 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
     fun clearCandidate() {
         if (state.value.busy) return
         candidate = null
-        _state.value = state.value.copy(catalog = emptyList(), candidateProvider = null, message = null)
+        _state.value = state.value.copy(catalog = emptyList(), candidateProvider = null, candidateTranscription = false, message = null)
     }
 
-    fun loadModels(provider: GatewayProvider, address: String, enteredKey: String, options: GatewayOptions) {
-        if (state.value.busy || provider == GatewayProvider.ChatGPT) return
+    fun loadModels(
+        provider: GatewayProvider, address: String, enteredKey: String, options: GatewayOptions,
+        forTranscription: Boolean = false,
+    ) {
+        if (state.value.busy || provider == GatewayProvider.ChatGPT || (forTranscription && provider !in transcriptionProviders)) return
         clearCandidate()
         val base = runCatching { provider.address(address) }.getOrElse {
             _state.value = state.value.copy(message = R.string.chat_address_error)
@@ -270,13 +281,17 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         val connection = GatewayConnection(base, key, "", false, provider, project,
             options.scope.takeIf { provider == GatewayProvider.GigaChat })
         operate {
-            val result = withContext(Dispatchers.IO) { providers.candidate(connection, options) }
+            val result = withContext(Dispatchers.IO) {
+                if (forTranscription) GatewayCandidate(connection, providers.transcriptionCatalog(connection), transcription = true)
+                else providers.candidate(connection, options)
+            }
             showCandidate(result)
         }
     }
 
-    fun authorize(provider: GatewayProvider, open: (String) -> Unit) {
+    fun authorize(provider: GatewayProvider, forTranscription: Boolean = false, open: (String) -> Unit) {
         if (provider !in listOf(GatewayProvider.ChatGPT, GatewayProvider.OpenRouter) || state.value.busy) return
+        if (forTranscription && provider != GatewayProvider.OpenRouter) return
         clearCandidate()
         operate(authorizing = true) {
             val connection = when (provider) {
@@ -290,7 +305,10 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
                 }
                 else -> oauth.openRouter(open)
             }
-            val result = withContext(Dispatchers.IO) { providers.candidate(connection, GatewayOptions()) }
+            val result = withContext(Dispatchers.IO) {
+                if (forTranscription) GatewayCandidate(connection, providers.transcriptionCatalog(connection), transcription = true)
+                else providers.candidate(connection, GatewayOptions())
+            }
             showCandidate(result)
         }
     }
@@ -301,11 +319,13 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
 
     private fun showCandidate(result: GatewayCandidate) {
         candidate = result
-        _state.value = state.value.copy(catalog = result.models, candidateProvider = result.connection.kind)
+        _state.value = state.value.copy(
+            catalog = result.models, candidateProvider = result.connection.kind, candidateTranscription = result.transcription,
+        )
     }
 
     fun connect(provider: GatewayProvider, model: GatewayModel, tools: Boolean, done: () -> Unit) {
-        val pending = candidate?.takeIf { it.connection.kind == provider }
+        val pending = candidate?.takeIf { it.connection.kind == provider && !it.transcription }
         val connection = pending?.connection ?: profiles[provider] ?: return
         val models = pending?.models ?: connection.models.orEmpty()
         if (models.none { it.id == model.id }) return
@@ -317,7 +337,7 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
     }
 
     fun activate(provider: GatewayProvider) {
-        if (provider !in profiles || provider == selected) return
+        if (profiles[provider]?.model.isNullOrBlank() || provider == selected) return
         operate { saveProfiles(profiles, provider) }
     }
 
@@ -325,25 +345,59 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         if (provider !in profiles) return
         operate {
             val remaining = profiles - provider
-            saveProfiles(remaining, selected?.takeIf { it in remaining } ?: remaining.keys.firstOrNull())
+            val active = selected?.takeIf { it in remaining }
+                ?: remaining.entries.firstOrNull { it.value.model.isNotBlank() }?.key
+            saveProfiles(remaining, active)
         }
     }
 
-    private suspend fun saveProfiles(next: Map<GatewayProvider, GatewayConnection>, active: GatewayProvider?) {
+    fun selectTranscription(provider: GatewayProvider, model: GatewayModel, done: () -> Unit) {
+        if (provider !in transcriptionProviders || !validTranscriptionModel(model.id)) return
+        val existing = profiles[provider]
+        val pending = candidate?.takeIf { it.connection.kind == provider && it.transcription }
+        val connection = pending?.connection ?: existing ?: return
+        val fromCatalog = pending?.models?.any { it.id == model.id } == true
+        val fromSaved = existing != null && transcription?.provider == provider && transcription?.id == model.id
+        if (provider != GatewayProvider.LiteLLM && !fromCatalog && !fromSaved) return
+        val next = existing?.takeIf { it.address == connection.address }?.let { current ->
+            connection.copy(model = current.model, tools = current.tools, models = current.models)
+        } ?: connection
+        val active = selected?.takeIf { it != provider || next.model.isNotBlank() }
+        operate {
+            saveProfiles(profiles + (provider to next), active, TranscriptionSelection(provider, model.id, model.label))
+            done()
+        }
+    }
+
+    fun clearTranscription() {
+        if (transcription != null) operate { saveProfiles(profiles, selected, speech = null) }
+    }
+
+    private suspend fun saveProfiles(
+        next: Map<GatewayProvider, GatewayConnection>, active: GatewayProvider?,
+        speech: TranscriptionSelection? = transcription?.takeIf {
+            it.provider in next && next[it.provider]?.address == profiles[it.provider]?.address
+        },
+    ) {
         val workspace = state.value.workspace
-        withContext(Dispatchers.IO) { persist(workspace, next, active) }
+        withContext(Dispatchers.IO) { persist(workspace, next, active, speech) }
+        check(state.value.workspace == workspace)
         val clearHistory = selected != active || profiles[selected]?.copy(models = null) != next[active]?.copy(models = null)
         profiles = next
         selected = active
+        transcription = speech
         candidate = null
         updateProfiles(clearHistory)
     }
 
     @Synchronized
-    private fun persist(workspace: String, next: Map<GatewayProvider, GatewayConnection>, active: GatewayProvider?) {
+    private fun persist(
+        workspace: String, next: Map<GatewayProvider, GatewayConnection>, active: GatewayProvider?,
+        speech: TranscriptionSelection?,
+    ) {
         val editor = preferences.edit()
         if (next.isEmpty()) editor.remove(workspace) else {
-            val sealed = vault.seal(workspace, json.toJson(GatewayVault(next, active)))
+            val sealed = vault.seal(workspace, json.toJson(GatewayVault(next, active, speech)))
             editor.putString(workspace, sealed)
         }
         check(editor.commit())
@@ -355,7 +409,8 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         val active = profiles[selected]
         _state.value = current.copy(
             model = active?.model.orEmpty(),
-            provider = selected, catalog = emptyList(), candidateProvider = null, message = null,
+            provider = selected, catalog = emptyList(), candidateProvider = null, candidateTranscription = false,
+            transcription = transcription, message = null,
             profiles = profiles.mapValues { (_, item) ->
                 SavedGateway(item.address, item.model, item.tools, item.project, item.gigaScope, item.models.orEmpty())
             },
@@ -391,12 +446,13 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         val workspace = state.value.workspace
         val previous = profiles
         val active = selected
+        val speech = transcription
         val updated = withContext(NonCancellable + Dispatchers.IO) {
             val stored = preferences.getString(workspace, null)
             val next = oauth.refreshChatGpt(connection)
             synchronized(this@ChatController) {
                 check(preferences.getString(workspace, null) == stored)
-                persist(workspace, previous + (GatewayProvider.ChatGPT to next), active)
+                persist(workspace, previous + (GatewayProvider.ChatGPT to next), active, speech)
             }
             next
         }
@@ -404,10 +460,10 @@ internal class ChatController(context: Context, private val scope: CoroutineScop
         return updated
     }
 
-    suspend fun transcribeVoice(workspace: String, provider: GatewayProvider, model: String, clip: VoiceClip): String {
-        check(state.value.workspace == workspace)
-        val connection = requireNotNull(profiles[provider])
-        return withContext(Dispatchers.IO) { VoiceTranscriber().transcribe(connection, model, clip.file) }
+    suspend fun transcribeVoice(workspace: String, selection: TranscriptionSelection, clip: VoiceClip): VoiceTranscript {
+        check(state.value.workspace == workspace && transcription == selection)
+        val connection = requireNotNull(profiles[selection.provider])
+        return withContext(Dispatchers.IO) { transcriber.transcribe(connection, selection.id, clip.file) }
     }
 
     fun removeProposal(id: String) {

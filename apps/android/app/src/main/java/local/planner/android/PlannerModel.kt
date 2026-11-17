@@ -277,7 +277,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             ?.let { NoteChatContext(it.title.take(500), it.text.take(12_000).replace("\uFFFC", "")) }
     }
 
-    fun transcribeNote(draft: NoteDraft, provider: GatewayProvider, model: String) {
+    fun transcribeNote(draft: NoteDraft, selection: TranscriptionSelection) {
         val clip = noteVoice.clip ?: return
         if (noteDraft !== draft || draft.transcribing || draft.workspace != library.value.workspace) return
         draft.transcribing = true
@@ -285,11 +285,17 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         draft.transcriptionError = null
         viewModelScope.launch {
             try {
-                val result = chat.transcribeVoice(draft.workspace, provider, model.trim(), clip)
-                if (noteDraft === draft) draft.transcript = result
+                val result = chat.transcribeVoice(draft.workspace, selection, clip)
+                if (noteDraft === draft) {
+                    draft.transcript = result.text
+                    if (result.cleanupFailed) draft.transcriptionError = R.string.voice_remote_cleanup_error
+                }
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
-                if (noteDraft === draft) draft.transcriptionError = R.string.voice_transcript_error
+                if (noteDraft === draft) {
+                    draft.transcriptionError = if (failure is VoiceRemoteCleanupFailed) R.string.voice_remote_cleanup_error
+                        else R.string.voice_transcript_error
+                }
             } finally {
                 draft.transcribing = false
             }
