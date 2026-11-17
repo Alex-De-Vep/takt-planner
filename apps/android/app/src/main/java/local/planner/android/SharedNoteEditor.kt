@@ -24,7 +24,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -63,7 +62,7 @@ private const val NOTE_BODY_SIZE = 16
 private const val SPAN_FLAGS = Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
 
 @Composable
-internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, actions: @Composable RowScope.() -> Unit) {
+internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var editor by remember { mutableStateOf<EditText?>(null) }
@@ -87,15 +86,13 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, actions: @Com
     val accent = MaterialTheme.colorScheme.primary.toArgb()
 
     Column {
-        if (draft.original?.document?.deletedAt == null) Row(verticalAlignment = Alignment.CenterVertically) {
+        if (draft.original?.document?.deletedAt == null) {
             NoteFormatBar(
                 editor = editor,
                 enabled = editable && editor != null,
                 addLink = { addLink = true },
                 addImage = { imagePicker.launch("image/*") },
-                modifier = Modifier.weight(1f, fill = false),
             )
-            actions()
         }
         AndroidView(
             modifier = Modifier.fillMaxWidth(),
@@ -149,10 +146,8 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, actions: @Com
 }
 
 @Composable
-private fun NoteFormatBar(
-    editor: EditText?, enabled: Boolean, addLink: () -> Unit, addImage: () -> Unit, modifier: Modifier,
-) {
-    Surface(modifier, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+private fun NoteFormatBar(editor: EditText?, enabled: Boolean, addLink: () -> Unit, addImage: () -> Unit) {
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,

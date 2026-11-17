@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -305,7 +304,7 @@ internal fun NoteEditor(
                     Modifier.fillMaxWidth().focusOnEntry(original == null), placeholder = R.string.note_title,
                     singleLine = true, enabled = !draft.saving, readOnly = !editing,
                     textStyle = MaterialTheme.typography.headlineSmall)
-                val actions: @Composable RowScope.() -> Unit = {
+                if (!removed) Row(verticalAlignment = Alignment.CenterVertically) {
                     if (voice.clip == null) {
                         ActionIcon(R.drawable.ic_waveform, R.string.voice_start, enabled = editing) {
                             focus.clearFocus()
@@ -335,15 +334,12 @@ internal fun NoteEditor(
                         ActionIcon(R.drawable.ic_delete, R.string.note_move_to_trash, enabled = editing) { confirmTrash = true }
                     }
                 }
-                if (!sharedEditor && !removed) {
-                    Row(verticalAlignment = Alignment.CenterVertically, content = actions)
-                }
                 if (formatted) {
                     Text(stringResource(R.string.note_formatted_preview), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 if (sharedEditor) {
-                    SharedNoteEditor(draft, editable = editing && sharedFormat, actions = actions)
+                    SharedNoteEditor(draft, editable = editing && sharedFormat)
                 } else if (formatted || removed) {
                     SelectionContainer {
                         Text(draft.text.replace("\uFFFC", ""), Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
