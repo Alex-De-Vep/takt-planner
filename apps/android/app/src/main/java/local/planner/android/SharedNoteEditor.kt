@@ -21,15 +21,17 @@ import android.view.Gravity
 import android.widget.EditText
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,7 +46,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import java.io.ByteArrayOutputStream
 import java.util.Base64
@@ -82,8 +88,13 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, actions: @Com
 
     Column {
         if (draft.original?.document?.deletedAt == null) Row(verticalAlignment = Alignment.CenterVertically) {
-            NoteFormatMenu(editor = editor, enabled = editable,
-                addLink = { addLink = true }, addImage = { imagePicker.launch("image/*") })
+            NoteFormatBar(
+                editor = editor,
+                enabled = editable && editor != null,
+                addLink = { addLink = true },
+                addImage = { imagePicker.launch("image/*") },
+                modifier = Modifier.weight(1f, fill = false),
+            )
             actions()
         }
         AndroidView(
@@ -138,50 +149,42 @@ internal fun SharedNoteEditor(draft: NoteDraft, editable: Boolean, actions: @Com
 }
 
 @Composable
-private fun NoteFormatMenu(editor: EditText?, enabled: Boolean, addLink: () -> Unit, addImage: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val label = stringResource(R.string.note_formatting)
-    Box {
-        IconButton(
-            onClick = { expanded = true },
-            enabled = enabled && editor != null,
-            modifier = Modifier.semantics { contentDescription = label },
+private fun NoteFormatBar(
+    editor: EditText?, enabled: Boolean, addLink: () -> Unit, addImage: () -> Unit, modifier: Modifier,
+) {
+    Surface(modifier, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Aa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        DropdownMenu(expanded = expanded && enabled, onDismissRequest = { expanded = false }) {
-            val edit = editor ?: return@DropdownMenu
-            val entries: List<Pair<Int, () -> Unit>> = listOf(
-                R.string.note_bold to { edit.toggleTypeface(Typeface.BOLD) },
-                R.string.note_italic to { edit.toggleTypeface(Typeface.ITALIC) },
-                R.string.note_underline to {
-                    edit.toggleRange({ it is UnderlineSpan }, { UnderlineSpan() })
-                },
-                R.string.note_heading to {
-                    edit.toggleRange({ it is RelativeSizeSpan }, { RelativeSizeSpan(1.5f) })
-                },
-                R.string.note_list to { edit.prefixParagraph("• ") },
-                R.string.note_numbered_list to { edit.prefixParagraph("1. ") },
-                R.string.note_checklist to { edit.prefixParagraph("☐ ") },
-                R.string.note_link to addLink,
-                R.string.note_image to addImage,
-            )
-            entries.forEach { (title, apply) ->
-                val icon = when (title) {
-                    R.string.note_link -> R.drawable.ic_link
-                    R.string.note_image -> R.drawable.ic_image
-                    else -> null
-                }
-                DropdownMenuItem(
-                    text = { Text(stringResource(title)) },
-                    leadingIcon = icon?.let { { Glyph(it) } },
-                    onClick = {
-                        expanded = false
-                        apply()
-                    },
-                )
+            NoteFormatButton("B", R.string.note_bold, enabled, TextStyle(fontWeight = FontWeight.Bold)) {
+                editor?.toggleTypeface(Typeface.BOLD)
             }
+            NoteFormatButton("I", R.string.note_italic, enabled, TextStyle(fontStyle = FontStyle.Italic)) {
+                editor?.toggleTypeface(Typeface.ITALIC)
+            }
+            ActionIcon(R.drawable.ic_list, R.string.note_list, enabled = enabled) { editor?.prefixParagraph("• ") }
+            NoteFormatButton("☐", R.string.note_checklist, enabled) { editor?.prefixParagraph("☐ ") }
+            ActionIcon(R.drawable.ic_link, R.string.note_link, enabled = enabled, onClick = addLink)
+            ActionIcon(R.drawable.ic_image, R.string.note_image, enabled = enabled, onClick = addImage)
+            NoteFormatButton("H", R.string.note_heading, enabled, TextStyle(fontWeight = FontWeight.SemiBold)) {
+                editor?.toggleRange({ it is RelativeSizeSpan }, { RelativeSizeSpan(1.5f) })
+            }
+            NoteFormatButton("U", R.string.note_underline, enabled, TextStyle(textDecoration = TextDecoration.Underline)) {
+                editor?.toggleRange({ it is UnderlineSpan }, { UnderlineSpan() })
+            }
+            NoteFormatButton("1.", R.string.note_numbered_list, enabled) { editor?.prefixParagraph("1. ") }
         }
+    }
+}
+
+@Composable
+private fun NoteFormatButton(
+    symbol: String, description: Int, enabled: Boolean, style: TextStyle = TextStyle.Default, onClick: () -> Unit,
+) {
+    val label = stringResource(description)
+    IconButton(onClick, Modifier.semantics { contentDescription = label }, enabled = enabled) {
+        Text(symbol, style = MaterialTheme.typography.titleMedium.merge(style))
     }
 }
 

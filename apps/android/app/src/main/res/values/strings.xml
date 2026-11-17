@@ -278,7 +278,6 @@
     <string name="note_edit_text_hint">Create an editable text copy. The original note will keep its formatting and images.</string>
     <string name="note_create_text_copy">Create text copy</string>
     <string name="notes_format_unsupported">Update the Takt server to sync notes with formatting.</string>
-    <string name="note_formatting">Text formatting</string>
     <string name="note_bold">Bold</string>
     <string name="note_italic">Italic</string>
     <string name="note_underline">Underline</string>
