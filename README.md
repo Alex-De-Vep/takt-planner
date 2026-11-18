@@ -42,11 +42,11 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 
 **macOS 26 or later and Apple Silicon.**
 
-Source version **0.3.10 (build 94)** · [Release history](docs/releases).
+Source version **0.3.27 (build 111)** · [Release history](docs/releases).
 
 Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Takt** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
 
-**Signing:** this build uses an ad-hoc signature. It is not Developer ID signed or notarized by Apple. Gatekeeper may restrict opening a download on another Mac. You can build the app in Xcode if macOS does not allow the downloaded package to open. The project does not require disabling system security.
+**Signing:** the prepared macOS 0.3.27 build is signed with Apple Development and is not notarized. Gatekeeper may restrict opening it on another Mac. For build details, see the [release guide](docs/releasing.md).
 
 ## Android
 

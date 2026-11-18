@@ -42,11 +42,11 @@ Takt vereint Aufgaben, Tagesplanung und Kalender auf macOS und Android. Auf dem 
 
 **macOS 26 oder neuer auf Apple Silicon.**
 
-Quellcode-Version **0.3.10 (Build 94)** · [Versionsverlauf](docs/releases).
+Quellcode-Version **0.3.27 (Build 111)** · [Versionsverlauf](docs/releases).
 
 Lade ein DMG aus [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases) herunter. Öffne es, ziehe **Takt** nach **Programme** und wirf das Image aus. Beende die App, bevor du eine frühere Version ersetzt.
 
-Die App ist ad hoc signiert. Gatekeeper kann das Öffnen eines Downloads auf einem anderen Mac einschränken. In diesem Fall kannst du die App in Xcode selbst bauen.
+Die vorbereitete macOS-Version 0.3.27 ist mit Apple Development signiert und nicht notarisiert. Gatekeeper kann das Öffnen auf einem anderen Mac einschränken. [Release-Anleitung](docs/releasing.md).
 
 ## Android
 
