@@ -3,6 +3,7 @@ package local.planner.android
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,7 +67,8 @@ import java.time.format.FormatStyle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TaskEditor(
-    library: Library, task: Entity?, section: String, model: PlannerModel, snackbar: SnackbarHostState, close: () -> Unit,
+    library: Library, task: Entity?, section: String, model: PlannerModel, snackbar: SnackbarHostState,
+    openChat: (String) -> Unit, close: () -> Unit,
 ) {
     val draft = remember { model.openDraft(library, task, section) }
     val deadline = draft.deadline
@@ -103,9 +105,6 @@ internal fun TaskEditor(
             TopAppBar(
                 title = { Text(stringResource(if (task == null) R.string.new_task else R.string.task_details)) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, onClick = navigateBack) },
-                actions = {
-                    if (task != null && !draft.saving) ActionIcon(R.drawable.ic_delete, R.string.delete_task) { action = "delete" }
-                },
             )
         },
         bottomBar = {
@@ -121,37 +120,37 @@ internal fun TaskEditor(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+                Modifier.widthIn(max = 720.dp).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Box {
-                    TextButton(onClick = { folderMenu = true }, enabled = !draft.saving) {
-                        Glyph(R.drawable.ic_folder)
-                        Text(sectionName(activeLocation, library), Modifier.padding(start = 8.dp))
-                    }
-                    DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
-                        (listOf("inbox", "week", "month") + library.folders.map(Entity::id)).forEach { key ->
-                            DropdownMenuItem(text = { Text(sectionName(key, library)) }, onClick = {
-                                draft.location = key
-                                folderMenu = false
-                            })
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box {
+                        TextButton(onClick = { folderMenu = true }, enabled = !draft.saving) {
+                            Glyph(R.drawable.ic_folder)
+                            Text(sectionName(activeLocation, library), Modifier.padding(start = 8.dp))
+                        }
+                        DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
+                            (listOf("inbox", "week", "month") + library.folders.map(Entity::id)).forEach { key ->
+                                DropdownMenuItem(text = { Text(sectionName(key, library)) }, onClick = {
+                                    draft.location = key
+                                    folderMenu = false
+                                })
+                            }
                         }
                     }
-                }
-                PlannerTextField(
-                    draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(task == null),
-                    placeholder = R.string.task_title, singleLine = true, enabled = !draft.saving,
-                    textStyle = MaterialTheme.typography.headlineSmall,
-                )
-                if (showDescription) {
-                    EditorDetailField(
-                        draft.description, { draft.description = it }, R.string.description,
-                        enabled = !draft.saving, focusOnEntry = addingDescription,
+                    PlannerTextField(
+                        draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(task == null),
+                        placeholder = R.string.task_title, enabled = !draft.saving,
+                        textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 }
                 val accent = MaterialTheme.colorScheme.primary
                 val inactive = MaterialTheme.colorScheme.onSurfaceVariant
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     IconToggleButton(draft.focused, { draft.focused = it }, enabled = !draft.saving) {
                         Glyph(
                             if (draft.focused) R.drawable.ic_star else R.drawable.ic_star_outline,
@@ -169,6 +168,24 @@ internal fun TaskEditor(
                             addingDescription = true
                         }
                     }
+                    if (task != null) {
+                        ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, inactive, enabled = !draft.saving) {
+                            val go = {
+                                finish()
+                                openChat(task.id)
+                            }
+                            if (draft.dirty) model.saveTask(draft, go) else go()
+                        }
+                        ActionIcon(R.drawable.ic_delete, R.string.delete_task, inactive, enabled = !draft.saving) {
+                            action = "delete"
+                        }
+                    }
+                }
+                if (showDescription) {
+                    EditorDetailField(
+                        draft.description, { draft.description = it }, R.string.description,
+                        enabled = !draft.saving, focusOnEntry = addingDescription,
+                    )
                 }
                 if (deadline != null) {
                     val date = deadline.agendaDate()

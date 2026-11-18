@@ -46,7 +46,7 @@ export function installFiles(app:FastifyInstance,db:Database,auth:AuthService,co
      if(duplicate.rowCount){
        await access(store.blob(duplicate.rows[0].id));
        await tx.query('INSERT INTO attachment_files(library_id,attachment_id,blob_id) VALUES($1,$2,$3)',[identity.libraryId,attachmentId,duplicate.rows[0].id]);
-       await tx.query('UPDATE blobs SET delete_after=NULL WHERE id=$1',[duplicate.rows[0].id]);e.fileReady=true;await publish(tx,identity.libraryId,e);
+       await tx.query('UPDATE blobs SET delete_after=NULL WHERE id=$1',[duplicate.rows[0].id]);e.fileReady=true;await publish(tx,identity,e);
        return {uploadId,ready:true,partBytes:PART_BYTES};
      }
      const active=await tx.query('SELECT 1 FROM uploads WHERE library_id=$1 AND attachment_id=$2 AND completed_at IS NULL AND expires_at>now()',[identity.libraryId,attachmentId]);
@@ -101,7 +101,7 @@ export function installFiles(app:FastifyInstance,db:Database,auth:AuthService,co
      else{blobId=randomUUID();await rename(assembled,store.blob(blobId));await tx.query('INSERT INTO blobs(id,library_id,sha256,size) VALUES($1,$2,$3,$4)',[blobId,identity.libraryId,u.sha256,u.size]);}
      await tx.query('UPDATE blobs SET delete_after=NULL WHERE id=$1',[blobId]);
      await tx.query('INSERT INTO attachment_files(library_id,attachment_id,blob_id) VALUES($1,$2,$3)',[identity.libraryId,e.id,blobId]);
-     await tx.query('UPDATE uploads SET completed_at=now() WHERE id=$1',[id]);e.fileReady=true;await publish(tx,identity.libraryId,e);
+     await tx.query('UPDATE uploads SET completed_at=now() WHERE id=$1',[id]);e.fileReady=true;await publish(tx,identity,e);
      // Части удаляет worker после коммита; повтор завершения не читает их повторно.
      return {ok:true,attachment:e};
    },true);

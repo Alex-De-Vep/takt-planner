@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -29,8 +31,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -39,7 +41,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -49,6 +53,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -61,6 +66,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.FormatStyle
+import java.time.temporal.WeekFields
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -78,6 +84,10 @@ internal fun CalendarScreen(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val zone = ZoneId.systemDefault()
+    val today = LocalDate.now(zone)
+    val firstDay = WeekFields.of(LocalConfiguration.current.locales[0]).firstDayOfWeek
+    var view by rememberSaveable { mutableStateOf(CalendarView.Week) }
+    val range = view.dates(date, firstDay)
     var datePicker by rememberSaveable { mutableStateOf(false) }
     var revision by remember { mutableIntStateOf(0) }
     var canRead by remember { mutableStateOf(calendar.mayRead()) }
@@ -105,14 +115,16 @@ internal fun CalendarScreen(
         }.isSuccess
         onDispose { if (registered) resolver.unregisterContentObserver(observer) }
     }
-    val page by produceState<Result<CalendarPage>?>(null, date, canRead, revision, refresh, zone) {
-        value = if (canRead) withContext(Dispatchers.IO) {
-            runCatching {
-                val calendars = calendar.calendars()
-                val selected = calendar.selection(calendars)
-                CalendarPage(calendars, calendar.events(date, date.plusDays(7), zone, selected))
-            }
-        } else null
+    val page by key(calendar, range, canRead, zone) {
+        produceState<Result<CalendarPage>?>(null, revision, refresh) {
+            value = if (canRead) withContext(Dispatchers.IO) {
+                runCatching {
+                    val calendars = calendar.calendars()
+                    val selected = calendar.selection(calendars)
+                    CalendarPage(calendars, calendar.events(range.start, range.endExclusive, zone, selected))
+                }
+            } else null
+        }
     }
 
     Heading(stringResource(R.string.events)) {
@@ -127,57 +139,108 @@ internal fun CalendarScreen(
         }
         return
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween) {
-        TextButton(onClick = { selectDate(date.minusDays(7)) }) { Text(stringResource(R.string.previous_week)) }
-        FilledTonalButton(onClick = { datePicker = true }) { Text(dateLabel(date)) }
-        TextButton(onClick = { selectDate(date.plusDays(7)) }) { Text(stringResource(R.string.next_week)) }
-    }
+    FolderTabs(CalendarView.entries, view, { view = it }) { stringResource(it.label) }
+    CalendarPeriodNavigation(view, date, today, range, selectDate) { datePicker = true }
     if (datePicker) PickDate(date, { datePicker = false }) { selectDate(it); datePicker = false }
-    val loaded = page
-    if (loaded?.isFailure == true) {
-        Column(Modifier.padding(20.dp)) {
+    page?.fold(onSuccess = { data ->
+        CalendarAgenda(view, range, date, today, zone, data, selectDate, open)
+    }, onFailure = {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text(stringResource(R.string.calendar_read_error))
             TextButton(onClick = { revision++ }) { Text(stringResource(R.string.retry)) }
         }
+    }) ?: LinearProgressIndicator(Modifier.fillMaxWidth())
+}
+
+@Composable
+private fun CalendarAgenda(
+    view: CalendarView, range: CalendarDates, date: LocalDate, today: LocalDate, zone: ZoneId, data: CalendarPage,
+    selectDate: (LocalDate) -> Unit, open: (EventRequest) -> Unit,
+) {
+    val eventsByDay = remember(data.events, range, zone) {
+        range.days.associateWith { day ->
+            data.events.filter { it.occursOn(day, zone) }.sortedWith(compareBy({ !it.allDay }, { it.start }))
+        }
     }
-    val data = loaded?.getOrNull()
-    if (data != null) {
-        LazyColumn(contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 88.dp)) {
-            val days = (0L..6L).map(date::plusDays)
-            val hasEvents = days.any { day -> data.events.any { it.occursOn(day, zone) } }
-            if (!hasEvents) item {
+    val days = if (view == CalendarView.Week) {
+        range.days.filter { it == date || eventsByDay.getValue(it).isNotEmpty() }
+    } else listOf(date)
+    val hasEvents = days.any { eventsByDay[it]?.isNotEmpty() == true }
+    val listState = key(view, range) { rememberLazyListState() }
+    LaunchedEffect(listState, date, hasEvents) {
+        if (view == CalendarView.Week && hasEvents) {
+            val index = days.takeWhile { it < date }.sumOf { 1 + eventsByDay.getValue(it).size }
+            listState.scrollToItem(index)
+        }
+    }
+
+    if (view == CalendarView.Week) {
+        CalendarDayGrid(range, date, today, eventsByDay, showMonth = false, select = selectDate,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 6.dp))
+    }
+
+    LazyColumn(
+        state = listState,
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 88.dp),
+    ) {
+        if (view == CalendarView.Month) {
+            item(key = "month") {
+                CalendarDayGrid(range, date, today, eventsByDay, showMonth = true, select = selectDate)
+            }
+            item(key = "selected-day") { SectionLabel(dateLabel(date, FormatStyle.FULL)) }
+        }
+        if (!hasEvents) {
+            item(key = "empty") {
                 EmptyPanel(R.drawable.ic_calendar, R.string.no_events, R.string.no_events_hint)
             }
+        } else {
             days.forEach { day ->
-                val entries = data.events.filter { it.occursOn(day, zone) }
-                    .sortedWith(compareBy({ !it.allDay }, { it.start }))
-                if (entries.isNotEmpty()) item(key = day.toString()) {
-                    SectionLabel(dateLabel(day, FormatStyle.FULL))
-                    entries.forEach { entry ->
-                        Row(Modifier.fillMaxWidth().clickable { open(EventRequest(event = entry)) }
-                            .padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text(
-                                if (entry.allDay) stringResource(R.string.all_day)
-                                else timeLabel(entry.startsIn(zone).toLocalTime()),
+                val entries = eventsByDay.getValue(day)
+                if (view == CalendarView.Week) {
+                    item(key = day.toString()) {
+                        SectionLabel(dateLabel(day, FormatStyle.FULL))
+                        if (entries.isEmpty()) {
+                            Text(stringResource(R.string.no_events), Modifier.padding(bottom = 8.dp),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(entry.title.ifBlank { stringResource(R.string.untitled_event) },
-                                    style = MaterialTheme.typography.titleMedium)
-                                data.calendars.firstOrNull { it.id == entry.calendarId }?.let {
-                                    Text(it.name, style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                items(entries, key = { entry -> "$day:${entry.id}:${entry.start}" }) { entry ->
+                    CalendarEventRow(entry, day, zone, data.calendars.firstOrNull { it.id == entry.calendarId }?.name) {
+                        open(EventRequest(event = entry))
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun CalendarEventRow(entry: PhoneEvent, day: LocalDate, zone: ZoneId, name: String?, open: () -> Unit) {
+    val start = entry.startsIn(zone)
+    val end = entry.endsIn(zone)
+    val time = when {
+        entry.allDay -> stringResource(R.string.all_day)
+        start.toLocalDate() < day && end.toLocalDate() == day ->
+            stringResource(R.string.calendar_event_until, timeLabel(end.toLocalTime()))
+        start.toLocalDate() < day -> stringResource(R.string.calendar_event_ongoing)
+        end.toLocalDate() == day ->
+            stringResource(R.string.calendar_time_range, timeLabel(start.toLocalTime()), timeLabel(end.toLocalTime()))
+        else -> timeLabel(start.toLocalTime())
+    }
+    Row(Modifier.fillMaxWidth().clickable(onClick = open).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(entry.title.ifBlank { stringResource(R.string.untitled_event) },
+                style = MaterialTheme.typography.titleMedium)
+            name?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(time, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable

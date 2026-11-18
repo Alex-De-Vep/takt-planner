@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -42,7 +43,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -68,7 +71,8 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 private enum class Tab(val label: Int, val icon: Int) {
-    Tasks(R.string.app_name, R.drawable.ic_list),
+    Tasks(R.string.tasks, R.drawable.ic_list),
+    Notes(R.string.notes, R.drawable.ic_note),
     Events(R.string.events, R.drawable.ic_calendar),
     Chat(R.string.chat, R.drawable.ic_chat),
     Settings(R.string.settings, R.drawable.ic_settings),
@@ -80,6 +84,11 @@ private const val NEW_TASK = "new"
 internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel, snackbar: SnackbarHostState) {
     var tab by rememberSaveable { mutableStateOf(Tab.Tasks) }
     var selectedSection by rememberSaveable { mutableStateOf("inbox") }
+    var selectedNoteFolder by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteTrash by rememberSaveable { mutableStateOf(false) }
+    val notes by model.notes.collectAsState()
+    val noteState = notes.takeIf { it.workspace == library.workspace } ?: NotesState()
+    val noteFolder = selectedNoteFolder?.takeIf { id -> library.folders.any { it.id == id } }
     var route by rememberSaveable { mutableStateOf<String?>(null) }
     var managing by rememberSaveable { mutableStateOf(false) }
     val tabStates = rememberSaveableStateHolder()
@@ -91,17 +100,34 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     var eventJson by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarSettings by rememberSaveable { mutableStateOf(false) }
     var chatSettings by rememberSaveable { mutableStateOf(false) }
+    var chatTaskId by rememberSaveable { mutableStateOf<String?>(null) }
+    var chatNoteId by rememberSaveable { mutableStateOf<String?>(null) }
     val openEvent: (EventRequest) -> Unit = { eventJson = json.toJson(it) }
     val section = selectedSection.takeIf { it in Sections || library.folders.any { folder -> folder.id == it } } ?: "inbox"
     val task = library.tasks.firstOrNull { it.id == route }
 
+    val noteDraft = model.noteDraft?.takeIf { it.workspace == library.workspace }
     val eventRoute = eventJson
-    if (eventRoute != null) {
+    if (noteDraft != null) {
+        key(noteDraft.id) {
+            NoteEditor(
+                noteDraft, library, noteState.limit != null, noteState.formatVersion >= NOTE_FORMAT_VERSION, model, snackbar,
+            ) { id ->
+                chatTaskId = null
+                chatNoteId = id
+                tab = Tab.Chat
+            }
+        }
+    } else if (eventRoute != null) {
         val request = remember(eventRoute) { json.fromJson(eventRoute, EventRequest::class.java) }
         EventEditor(request, calendar, { eventJson = null }) { eventJson = null; calendarRefresh++ }
     } else if (route != null) {
         if (route == NEW_TASK || task != null) {
-            TaskEditor(library, task, section, model, snackbar) { route = null }
+            TaskEditor(library, task, section, model, snackbar, openChat = { id ->
+                chatNoteId = null
+                chatTaskId = id
+                tab = Tab.Chat
+            }) { route = null }
         } else {
             MissingTask(snackbar) { model.closeDraft(); route = null }
         }
@@ -112,7 +138,17 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                 NavigationBar {
                     Tab.entries.forEach { entry ->
                         NavigationBarItem(
-                            selected = tab == entry, onClick = { tab = entry },
+                            selected = tab == entry,
+                            onClick = {
+                                if (tab == Tab.Tasks && entry == Tab.Notes && section !in Sections) {
+                                    selectedNoteFolder = section
+                                    noteTrash = false
+                                }
+                                if (tab == Tab.Notes && entry == Tab.Tasks && !noteTrash && noteFolder != null) {
+                                    selectedSection = noteFolder
+                                }
+                                tab = entry
+                            },
                             icon = { Glyph(entry.icon) }, label = { Text(stringResource(entry.label)) },
                         )
                     }
@@ -124,6 +160,13 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                         onClick = { route = NEW_TASK }, icon = { Glyph(R.drawable.ic_add) },
                         text = { Text(stringResource(R.string.new_task)) },
                     )
+                    Tab.Notes -> if (!noteTrash && noteState.limit != null) {
+                        ExtendedFloatingActionButton(
+                            onClick = { model.openNote(null, noteFolder) },
+                            icon = { Glyph(R.drawable.ic_add) },
+                            text = { Text(stringResource(R.string.new_note)) },
+                        )
+                    }
                     Tab.Events -> ExtendedFloatingActionButton(
                         onClick = {
                             val start = calendarDate.takeUnless { it == LocalDate.now() }
@@ -140,10 +183,24 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                 Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()) {
                     tabStates.SaveableStateProvider(tab.name) {
                         when (tab) {
-                            Tab.Tasks -> TaskList(library, section, { selectedSection = it }, { managing = true }, { route = it }, model)
+                            Tab.Tasks -> TaskList(
+                                library, section, { selectedSection = it }, { managing = true }, { route = it }, model,
+                            )
+                            Tab.Notes -> NotesScreen(
+                                library, noteState, cloud, noteFolder, noteTrash,
+                                select = { selectedNoteFolder = it }, toggleTrash = {
+                                    if (noteTrash) selectedNoteFolder = null
+                                    noteTrash = !noteTrash
+                                },
+                                manage = { managing = true }, model = model,
+                            )
                             Tab.Events -> CalendarScreen(calendar, calendarDate, { calendarDateText = it.toString() },
                                 openEvent, { calendarSettings = true }, calendarRefresh)
-                            Tab.Chat -> ChatScreen(library, model) { chatSettings = true }
+                            Tab.Chat -> ChatScreen(
+                                library, model, chatTaskId, chatNoteId,
+                                selectTaskId = { chatTaskId = it; chatNoteId = null },
+                                clearNote = { chatNoteId = null },
+                            ) { chatSettings = true }
                             Tab.Settings -> Settings(library, cloud, model, calendar, calendarRefresh,
                                 { calendarSettings = true }, { chatSettings = true })
                         }
@@ -191,38 +248,8 @@ private fun TaskList(
         }
         ActionIcon(R.drawable.ic_folder, R.string.manage_folders, onClick = manage)
     }
-    val sections = Sections.keys + library.folders.map(Entity::id)
-    PrimaryScrollableTabRow(
-        selectedTabIndex = sections.indexOf(section).coerceAtLeast(0), edgePadding = 6.dp, minTabWidth = 0.dp,
-        indicator = {},
-    ) {
-        sections.forEachIndexed { index, key ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (index == Sections.size) {
-                    Box(Modifier.width(8.dp), contentAlignment = Alignment.Center) {
-                        VerticalDivider(Modifier.height(18.dp))
-                    }
-                }
-                val selected = key == section
-                Box(
-                    Modifier.selectable(selected, role = Role.Tab, onClick = { select(key) })
-                        .padding(horizontal = 14.dp).heightIn(min = 48.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        sectionName(key, library), Modifier.widthIn(max = 184.dp).padding(vertical = 8.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge,
-                    )
-                    if (selected) {
-                        Box(Modifier.matchParentSize(), contentAlignment = Alignment.BottomCenter) {
-                            Spacer(Modifier.fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
-                        }
-                    }
-                }
-            }
-        }
-    }
+    val sections = Sections.keys.toList() + library.folders.map(Entity::id)
+    FolderTabs(sections, section, select, dividerBefore = Sections.size) { sectionName(it, library) }
     if (searching) {
         PlannerTextField(
             value = search, onValueChange = { search = it }, singleLine = true,
@@ -321,7 +348,6 @@ private fun TaskRow(
                         task.text("title").orEmpty().ifBlank { stringResource(R.string.untitled) },
                         style = MaterialTheme.typography.titleMedium,
                         textDecoration = if (task.completed) TextDecoration.LineThrough else null,
-                        maxLines = 3, overflow = TextOverflow.Ellipsis,
                     )
                     task.text("description")?.trim()?.takeIf(String::isNotEmpty)?.let { description ->
                         Text(description, style = MaterialTheme.typography.bodyMedium,
@@ -412,4 +438,44 @@ internal fun deadlineLabel(deadline: Deadline): String {
     val time = deadline.instant?.atZone(ZoneId.systemDefault())?.toLocalTime()
         ?.let { timeLabel(it) }
     return if (time == null) date else "$date · $time"
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun <T> FolderTabs(
+    keys: List<T>, selected: T, select: (T) -> Unit, dividerBefore: Int? = null,
+    label: @Composable (T) -> String,
+) {
+    PrimaryScrollableTabRow(
+        selectedTabIndex = keys.indexOf(selected).coerceAtLeast(0), edgePadding = 6.dp, minTabWidth = 0.dp,
+        indicator = {},
+    ) {
+        keys.forEachIndexed { index, key ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (index == dividerBefore) {
+                    Box(Modifier.width(8.dp), contentAlignment = Alignment.Center) {
+                        VerticalDivider(Modifier.height(18.dp))
+                    }
+                }
+                val active = key == selected
+                Box(
+                    Modifier.selectable(active, role = Role.Tab, onClick = { select(key) })
+                        .padding(horizontal = 14.dp).heightIn(min = 48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label(key), Modifier.widthIn(max = 184.dp).padding(vertical = 8.dp),
+                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge,
+                    )
+                    if (active) {
+                        Box(Modifier.matchParentSize(), contentAlignment = Alignment.BottomCenter) {
+                            Spacer(Modifier.fillMaxWidth().height(3.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

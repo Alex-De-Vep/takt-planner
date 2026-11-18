@@ -9,12 +9,46 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
 class CalendarAndChatTest {
+    @Test
+    fun monthGridIncludesCompleteWeeksAndLeapDay() {
+        val leapDay = LocalDate.of(2028, 2, 29)
+        val month = CalendarView.Month.dates(leapDay, DayOfWeek.MONDAY)
+        assertEquals(LocalDate.of(2028, 1, 31), month.start)
+        assertEquals(LocalDate.of(2028, 3, 6), month.endExclusive)
+        assertEquals(35, month.days.size)
+        assertTrue(month.days.contains(leapDay))
+        assertEquals(LocalDate.of(2028, 3, 29), CalendarView.Month.move(leapDay, 1))
+        assertEquals(LocalDate.of(2027, 2, 28), CalendarView.Month.move(LocalDate.of(2027, 1, 31), 1))
+    }
+
+    @Test
+    fun weekUsesLocalFirstDayAcrossYearBoundary() {
+        val date = LocalDate.of(2027, 1, 1)
+        val monday = CalendarView.Week.dates(date, DayOfWeek.MONDAY)
+        val sunday = CalendarView.Week.dates(date, DayOfWeek.SUNDAY)
+        assertEquals(LocalDate.of(2026, 12, 28), monday.start)
+        assertEquals(LocalDate.of(2027, 1, 3), monday.last)
+        assertEquals(LocalDate.of(2026, 12, 27), sunday.start)
+        assertEquals(7, sunday.days.size)
+        assertEquals(LocalDate.of(2027, 1, 8), CalendarView.Week.move(date, 1))
+    }
+
+    @Test
+    fun dayViewKeepsOnlyTheSelectedDate() {
+        val date = LocalDate.of(2026, 12, 31)
+        val range = CalendarView.Day.dates(date, DayOfWeek.SUNDAY)
+        assertEquals(listOf(date), range.days)
+        assertEquals(LocalDate.of(2027, 1, 1), CalendarView.Day.move(date, 1))
+        assertEquals(LocalDate.of(2026, 12, 30), CalendarView.Day.move(date, -1))
+    }
+
     @Test
     fun allDayEventsStayOnCalendarDateAndUseExclusiveEnd() {
         val day = LocalDate.of(2026, 11, 10)
@@ -47,7 +81,9 @@ class CalendarAndChatTest {
     @Test
     fun chatUsesGatewayContractWithoutSendingTaskIds() {
         val gateway = GatewayChat(object : Transport {
-            override fun request(origin: String, path: String, body: JsonObject?, token: String?): String {
+            override fun request(
+                origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+            ): String {
                 assertEquals("/chat/completions", path)
                 assertEquals("qa-key", token)
                 val request = requireNotNull(body)
@@ -71,7 +107,9 @@ class CalendarAndChatTest {
     @Test
     fun calendarActionsAreOutsideTheExistingChatContract() {
         val gateway = GatewayChat(object : Transport {
-            override fun request(origin: String, path: String, body: JsonObject?, token: String?): String {
+            override fun request(
+                origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+            ): String {
                 val result = JsonParser.parseString("""{"message":"Review this","actions":[
                     {"key":"event","kind":"event","title":"Calendar event"},
                     {"key":"task","kind":"task","title":"New task","date":"2026-11-10"}
@@ -83,6 +121,26 @@ class CalendarAndChatTest {
             "Help me plan", emptyList(), null, emptyList())
         assertEquals("New task", reply.proposals.single().title)
         assertNotNull(reply.proposals.single().deadline)
+    }
+
+    @Test
+    fun chatSendsPlainNoteContextWithoutTurningItIntoATaskTarget() {
+        val gateway = GatewayChat(object : Transport {
+            override fun request(
+                origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
+            ): String {
+                val messages = requireNotNull(body).getAsJsonArray("messages")
+                val system = messages.first().asJsonObject["content"].asString
+                val context = JsonParser.parseString(system.substringAfter("Local context (JSON data): ")).asJsonObject
+                assertEquals("Project", context.getAsJsonObject("note_context")["title"].asString)
+                assertEquals("Review notes", context.getAsJsonObject("note_context")["text"].asString)
+                assertFalse(context.has("edit_target"))
+                return """{"choices":[{"message":{"content":"Ready"}}]}"""
+            }
+        })
+        val reply = gateway.send(GatewayConnection("https://gateway.example/v1", "key", "model", false),
+            "Summarize", emptyList(), null, emptyList(), NoteChatContext("Project", "Review notes"))
+        assertEquals("Ready", reply.text)
     }
 
     private fun completion(arguments: JsonObject): String = """{"choices":[{"message":{"tool_calls":[{"function":

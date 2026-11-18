@@ -40,6 +40,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,19 +54,27 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun ChatScreen(library: Library, model: PlannerModel, settings: () -> Unit) {
+internal fun ChatScreen(
+    library: Library, model: PlannerModel, taskId: String?, noteId: String?,
+    selectTaskId: (String?) -> Unit, clearNote: () -> Unit, settings: () -> Unit,
+) {
     val chat by model.chat.state.collectAsState()
     var prompt by remember { mutableStateOf("") }
-    var taskId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectTask by rememberSaveable { mutableStateOf(false) }
     var applying by remember { mutableStateOf<String?>(null) }
     val task = library.tasks.firstOrNull { it.id == taskId }
+    val noteEntry by produceState<Pair<String, NoteChatContext?>?>(null, library.workspace, noteId) {
+        value = noteId?.let { it to model.noteChatContext(library.workspace, it) }
+    }
+    val note = noteEntry?.takeIf { it.first == noteId }?.second
     val focus = LocalFocusManager.current
     val openSettings = { focus.clearFocus(); settings() }
     val openTaskPicker = { focus.clearFocus(); selectTask = true }
     val send = { text: String ->
-        model.chat.send(text.trim(), task, task?.let { library.items(it.id) }.orEmpty()) {
-            if (prompt == text) prompt = ""
+        if (noteId == null || note != null) {
+            model.chat.send(text.trim(), task, task?.let { library.items(it.id) }.orEmpty(), note) {
+                if (prompt == text) prompt = ""
+            }
         }
     }
     ChatHeading(chat.activeModelLabel ?: chat.model.takeIf(String::isNotEmpty), openSettings)
@@ -137,21 +146,31 @@ internal fun ChatScreen(library: Library, model: PlannerModel, settings: () -> U
                         Text(task.text("title").orEmpty().ifBlank { stringResource(R.string.untitled) },
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    ActionIcon(R.drawable.ic_close, R.string.chat_remove_task) { taskId = null }
+                    ActionIcon(R.drawable.ic_close, R.string.chat_remove_task) { selectTaskId(null) }
                 }
+            }
+            if (noteId != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Glyph(R.drawable.ic_note)
+                    Text(note?.title?.ifBlank { stringResource(R.string.untitled_note) }
+                        ?: stringResource(R.string.note), Modifier.weight(1f).padding(start = 8.dp),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    ActionIcon(R.drawable.ic_close, R.string.chat_remove_note, onClick = clearNote)
+                }
+                if (noteEntry?.first == noteId && note == null) Text(stringResource(R.string.note_unavailable))
             }
             if (chat.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             chat.message?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (task == null) {
+                if (task == null && noteId == null) {
                     IconButton(onClick = openTaskPicker, enabled = !chat.busy && library.tasks.isNotEmpty()) {
                         Glyph(R.drawable.ic_attach, stringResource(R.string.chat_attach_task), LocalContentColor.current)
                     }
                 }
                 PlannerTextField(prompt, { prompt = it.take(4000) }, Modifier.weight(1f),
                     placeholder = R.string.chat_message, maxLines = 3)
-                FilledIconButton(onClick = { send(prompt) }, enabled = !chat.busy && prompt.isNotBlank()) {
+                FilledIconButton(onClick = { send(prompt) }, enabled = !chat.busy && prompt.isNotBlank() && (noteId == null || note != null)) {
                     Glyph(R.drawable.ic_send, stringResource(R.string.chat_send), LocalContentColor.current)
                 }
             }
@@ -169,7 +188,7 @@ internal fun ChatScreen(library: Library, model: PlannerModel, settings: () -> U
                         items(library.tasks.filter { it.text("title").orEmpty().contains(search.trim(), ignoreCase = true) },
                             key = Entity::id) { entry ->
                             Text(entry.text("title").orEmpty().ifBlank { stringResource(R.string.untitled) },
-                                Modifier.fillMaxWidth().clickable { taskId = entry.id; selectTask = false }.padding(vertical = 12.dp))
+                                Modifier.fillMaxWidth().clickable { selectTaskId(entry.id); selectTask = false }.padding(vertical = 12.dp))
                         }
                     }
                 }
@@ -230,18 +249,19 @@ internal fun ChatConnectionDialog(controller: ChatController, close: () -> Unit)
         ChatProviderDialog(controller, state, initialProvider) { editing = null }
         return
     }
-    val unconnected = GatewayProvider.entries.firstOrNull { it !in state.profiles }
+    val chatProfiles = state.profiles.filterValues { it.model.isNotBlank() }
+    val unconnected = GatewayProvider.entries.firstOrNull { it !in chatProfiles }
     AlertDialog(
         onDismissRequest = close,
         title = { Text(stringResource(R.string.chat_choose_model)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (state.profiles.isEmpty()) {
+                if (chatProfiles.isEmpty()) {
                     if (!state.busy) Text(stringResource(R.string.chat_no_models))
                 } else {
                     Text(stringResource(R.string.chat_connected_models), style = MaterialTheme.typography.titleSmall)
                     Column(Modifier.selectableGroup()) {
-                        state.profiles.entries.sortedBy { it.key.label }.forEach { (provider, saved) ->
+                        chatProfiles.entries.sortedBy { it.key.label }.forEach { (provider, saved) ->
                             val active = provider == state.provider
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Row(
@@ -281,7 +301,20 @@ internal fun ChatConnectionDialog(controller: ChatController, close: () -> Unit)
 }
 
 @Composable
-private fun ChatProviderDialog(controller: ChatController, state: ChatState, initialProvider: GatewayProvider, close: () -> Unit) {
+internal fun TranscriptionConnectionDialog(
+    controller: ChatController, chosen: (TranscriptionSelection) -> Unit = {}, close: () -> Unit,
+) {
+    val state by controller.state.collectAsState()
+    val initial = state.transcription?.provider
+        ?: transcriptionProviders.firstOrNull { it in state.profiles } ?: transcriptionProviders.first()
+    ChatProviderDialog(controller, state, initial, forTranscription = true, chosen = chosen, close = close)
+}
+
+@Composable
+private fun ChatProviderDialog(
+    controller: ChatController, state: ChatState, initialProvider: GatewayProvider,
+    forTranscription: Boolean = false, chosen: (TranscriptionSelection) -> Unit = {}, close: () -> Unit,
+) {
     val context = LocalContext.current
     var provider by rememberSaveable { mutableStateOf(initialProvider) }
     val saved = state.profiles[provider]
@@ -292,18 +325,26 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
         mutableStateOf((saved?.models?.map(GatewayModel::id) ?: provider.configuredModels.orEmpty()).joinToString(", "))
     }
     var scope by rememberSaveable(provider) { mutableStateOf(saved?.scope ?: GigaScope.Personal) }
-    var selectedId by rememberSaveable(provider) { mutableStateOf(saved?.model.orEmpty()) }
+    val savedSpeech = state.transcription?.takeIf { it.provider == provider }
+    var selectedId by rememberSaveable(provider) {
+        mutableStateOf(if (forTranscription) savedSpeech?.id.orEmpty() else saved?.model.orEmpty())
+    }
+    var manualSpeech by rememberSaveable(provider) { mutableStateOf("") }
     var useTools by rememberSaveable(provider) { mutableStateOf(saved?.tools ?: false) }
-    val hasCandidate = state.candidateProvider == provider
+    val hasCandidate = state.candidateProvider == provider && state.candidateTranscription == forTranscription
     val changed = saved != null && (key.isNotBlank() || address != saved.address ||
         project != saved.project.orEmpty() || scope != (saved.scope ?: GigaScope.Personal) ||
         (provider.configuredModels?.isNotEmpty() == true && modelIds != saved.models.joinToString(", ", transform = GatewayModel::id)))
     val catalog = when {
         hasCandidate -> state.catalog
         changed -> emptyList()
+        forTranscription -> listOfNotNull(savedSpeech?.let { GatewayModel(it.id, null, it.label) })
         else -> saved?.models.orEmpty()
     }
     val selected = catalog.firstOrNull { it.id == selectedId } ?: catalog.firstOrNull()
+    val speechModel = if (provider == GatewayProvider.LiteLLM && manualSpeech.isNotBlank()) {
+        manualSpeech.trim().takeIf(::validTranscriptionModel)?.let { GatewayModel(it, null) }
+    } else selected
     val canSetTools = selected?.tools != false
     val dismiss = {
         when {
@@ -312,16 +353,21 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
         }
     }
     LaunchedEffect(provider, selected?.id, hasCandidate) {
-        if (selected != null) useTools = if (selected.id == saved?.model) saved.tools else selected.tools == true
+        if (!forTranscription && selected != null) {
+            useTools = if (selected.id == saved?.model) saved.tools else selected.tools == true
+        }
     }
     val openBrowser: (String) -> Unit = { address ->
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(address)))
     }
     AlertDialog(
-        onDismissRequest = dismiss, title = { Text(stringResource(R.string.chat_connection)) },
+        onDismissRequest = dismiss, title = {
+            Text(stringResource(if (forTranscription) R.string.voice_model else R.string.chat_connection))
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                GatewayPicker(stringResource(R.string.chat_provider), GatewayProvider.entries, provider, !state.busy, { it.label }) {
+                val available = if (forTranscription) transcriptionProviders else GatewayProvider.entries
+                GatewayPicker(stringResource(R.string.chat_provider), available, provider, !state.busy, { it.label }) {
                     controller.clearCandidate()
                     provider = it
                 }
@@ -341,7 +387,7 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
                     }) { address = it; controller.clearCandidate() }
                 }
                 if (provider == GatewayProvider.ChatGPT || provider == GatewayProvider.OpenRouter) {
-                    TextButton(onClick = { controller.authorize(provider, openBrowser) }, enabled = !state.busy) {
+                    TextButton(onClick = { controller.authorize(provider, forTranscription, openBrowser) }, enabled = !state.busy) {
                         Text(stringResource(R.string.chat_browser_login, provider.label))
                     }
                 }
@@ -366,7 +412,9 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
                         }
                     }
                     TextButton(
-                        onClick = { controller.loadModels(provider, address, key, GatewayOptions(modelIds, project, scope)) },
+                        onClick = { controller.loadModels(
+                            provider, address, key, GatewayOptions(modelIds, project, scope), forTranscription,
+                        ) },
                         enabled = !state.busy && (provider.bases.isNotEmpty() || address.isNotBlank()),
                     ) { Text(stringResource(R.string.chat_load_models)) }
                 }
@@ -374,30 +422,49 @@ private fun ChatProviderDialog(controller: ChatController, state: ChatState, ini
                     GatewayPicker(stringResource(R.string.chat_model), catalog, selected, !state.busy, GatewayModel::label) {
                         selectedId = it.id
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!forTranscription) Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(useTools && canSetTools, { useTools = it }, enabled = canSetTools && !state.busy)
                         Text(stringResource(R.string.chat_task_proposals))
                     }
-                } else if (saved != null) {
+                } else if (forTranscription && hasCandidate && catalog.isEmpty()) {
+                    Text(stringResource(R.string.voice_models_empty), style = MaterialTheme.typography.bodySmall)
+                } else if (!forTranscription && saved != null && saved.model.isNotBlank()) {
                     Text(stringResource(R.string.chat_current_model, saved.model))
+                }
+                if (forTranscription && provider == GatewayProvider.LiteLLM && (hasCandidate || saved != null && !changed)) {
+                    PlannerTextField(manualSpeech, { manualSpeech = it }, enabled = !state.busy,
+                        placeholder = R.string.voice_manual_model, singleLine = true)
                 }
                 if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 state.message?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
-                if (saved != null) {
+                if (saved != null && (!forTranscription || saved.model.isBlank())) {
                     TextButton(onClick = { key = ""; controller.disconnect(provider) }, enabled = !state.busy) {
                         Text(stringResource(R.string.chat_disconnect))
+                    }
+                }
+                if (forTranscription && savedSpeech != null && saved?.model?.isNotBlank() == true) {
+                    TextButton(onClick = controller::clearTranscription, enabled = !state.busy) {
+                        Text(stringResource(R.string.voice_clear_model))
                     }
                 }
             }
         },
         confirmButton = {
-            val canActivate = saved != null && !changed && provider != state.provider
+            val canActivate = saved?.model?.isNotBlank() == true && !changed && provider != state.provider
             TextButton(onClick = {
-                if (selected != null) controller.connect(provider, selected, useTools, close)
+                if (forTranscription && speechModel != null) {
+                    controller.selectTranscription(provider, speechModel) {
+                        controller.state.value.transcription?.let(chosen)
+                        close()
+                    }
+                } else if (selected != null) controller.connect(provider, selected, useTools, close)
                 else controller.activate(provider)
                 key = ""
-            }, enabled = !state.busy && (selected != null || canActivate)) {
+            }, enabled = !state.busy && if (forTranscription) {
+                speechModel != null && (hasCandidate || saved != null && !changed)
+            } else selected != null || canActivate) {
                 Text(stringResource(when {
+                    forTranscription -> R.string.save
                     selected == null -> R.string.chat_use_provider
                     saved == null -> R.string.chat_add_model
                     else -> R.string.save

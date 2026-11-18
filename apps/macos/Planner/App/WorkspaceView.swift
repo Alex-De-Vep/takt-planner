@@ -174,7 +174,10 @@ struct WorkspaceView: View {
             .onChange(of: tasks.map(\.focusDay), initial: true) { service.preserveLegacyTodayMarks(in: tasks) }
             // Сроки отображаются относительно текущей даты и часового пояса.
             .onChange(of: scenePhase) { if scenePhase == .active { now = .now } }
-            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in now = .now }
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: DispatchQueue.main)) { _ in
+                now = .now
+                TodayWidgetPublisher.publish(from: service.context)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: DispatchQueue.main)) { _ in now = .now }
             .onChange(of: notifications.openRevision) { openNotificationTask() }
             .onAppear { openNotificationTask() }

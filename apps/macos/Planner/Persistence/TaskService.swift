@@ -41,6 +41,7 @@ final class TaskService {
     var syncRepository: SyncRepository?
     var syncQueued: (() -> Void)?
     var notificationChanged: ((UUID, Bool) -> Void)?
+    @ObservationIgnored var didSaveTasks: (() -> Void)?
     // Маркер библиотеки защищает от переноса идентификаторов из другого хранилища процесса.
     let dragScopeID = UUID()
     // Неудачно сохранённый ввод принадлежит задаче и не пропадает при переключении между строками.
@@ -130,6 +131,7 @@ final class TaskService {
         change()
         let queued = try syncRepository?.captureLocalChanges() ?? false
         try saveContext(context)
+        didSaveTasks?()
         if queued { syncQueued?() }
     }
 

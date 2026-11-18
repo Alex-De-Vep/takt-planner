@@ -10,9 +10,17 @@ final class WorkspaceTaskContent {
     @ObservationIgnored private var key: WorkspaceListAnimationKey?
 
     func update(_ view: AnyView, key: WorkspaceListAnimationKey?, transaction: Transaction, host: NSView) {
-        if let old = self.key, let key, old.scope == key.scope, old != key,
-           !transaction.disablesAnimations, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            WorkspaceListTransitions.prepare(in: host, scope: key.scope)
+        if let old = self.key, let key, old.scope == key.scope, old != key {
+            let animated = !transaction.disablesAnimations && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let newTopNote: UUID?
+            if case .notes = key.scope, old.active.first != key.active.first {
+                newTopNote = key.active.first
+            } else {
+                newTopNote = nil
+            }
+            if animated || newTopNote != nil {
+                WorkspaceListTransitions.prepare(in: host, scope: key.scope, animated: animated, newTopNote: newTopNote)
+            }
         }
         self.key = key
         withTransaction(transaction) { self.view = view }
@@ -1174,7 +1182,10 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         item.maximumThickness = rightPanelMaximumWidth
         // Подтверждаем конечную секцию после системной анимации.
         setCalendarToolbar(column: !collapsed, visible: !collapsed)
-        if !collapsed { releaseRightPanelToolbar() }
+        if !collapsed {
+            (item.viewController as? CalendarSidebarController)?.updateColumnCorners()
+            releaseRightPanelToolbar()
+        }
         scheduleToolbarAlignment()
         finishCalendarHeaderTransition(afterLayout: wasAnimating)
         headerConfigurationChanged?()

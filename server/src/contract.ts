@@ -43,7 +43,7 @@ export const contractSchemas=[stampSchema,mutationSchema,...entities,entity,erro
  named('NoteIndexResponse',object({notes:array(object({id,revision:noteRevision}))})),
  named('NoteResponse',object({revision:noteRevision,data:noteData})),
  named('NoteWriteResponse',object({revision:noteRevision})),
- named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
+ named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer,maxNoteFormatVersion:integer,noteEventsVersion:integer,taskEventsVersion:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
 ];
 const email={type:'string',minLength:3,maxLength:254},password={type:'string',minLength:12,maxLength:128};
 const mutations={type:'array',minItems:1,maxItems:100,items:ref('Mutation')};
@@ -70,6 +70,7 @@ export function isPublicRoute(path:string) {return path.startsWith('/health/')||
 export function routeContract(method:string,path:string) {
  const response:Record<string,any>={};for(const status of [400,401,403,404,409,410,413,415,429,500,503])response[status]=ref('ErrorResponse');
  if(responses[path])response[200]=ref(responses[path]!);
+ if(path==='/v1/notes/events')response[200]={type:'string'};
  if(path==='/v1/notes/:id'&&method==='PUT')response[200]=ref('NoteWriteResponse');
  if(path==='/health/ready')response[503]={anyOf:[ref('HealthResponse'),ref('ErrorResponse')]};
  if(path==='/v1/attachments/:id/content')response[200]={type:'string',format:'binary'};
@@ -89,6 +90,7 @@ export function completeOpenAPI(spec:any) {
    const retryHeader={description:'Seconds until the exhausted limit permits retrying.',schema:{type:'integer',minimum:1}};
    if(op.responses['429'])op.responses['429'].headers={'Retry-After':retryHeader};
    if(path==='/v1/auth/login'&&op.responses['401'])op.responses['401'].headers={'Retry-After':retryHeader};
+   if(path==='/v1/notes/events')op.responses['200']={description:'Authenticated stream of note and task change signals.',content:{'text/event-stream':{schema:{type:'string'}}}};
    if(path==='/v1/attachments/{id}/content')op.responses['200']={description:'Original file bytes; verify SHA-256 before installing into cache.',content:{'application/octet-stream':{schema:{type:'string',format:'binary'}}},headers:{'X-Content-SHA256':{schema:{type:'string'}},'Content-Disposition':{schema:{type:'string'}}}};
  }return doc;
 }

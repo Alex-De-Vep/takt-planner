@@ -38,13 +38,19 @@ internal data class CloudState(
 
 internal class PlannerModel(application: Application) : AndroidViewModel(application) {
     private val store = PlannerStore(application)
-    private val sync = CloudSync(store)
+    private val noteStore = NoteStore(application)
+    private val sync = CloudSync(store, noteStore)
     private val network = Mutex()
     private var nextSync = 0L
     private var failures = 0
     private var draft: TaskDraft? = null
 
     val library = store.library
+    val notes = noteStore.state
+    val noteVoice = NoteVoice(application)
+    var noteDraft by mutableStateOf<NoteDraft?>(null)
+        private set
+    private var openingNote = false
     val chat = ChatController(application, viewModelScope)
     private val _cloud = MutableStateFlow(CloudState())
     val cloud = _cloud.asStateFlow()
@@ -58,11 +64,15 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             try {
                 withContext(Dispatchers.IO) { store.load() }
                 loadConnection()
+                withContext(Dispatchers.IO) { noteStore.open(library.value.workspace) }
                 _ready.value = true
                 if (cloud.value.firstSyncPending) firstSync() else refresh()
                 library.collect {
                     chat.bind(it.workspace)
-                    if (it.profile == null) draft = null
+                    if (it.profile == null) {
+                        draft = null
+                        if (library.value.profile == null && noteDraft != null) closeNote()
+                    }
                     withContext(Dispatchers.IO) { DeadlineReminders.update(getApplication(), it) }
                 }
             } catch (failure: Exception) {
@@ -207,6 +217,165 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         }
         failure is java.io.IOException -> R.string.cloud_offline
         else -> R.string.cloud_error
+    }
+
+    fun openNote(id: String?, folderId: String?) {
+        val current = library.value
+        if (current.profile == null || noteDraft != null || openingNote) return
+        openingNote = true
+        viewModelScope.launch {
+            try {
+                val original = id?.let { withContext(Dispatchers.IO) { noteStore.read(current.workspace, it) } }
+                if (library.value.workspace != current.workspace) return@launch
+                if (id != null && original == null) {
+                    _error.value = R.string.note_unavailable
+                } else {
+                    val draft = NoteDraft(current.workspace, original, folderId?.let(::noteFolder))
+                    noteVoice.bind(draft.workspace, draft.id)
+                    noteDraft = draft
+                }
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _error.value = R.string.storage_error
+            } finally {
+                openingNote = false
+            }
+        }
+    }
+
+    fun copyNoteAsText(source: NoteDraft) {
+        if (noteDraft !== source || source.saving || source.transcribing || noteVoice.startedAt != null) return
+        val openCopy = {
+            val current = library.value
+            if (current.profile != null && current.workspace == source.workspace) {
+                val folder = source.folder.takeIf { selected -> current.folders.any { noteFolder(it.id) == selected } }
+                val copy = NoteDraft(current.workspace, null, folder).apply {
+                    title = source.title
+                    text = source.text.replace("\uFFFC", "")
+                }
+                noteVoice.bind(copy.workspace, copy.id)
+                noteDraft = copy
+            }
+        }
+        if (source.dirty) saveNote(source) { openCopy() } else openCopy()
+    }
+
+    fun closeNote() {
+        noteVoice.close(discard = noteDraft?.original == null)
+        noteDraft = null
+    }
+
+    override fun onCleared() {
+        noteVoice.suspendMedia()
+        super.onCleared()
+    }
+
+    suspend fun noteChatContext(workspace: String, id: String): NoteChatContext? = withContext(Dispatchers.IO) {
+        if (library.value.workspace != workspace) return@withContext null
+        runCatching { noteStore.read(workspace, id)?.document }.getOrNull()
+            ?.takeIf { it.deletedAt == null }
+            ?.let { NoteChatContext(it.title.take(500), it.text.take(12_000).replace("\uFFFC", "")) }
+    }
+
+    fun transcribeNote(draft: NoteDraft, selection: TranscriptionSelection) {
+        val clip = noteVoice.clip ?: return
+        if (noteDraft !== draft || draft.transcribing || draft.workspace != library.value.workspace) return
+        draft.transcribing = true
+        draft.transcript = null
+        draft.transcriptionError = null
+        viewModelScope.launch {
+            try {
+                val result = chat.transcribeVoice(draft.workspace, selection, clip)
+                if (noteDraft === draft) {
+                    draft.transcript = result.text
+                    if (result.cleanupFailed) draft.transcriptionError = R.string.voice_remote_cleanup_error
+                }
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                if (noteDraft === draft) {
+                    draft.transcriptionError = if (failure is VoiceRemoteCleanupFailed) R.string.voice_remote_cleanup_error
+                        else R.string.voice_transcript_error
+                }
+            } finally {
+                draft.transcribing = false
+            }
+        }
+    }
+
+    suspend fun searchNotes(workspace: String, text: String): Set<String> = try {
+        withContext(Dispatchers.IO) { noteStore.search(workspace, text) }
+    } catch (failure: Exception) {
+        if (failure is CancellationException) throw failure
+        _error.value = R.string.storage_error
+        emptySet()
+    }
+
+    fun autosaveNote(draft: NoteDraft) {
+        if (draft.original != null && draft.dirty) saveNote(draft, closeAfterSave = false)
+    }
+
+    fun saveNote(draft: NoteDraft, closeAfterSave: Boolean = true, done: (String) -> Unit = {}) {
+        val current = library.value
+        if (noteDraft !== draft || draft.saving || noteVoice.startedAt != null ||
+            current.workspace != draft.workspace || current.profile == null) return
+        if (draft.persisting) {
+            if (closeAfterSave || draft.afterPersist == null) {
+                draft.afterPersist = {
+                    if (closeAfterSave) saveNote(draft, done = done) else autosaveNote(draft)
+                }
+            }
+            return
+        }
+        val baseline = draft.original
+        val original = baseline?.document
+        if (original != null && !draft.dirty) {
+            if (closeAfterSave) {
+                closeNote()
+                done(original.id)
+            }
+            return
+        }
+        val folder = draft.folder
+        if (folder != NOTE_WITHOUT_FOLDER && folder != original?.folder && current.folders.none { noteFolder(it.id) == folder }) {
+            draft.error = R.string.note_choose_folder
+            return
+        }
+        val now = noteTime()
+        val richText = draft.richText ?: SharedNoteText().takeIf {
+            original == null && notes.value.workspace == current.workspace && notes.value.formatVersion >= NOTE_FORMAT_VERSION
+        }
+        val note = (original ?: NoteDocument(draft.id, folder, createdAt = now)).copy(
+            folder = folder, title = draft.title.trim(), text = draft.text, pinned = draft.pinned, richText = richText,
+            updatedAt = now, deletedAt = if (draft.trashed) original?.deletedAt ?: now else null,
+        )
+        draft.persisting = true
+        draft.saving = closeAfterSave
+        draft.error = null
+        viewModelScope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) { noteStore.save(current.workspace, baseline, note) }
+                if (noteDraft === draft) {
+                    if (closeAfterSave) {
+                        noteVoice.close()
+                        noteDraft = null
+                    } else {
+                        if (saved.document.id != draft.id) noteVoice.bind(draft.workspace, saved.document.id)
+                        draft.acknowledge(saved)
+                    }
+                    done(saved.document.id)
+                }
+                refresh()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                draft.error = if (failure is NoteTooLarge) R.string.note_too_large else R.string.storage_error
+            } finally {
+                draft.persisting = false
+                draft.saving = false
+                val followUp = draft.afterPersist
+                draft.afterPersist = null
+                if (noteDraft === draft) followUp?.invoke()
+            }
+        }
     }
 
     fun saveTask(

@@ -57,6 +57,7 @@ internal fun Settings(
     calendar: DeviceCalendar, calendarRefresh: Int, calendarSettings: () -> Unit, chatSettings: () -> Unit,
 ) {
     var signOut by rememberSaveable { mutableStateOf(false) }
+    var chooseSpeech by rememberSaveable { mutableStateOf(false) }
     val profile = requireNotNull(library.profile)
     val chat by model.chat.state.collectAsState()
     Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -87,9 +88,16 @@ internal fun Settings(
                 SettingsLink(R.drawable.ic_chat, R.string.chat_choose_model,
                     summary = chat.activeModelLabel?.let { stringResource(R.string.chat_current_model, it) }
                         ?: stringResource(R.string.chat_no_models), onClick = chatSettings)
+                SettingsLink(R.drawable.ic_waveform, R.string.voice_model,
+                    summary = chat.transcription?.let { "${it.provider.label} · ${it.label}" }
+                        ?: stringResource(R.string.voice_model_unset)) {
+                    model.chat.clearCandidate()
+                    chooseSpeech = true
+                }
             }
         }
     }
+    if (chooseSpeech) TranscriptionConnectionDialog(model.chat) { chooseSpeech = false }
     if (signOut) {
         Confirm(R.string.sign_out, R.string.sign_out_hint, R.string.sign_out, { signOut = false }) {
             signOut = false

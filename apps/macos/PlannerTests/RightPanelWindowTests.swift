@@ -96,6 +96,56 @@ struct RightPanelWindowTests {
         #expect(assistantClicks == (panel == .calendar ? 1 : 0))
     }
 
+    @Test(arguments: [1100.0, 1400.0], [RightPanel.calendar, .assistant])
+    func panelsOpenedAfterLaunchKeepTheSameCornerRadius(width: Double, first: RightPanel) async throws {
+        let size = NSSize(width: width, height: 640)
+        let container = WorkspaceContainerController()
+        container.view.frame.size = size
+        let workspace = container.workspace
+        workspace.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
+            taskActions: AnyView(EmptyView()), isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
+            folderTitle: "Входящие", taskCountTitle: "Задач: 1", newTaskTitle: "Создать", newChecklistItemTitle: "Подзадача",
+            taskActionsTitle: "Действия с задачей", hasSelectedTask: false, newFolder: {}, newTask: {}, newChecklistItem: {},
+            sidebarVisibilityChanged: { _ in })
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentViewController = container
+        window.orderFront(nil)
+        defer { window.orderOut(nil); container.detachWindow(); window.close() }
+
+        func show(_ panel: RightPanel) {
+            container.update(calendar: AnyView(EmptyView()), visible: true, width: panel == .assistant ? 420 : 340,
+                sidebarVisible: true, panel: panel,
+                minimumWidth: panel == .assistant ? CalendarPanelLayout.assistantMinimumWidth : CalendarPanelLayout.minimumWidth,
+                maximumWidth: panel == .assistant ? CalendarPanelLayout.assistantMaximumWidth : CalendarPanelLayout.maximumWidth,
+                widthChanged: { _ in }, visibilityChanged: { _ in }, updateToolbar: { active in
+                    workspace.updateRightPanelToolbar(active: active, calendarTitle: "Календарь", assistantTitle: "ИИ-чат",
+                        headingTitle: panel == .assistant ? "Помощник" : "Календарь", toggleCalendar: {}, toggleAssistant: {})
+                })
+            container.view.layoutSubtreeIfNeeded()
+        }
+
+        try await Task.sleep(for: .milliseconds(400))
+        let isOverlay = width == 1100
+        for panel in [first, first == .calendar ? .assistant : .calendar, first] {
+            show(panel)
+            try await Task.sleep(for: .milliseconds(700))
+            let host = try #require((container.children + workspace.children)
+                .compactMap { $0 as? CalendarSidebarController }.first)
+            #expect(host.usesOverlayChrome == isOverlay)
+            let glass: NSGlassEffectView
+            if isOverlay {
+                glass = try #require(host.view.subviews.compactMap { $0 as? NSGlassEffectView }.first)
+            } else {
+                let parent = try #require(host.view.superview)
+                glass = try #require(sequence(first: parent, next: { $0.superview }).first { $0 is NSGlassEffectView }
+                    as? NSGlassEffectView)
+            }
+            #expect(glass.cornerRadius == 18)
+        }
+    }
+
     @Test(arguments: [1100.0, 1140.0, 1170.0, 1180.0, 1400.0])
     func restoredChatSwitchesToCalendarWithoutResizingTheWindow(width: Double) async throws {
         let container = WorkspaceContainerController()

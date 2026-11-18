@@ -100,6 +100,24 @@ test('notes sync across devices with idempotent writes, conflict checks and acco
   assert.deepEqual((await snapshot(first)).entities, []);
 });
 
+test('shared rich notes keep their formatting when an older client tries to save', async () => {
+  const mac = await account();
+  const android = await login();
+  const path = '/v1/notes/' + randomUUID();
+  const encode = body => Buffer.from(JSON.stringify(body)).toString('base64');
+  const legacy = { text: 'Bold', document: '' };
+  const shared = { ...legacy, richText: { version: 1, spans: [{ start: 0, end: 4, bold: true }] } };
+  const created = await api('PUT', path, { baseRevision: null, data: encode(legacy) }, mac);
+  const upgraded = await api('PUT', path, { baseRevision: created.json().revision, data: encode(shared) }, mac);
+  assert.equal(upgraded.statusCode, 200, upgraded.body);
+  const revision = upgraded.json().revision;
+  const downgrade = await api('PUT', path, { baseRevision: revision, data: encode(legacy) }, android);
+  assert.equal(downgrade.statusCode, 409);
+  assert.equal(downgrade.json().error.code, 'note_format_requires_update');
+  assert.deepEqual((await api('GET', path, undefined, android)).json(), { revision, data: encode(shared) });
+  assert.equal((await api('GET', '/v1/config')).json().limits.maxNoteFormatVersion, 1);
+});
+
 test('OpenAPI describes every success/error response, binary upload and retry headers',async()=>{
  const doc=(await api('GET','/v1/openapi.json')).json();
  assert.equal(doc.info.version,SERVER_VERSION);assert.ok(doc.components.schemas.TaskEntity);assert.ok(doc.components.schemas.LoginResponse);
@@ -217,4 +235,100 @@ test('backup verification rejects symlinked files and directories escaping the s
  const blobId=randomUUID();await writeFile(join(outside,blobId),'abc');await symlink(outside,join(stage,'blobs'));await writeFile(join(stage,'database.dump'),'dump');
  await writeFile(join(stage,'manifest.json'),JSON.stringify({formatVersion:1,backupId:randomUUID(),files:[{path:'database.dump',size:4,sha256:hash('dump')},{path:'blobs/'+blobId,size:3,sha256:hash('abc')}]}));
  await assert.rejects(()=>verifyBackup(root,stage));
+});
+
+test('note and task stream signals committed writes to other sessions in the same library', { timeout: 30_000 }, async () => {
+  const writer = await account();
+  const reader = await login();
+  const other = await account('bob@example.test');
+  const { app: eventApp } = await buildApp(config, db);
+  const abort = new AbortController();
+  try {
+    const origin = await eventApp.listen({ host: '127.0.0.1', port: 0 });
+    const endpoint = origin + '/v1/notes/events';
+    assert.equal((await fetch(endpoint)).status, 401);
+    const limits = (await api('GET', '/v1/config')).json().limits;
+    assert.equal(limits.noteEventsVersion, 1);
+    assert.equal(limits.taskEventsVersion, 1);
+    async function subscribe(identity) {
+      const response = await fetch(endpoint, {
+        headers: { authorization: 'Bearer ' + identity.accessToken },
+        signal: abort.signal
+      });
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('content-type'), /^text\/event-stream/);
+      const decoder = new TextDecoder();
+      const stream = response.body.getReader();
+      let buffer = '';
+      async function next() {
+        while (!buffer.includes('\n\n')) {
+          const { value, done } = await stream.read();
+          if (done) return null;
+          buffer += decoder.decode(value, { stream: true });
+        }
+        const position = buffer.indexOf('\n\n');
+        const frame = buffer.slice(0, position);
+        buffer = buffer.slice(position + 2);
+        return frame;
+      }
+      assert.equal(await next(), 'event: ready\ndata: {}');
+      return next;
+    }
+
+    const [nextReader, nextWriter, nextOther] = await Promise.all(
+      [reader, writer, other].map(subscribe)
+    );
+    // Two heartbeats span the API server's 15-second socket timeout.
+    for (let i = 0; i < 2; i++) {
+      for (const frame of await Promise.all([nextReader(), nextWriter(), nextOther()])) {
+        assert.equal(frame, ': keep-alive');
+      }
+    }
+
+    // The HTTP API and the event stream use separate app instances.
+    const url = '/v1/notes/' + randomUUID();
+    const note = { baseRevision: null, data: Buffer.from('First version').toString('base64') };
+    const first = await api('PUT', url, note, writer);
+    assert.equal(first.statusCode, 200);
+    assert.equal(await nextReader(), 'event: notes.changed\ndata: {}');
+    assert.equal((await api('GET', url, undefined, reader)).json().revision, first.json().revision);
+
+    assert.equal((await api('PUT', url, note, writer)).statusCode, 200);
+    assert.equal((await api('PUT', url, { ...note, data: 'eA==' }, writer)).statusCode, 409);
+
+    // A failed import may publish one mutation internally before rolling it back.
+    const firstTask = task(writer);
+    const importId = randomUUID();
+    assert.equal((await api('POST', '/v1/library/imports', { importId }, writer)).statusCode, 200);
+    const invalid = task(writer);
+    invalid.changes.placement.value = { kind: 'folder', folderId: randomUUID() };
+    invalid.operationId = 'ffffffff-ffff-4fff-afff-ffffffffffff';
+    for (const field of Object.values(invalid.changes)) field.version.operationId = invalid.operationId;
+    assert.equal((await api('POST', `/v1/library/imports/${importId}/mutations`,
+      { mutations: [firstTask, invalid] }, writer)).statusCode, 200);
+    assert.equal((await api('POST', `/v1/library/imports/${importId}/commit`, {}, writer)).statusCode, 409);
+
+    await initialize(writer, [firstTask, task(writer)]);
+    assert.equal(await nextReader(), 'event: tasks.changed\ndata: {}');
+    const edit = operation(writer, 'task', firstTask.entityId, { title: 'Updated task' }, 'update', Date.now());
+    assert.equal((await send(writer, [edit]))[0].status, 'applied');
+    assert.equal(await nextReader(), 'event: tasks.changed\ndata: {}');
+    const page = (await api('GET', '/v1/sync/changes?cursor=2', undefined, reader)).json();
+    assert.equal(page.changes.length, 1);
+    assert.equal(page.changes[0].entity.fields.title, 'Updated task');
+
+    await send(writer, [edit]);
+    const stale = operation(writer, 'task', firstTask.entityId, { title: 'Stale task' }, 'update', Date.now() - 60_000);
+    await send(writer, [stale]);
+
+    for (const [identity, next] of [[reader, nextReader], [writer, nextWriter], [other, nextOther]]) {
+      assert.equal((await api('POST', '/v1/auth/logout', {}, identity)).statusCode, 200);
+      // Additional frames here would leak the writer's own event, another account's event,
+      // or a signal for the idempotent/rejected writes above.
+      assert.equal(await next(), null);
+    }
+  } finally {
+    abort.abort();
+    await eventApp.close();
+  }
 });

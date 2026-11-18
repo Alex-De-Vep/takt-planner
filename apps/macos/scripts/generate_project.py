@@ -34,6 +34,11 @@ project_configs = configurations("project", {
     "CODE_SIGN_IDENTITY": "-", "CODE_SIGN_STYLE": "Manual", "COMBINE_HIDPI_IMAGES": "YES",
     "GCC_C_LANGUAGE_STANDARD": "gnu17", "CLANG_WARN_DOCUMENTATION_COMMENTS": "YES",
     "GCC_WARN_UNUSED_VARIABLE": "YES", "CLANG_WARN_UNREACHABLE_CODE": "YES",
+    # Local builds use ad-hoc signing. The DMG packager can re-sign both bundles.
+    "PROVISIONING_PROFILE_SUPPORTED": "NO",
+    "PLANNER_APP_BUNDLE_IDENTIFIER": "local.planner.Planner",
+    "PLANNER_APP_ENTITLEMENTS": "Planner/Planner.entitlements",
+    "PLANNER_WIDGET_APP_GROUP": "group.local.planner.today",
 })
 localization_package = add("localization-package", "XCLocalSwiftPackageReference", relativePath="Packages/PlannerLocalization")
 localization_product = add("localization-product", "XCSwiftPackageProductDependency", productName="PlannerLocalization", package=localization_package)
@@ -42,28 +47,34 @@ localization_build = add("localization-link", "PBXBuildFile", productRef=localiz
 mlx_package = add("mlx-package", "XCRemoteSwiftPackageReference", repositoryURL="https://github.com/ml-explore/mlx-swift-lm.git", requirement={"kind": "exactVersion", "version": "2.31.3"})
 mlx_products = [add("mlx-product-" + name, "XCSwiftPackageProductDependency", productName=name, package=mlx_package) for name in ("MLXLLM", "MLXLMCommon")]
 mlx_builds = [add("mlx-link-" + name, "PBXBuildFile", productRef=product) for name, product in zip(("MLXLLM", "MLXLMCommon"), mlx_products)]
-groups = []
+shared_widget_group = add("widget-shared-sources", "PBXFileSystemSynchronizedRootGroup",
+                          path="TodayWidgetShared", sourceTree="<group>")
+groups = [shared_widget_group]
 products = []
 targets = []
 for name, product_type, extension in (
     ("Planner", "com.apple.product-type.application", "app"),
     ("PlannerTests", "com.apple.product-type.bundle.unit-test", "xctest"),
     ("PlannerUITests", "com.apple.product-type.bundle.ui-testing", "xctest"),
+    ("TodayWidget", "com.apple.product-type.app-extension", "appex"),
 ):
     group = add(f"{name}-sources", "PBXFileSystemSynchronizedRootGroup", path=name, sourceTree="<group>")
     groups.append(group)
     product_name = "Takt" if name == "Planner" else name
-    product = add(f"{name}-product", "PBXFileReference", explicitFileType="wrapper.application" if name == "Planner" else "wrapper.cfbundle",
+    file_type = {"app": "wrapper.application", "appex": "wrapper.app-extension", "xctest": "wrapper.cfbundle"}
+    product = add(f"{name}-product", "PBXFileReference", explicitFileType=file_type[extension],
                   includeInIndex=0, path=f"{product_name}.{extension}", sourceTree="BUILT_PRODUCTS_DIR")
     products.append(product)
     settings = {
         "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.21", "CURRENT_PROJECT_VERSION": "105", "ARCHS": "arm64",
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.27", "CURRENT_PROJECT_VERSION": "111", "ARCHS": "arm64",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
         settings.update(PRODUCT_NAME=product_name, PRODUCT_MODULE_NAME=name,
-                        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)", CODE_SIGN_ENTITLEMENTS="Planner/Planner.entitlements", ENABLE_APP_SANDBOX="YES",
+                        PRODUCT_BUNDLE_IDENTIFIER="$(PLANNER_APP_BUNDLE_IDENTIFIER)",
+                        SWIFT_ACTIVE_COMPILATION_CONDITIONS="$(inherited) $(PLANNER_EXTRA_SWIFT_FLAGS)",
+                        CODE_SIGN_ENTITLEMENTS="$(PLANNER_APP_ENTITLEMENTS)", ENABLE_APP_SANDBOX="YES",
                         INFOPLIST_FILE="Configuration/Planner-Info.plist",
                         ENABLE_HARDENED_RUNTIME="YES", ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME="AccentColor",
                         ASSETCATALOG_COMPILER_APPICON_NAME="TasksIcon",
@@ -72,6 +83,13 @@ for name, product_type, extension in (
                         INFOPLIST_KEY_NSMicrophoneUsageDescription="Takt использует микрофон, чтобы записать голос для расшифровки в заметке.",
                         INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Takt нужен доступ к календарям для просмотра событий и планирования времени.",
                         INFOPLIST_KEY_NSHumanReadableCopyright="", INFOPLIST_KEY_CFBundleDevelopmentRegion="ru")
+    elif name == "TodayWidget":
+        settings.update(PRODUCT_BUNDLE_IDENTIFIER="$(PLANNER_APP_BUNDLE_IDENTIFIER).TodayWidget",
+                        INFOPLIST_FILE="Configuration/TodayWidget-Info.plist",
+                        INFOPLIST_KEY_CFBundleDisplayName="Takt",
+                        CODE_SIGN_ENTITLEMENTS="Configuration/TodayWidget.entitlements",
+                        APPLICATION_EXTENSION_API_ONLY="YES", ENABLE_APP_SANDBOX="YES",
+                        ENABLE_HARDENED_RUNTIME="YES", SKIP_INSTALL="YES")
     elif name == "PlannerTests":
         settings.update(TEST_HOST="$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt", BUNDLE_LOADER="$(TEST_HOST)")
     else:
@@ -81,12 +99,21 @@ for name, product_type, extension in (
     if name == "Planner":
         objects[identifier(f"{name}-Frameworks")]["files"] = [localization_build] + mlx_builds
     dependencies = []
-    if name != "Planner":
+    dependency = {"Planner": "TodayWidget", "PlannerTests": "Planner", "PlannerUITests": "Planner"}.get(name)
+    if dependency:
+        target = identifier(f"{dependency}-target")
         proxy = add(f"{name}-proxy", "PBXContainerItemProxy", containerPortal=identifier("project"), proxyType=1,
-                    remoteGlobalIDString=identifier("Planner-target"), remoteInfo="Planner")
-        dependencies.append(add(f"{name}-dependency", "PBXTargetDependency", target=identifier("Planner-target"), targetProxy=proxy))
+                    remoteGlobalIDString=target, remoteInfo=dependency)
+        dependencies.append(add(f"{name}-dependency", "PBXTargetDependency", target=target, targetProxy=proxy))
+    if name == "Planner":
+        widget = add("embed-widget-build", "PBXBuildFile", fileRef=identifier("TodayWidget-product"),
+                     settings={"ATTRIBUTES": ["CodeSignOnCopy", "RemoveHeadersOnCopy"]})
+        phases.append(add("embed-widget-phase", "PBXCopyFilesBuildPhase", name="Embed Widget Extension",
+                          buildActionMask=2147483647, dstPath="", dstSubfolderSpec=13, files=[widget],
+                          runOnlyForDeploymentPostprocessing=0))
+    source_groups = [group, shared_widget_group] if name in ("Planner", "TodayWidget") else [group]
     targets.append(add(f"{name}-target", "PBXNativeTarget", buildConfigurationList=configurations(name, settings),
-                       buildPhases=phases, buildRules=[], dependencies=dependencies, fileSystemSynchronizedGroups=[group],
+                       buildPhases=phases, buildRules=[], dependencies=dependencies, fileSystemSynchronizedGroups=source_groups,
                        packageProductDependencies=[localization_product] + mlx_products if name == "Planner" else [],
                        name=name, productName=product_name, productReference=product, productType=product_type))
 

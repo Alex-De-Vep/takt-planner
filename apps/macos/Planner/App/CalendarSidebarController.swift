@@ -4,6 +4,7 @@ import SwiftUI
 /// Содержимое календаря сохраняется при переходе между системной колонкой и накладной панелью.
 @MainActor
 final class CalendarSidebarController: NSViewController {
+    private static let cornerRadius: CGFloat = 18
     private let contentHost = NSHostingController(rootView: AnyView(EmptyView()))
     private let glass = NSGlassEffectView()
     var usesOverlayChrome = false {
@@ -23,13 +24,26 @@ final class CalendarSidebarController: NSViewController {
         addChild(contentHost)
         glass.style = .regular
         // Скругление повторяет видимый контур нативной панели папок при отступе 8 pt.
-        glass.cornerRadius = 18
+        glass.cornerRadius = Self.cornerRadius
         root.addSubview(glass)
         root.layoutContent = { [weak self] in self?.layoutContent() }
         configureChrome()
     }
 
     func updateContent(_ content: AnyView) { contentHost.rootView = content }
+
+    func updateColumnCorners() {
+        guard !usesOverlayChrome, isViewLoaded else { return }
+        // AppKit wraps a late-added sidebar in glass with a smaller corner radius.
+        var ancestor = view.superview
+        while let parent = ancestor {
+            if let columnGlass = parent as? NSGlassEffectView {
+                if columnGlass.cornerRadius != Self.cornerRadius { columnGlass.cornerRadius = Self.cornerRadius }
+                return
+            }
+            ancestor = parent.superview
+        }
+    }
 
     private func configureChrome() {
         guard let root = view as? CalendarSidebarSurface else { return }
@@ -54,7 +68,10 @@ final class CalendarSidebarController: NSViewController {
             glass.frame = NSRect(x: inset, y: inset, width: max(0, view.bounds.width - 2 * inset),
                                  height: max(0, view.bounds.height - 2 * inset))
             contentHost.view.frame = glass.bounds
-        } else { contentHost.view.frame = view.bounds }
+        } else {
+            contentHost.view.frame = view.bounds
+            updateColumnCorners()
+        }
     }
 }
 

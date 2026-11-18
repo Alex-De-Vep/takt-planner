@@ -4,6 +4,39 @@ import Testing
 @testable import Planner
 
 @MainActor struct NoteTests {
+    @Test func onlyNewCloudNotesUseSharedFormatEvenWhileLoadingServerConfig() throws {
+        let store = NoteStore()
+        let oldID = try #require(store.create(folder: "inbox"))
+        store.edit(oldID, content: NSAttributedString(string: "Old document"))
+        #expect(store.flush())
+
+        store.awaitingCloudNoteFormat = true
+        let newID = try #require(store.create(folder: "inbox"))
+        #expect(store.notes.first?.richText?.version == SharedNoteText.currentVersion)
+        store.sharedFormatLimit = 8 * 1024 * 1024
+        store.awaitingCloudNoteFormat = false
+        let value = NSMutableAttributedString(string: "🚀 Android link\n• Bullet",
+            attributes: [.font: NSFont.systemFont(ofSize: 16), .foregroundColor: NSColor.labelColor])
+        value.addAttribute(.font, value: NSFont.boldSystemFont(ofSize: 24), range: NSRange(location: 0, length: 2))
+        value.addAttribute(.link, value: URL(string: "https://example.test")!, range: NSRange(location: 3, length: 12))
+        store.edit(newID, content: value)
+        store.edit(oldID, content: NSAttributedString(string: "Old document edited"))
+        #expect(store.flush())
+
+        let old = try #require(store.notes.first { $0.id == oldID })
+        #expect(old.richText == nil)
+        #expect(!old.document.isEmpty)
+        let note = try #require(store.notes.first { $0.id == newID })
+        #expect(note.document.isEmpty)
+        let body = try #require(note.richText)
+        #expect(body.spans.first?.end == 2)
+        #expect(body.spans.first?.bold == true)
+        let wire = try NoteStore.wireData(note)
+        let restored = try JSONDecoder().decode(PlannerNote.self, from: wire)
+        #expect(restored.attributedText().string == value.string)
+        #expect(restored.attributedText().attribute(.link, at: 3, effectiveRange: nil) as? URL == URL(string: "https://example.test"))
+    }
+
     @Test func conflictKeepsOfflineEditAfterRestartAndCloudTrashCanBeRestored() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: "TaktNotes-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }

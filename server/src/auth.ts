@@ -4,8 +4,8 @@ import type { Config } from './config.js';
 import type { Database, Tx } from './db.js';
 import { ApiError, fail, requireValue } from './errors.js';
 import { checkPassword, code, codeHash, digest, email, hashPassword, password, queueMail, rateLimit, rateLimitMany, same, token, uuid } from './security.js';
-export interface Identity { userId: string; libraryId: string; sessionId: string; deviceId: string; email: string; }
-export interface AuthService { authenticate(request: FastifyRequest): Promise<Identity>; }
+export interface Identity { userId: string; libraryId: string; sessionId: string; deviceId: string; email: string; expiresAt: Date; }
+export interface AuthService { authenticate(request: FastifyRequest, revalidate?: boolean): Promise<Identity>; }
 const generic = { message: 'Если адрес доступен для этой операции, письмо будет отправлено' };
 export async function installAuth(app: FastifyInstance, db: Database, config: Config): Promise<AuthService> {
   // Проверка неизвестного пользователя тоже выполняет Argon2, без быстрого раскрытия существования аккаунта.
@@ -41,17 +41,18 @@ export async function installAuth(app: FastifyInstance, db: Database, config: Co
     await tx.query(`INSERT INTO refresh_tokens(hash,session_id,expires_at) SELECT $1,id,LEAST(absolute_expires_at,now()+interval '30 days') FROM sessions WHERE id=$2`,[digest(refreshToken),sessionId]);
     return { accessToken, refreshToken, expiresIn:900, tokenType:'Bearer' };
   }
-  async function authenticate(request: FastifyRequest): Promise<Identity> {
-    const cached=identities.get(request);if(cached)return cached;
+  async function authenticate(request: FastifyRequest, revalidate = false): Promise<Identity> {
+    const cached=identities.get(request);if(cached&&!revalidate)return cached;
     const header = request.headers.authorization;
     if (!header?.startsWith('Bearer ') || header.length > 256) fail(401,'unauthorized','Требуется вход');
-    const r = await db.pool.query(`SELECT u.id AS user_id,u.email,l.id AS library_id,s.id AS session_id,s.device_id
+    const r = await db.pool.query(`SELECT u.id AS user_id,u.email,l.id AS library_id,s.id AS session_id,s.device_id,
+        LEAST(a.expires_at,s.absolute_expires_at,s.idle_expires_at) AS expires_at
       FROM access_tokens a JOIN sessions s ON s.id=a.session_id JOIN users u ON u.id=s.user_id JOIN libraries l ON l.owner_id=u.id
       WHERE a.hash=$1 AND a.expires_at>now() AND s.revoked_at IS NULL AND s.absolute_expires_at>now() AND s.idle_expires_at>now() AND u.verified_at IS NOT NULL AND u.deleted_at IS NULL`,[digest(header.slice(7))]);
     if (!r.rowCount) fail(401,'unauthorized','Требуется повторный вход');
     const v=r.rows[0];
-    await rateLimit(db,`api-user:${v.user_id}`,config.userRequestsPerMinute,60);
-    const identity={userId:v.user_id,email:v.email,libraryId:v.library_id,sessionId:v.session_id,deviceId:v.device_id};
+    if(!cached) await rateLimit(db,`api-user:${v.user_id}`,config.userRequestsPerMinute,60);
+    const identity={userId:v.user_id,email:v.email,libraryId:v.library_id,sessionId:v.session_id,deviceId:v.device_id,expiresAt:v.expires_at};
     identities.set(request,identity);return identity;
   }
   app.post('/v1/auth/register',async request => {

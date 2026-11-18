@@ -91,19 +91,21 @@ internal fun AccountEntry(cloud: CloudState, model: PlannerModel) {
 
 @Composable
 private fun Welcome(open: (AccountForm) -> Unit) {
-    val pager = rememberPagerState { 4 }
+    val pages = listOf(
+        Triple(R.drawable.ic_list, R.string.welcome_tasks, R.string.welcome_tasks_hint),
+        Triple(R.drawable.ic_note, R.string.notes, R.string.welcome_notes_hint),
+        Triple(R.drawable.ic_calendar, R.string.events, R.string.welcome_events_hint),
+        Triple(R.drawable.ic_chat, R.string.chat, R.string.welcome_chat_hint),
+        Triple(R.drawable.ic_sync, R.string.welcome_account_title, R.string.welcome_account_hint),
+    )
+    val pager = rememberPagerState { pages.size }
     val scope = rememberCoroutineScope()
     HorizontalPager(
         state = pager,
         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) { page ->
-        val (icon, title, hint) = when (page) {
-            0 -> Triple(R.drawable.ic_list, R.string.welcome_tasks, R.string.welcome_tasks_hint)
-            1 -> Triple(R.drawable.ic_calendar, R.string.events, R.string.welcome_events_hint)
-            2 -> Triple(R.drawable.ic_chat, R.string.chat, R.string.welcome_chat_hint)
-            else -> Triple(R.drawable.ic_sync, R.string.welcome_account_title, R.string.welcome_account_hint)
-        }
+        val (icon, title, hint) = pages[page]
         Column(Modifier.padding(horizontal = 20.dp)) {
             EmptyPanel(
                 icon, title, hint,

@@ -16,6 +16,7 @@ internal enum class GatewayProvider(
     val configuredModels: List<String>? = null,
 ) {
     ChatGPT("ChatGPT", listOf("https://api.openai.com/v1"), GatewayWire.Responses),
+    OpenAI("OpenAI API", listOf("https://api.openai.com/v1"), GatewayWire.Responses),
     OpenRouter("OpenRouter", listOf("https://openrouter.ai/api/v1")),
     LiteLLM("LiteLLM", emptyList()),
     Copilot("GitHub Copilot", emptyList()),
@@ -51,6 +52,7 @@ internal enum class GatewayProvider(
         val lower = id.lowercase()
         return when (this) {
             ChatGPT, Yandex, Copilot -> true
+            OpenAI -> true.takeIf { lower.startsWith("gpt-") && lower !in openAiSpeechModels }
             Claude -> lower.startsWith("claude-")
             Gemini -> lower.startsWith("gemini-") &&
                 listOf("image", "tts", "live", "audio", "robotics", "deep-research").none(lower::contains)
@@ -70,7 +72,9 @@ internal enum class GigaScope(val wire: String, val label: Int) {
     Corporate("GIGACHAT_API_CORP", R.string.chat_giga_corporate),
 }
 
-internal data class GatewayCandidate(val connection: GatewayConnection, val models: List<GatewayModel>)
+internal data class GatewayCandidate(
+    val connection: GatewayConnection, val models: List<GatewayModel>, val transcription: Boolean = false,
+)
 internal data class GatewayAnswer(val text: String, val name: String? = null, val arguments: String? = null)
 internal data class GatewayOptions(val modelIds: String = "", val project: String = "", val scope: GigaScope = GigaScope.Personal)
 
@@ -209,7 +213,7 @@ internal class ProviderGateway(private val request: GatewayRequest = providerReq
         return decodeProviderAnswer(raw, provider.wire)
     }
 
-    private fun headers(connection: GatewayConnection): Map<String, String> = when {
+    fun headers(connection: GatewayConnection): Map<String, String> = when {
         connection.kind == GatewayProvider.GigaChat -> mapOf("Authorization" to "Bearer " + gigaToken(connection))
         connection.kind == GatewayProvider.Yandex -> mapOf("Authorization" to "Api-Key ${connection.key}",
             "OpenAI-Project" to requireNotNull(connection.project))
@@ -241,6 +245,43 @@ internal class ProviderGateway(private val request: GatewayRequest = providerReq
     private fun objectRequest(url: String, headers: Map<String, String>) =
         JsonParser.parseString(request(url, headers, null, JSON_TYPE)).asJsonObject
 
+    fun transcriptionCatalog(connection: GatewayConnection): List<GatewayModel> {
+        val provider = connection.kind
+        require(provider in transcriptionProviders && provider.address(connection.address) == connection.address)
+        val fixedModels = fixedTranscriptionModels[provider]
+        if (fixedModels != null) return fixedModels
+        if (provider == GatewayProvider.Gemini) return geminiModels(connection).filter { it.id in geminiSpeechModels }
+
+        val address = when (provider) {
+            GatewayProvider.LiteLLM -> connection.address.removeSuffix("/v1") + "/model/info"
+            GatewayProvider.OpenRouter -> connection.address + "/models?output_modalities=transcription"
+            else -> connection.address + "/models"
+        }
+        val root = try {
+            objectRequest(address, headers(connection))
+        } catch (failure: ServerFailure) {
+            if (provider == GatewayProvider.LiteLLM && failure.status in listOf(403, 404)) return emptyList()
+            throw failure
+        }
+        return (root["data"] as? JsonArray)?.mapNotNull { raw ->
+            val item = raw as? JsonObject ?: return@mapNotNull null
+            val id = item.string(if (provider == GatewayProvider.LiteLLM) "model_name" else "id")
+                ?.takeIf(::validTranscriptionModel) ?: return@mapNotNull null
+            val supported = when (provider) {
+                GatewayProvider.OpenAI -> id in openAiSpeechModels
+                GatewayProvider.GigaChat -> {
+                    val modes = (item["input_modalities"] as? JsonArray)
+                        ?: ((item["architecture"] as? JsonObject)?.get("input_modalities") as? JsonArray)
+                    modes?.any { it.isJsonPrimitive && it.asString.equals("audio", ignoreCase = true) }
+                        ?: (id.lowercase() in gigaSpeechModels)
+                }
+                GatewayProvider.LiteLLM -> (item["model_info"] as? JsonObject)?.string("mode") == "audio_transcription"
+                else -> true
+            }
+            GatewayModel(id, null, item.string("display_name") ?: item.string("name")).takeIf { supported }
+        }?.distinctBy(GatewayModel::id).orEmpty()
+    }
+
     private fun catalog(root: JsonObject, provider: GatewayProvider): List<GatewayModel> {
         val rows = root.getAsJsonArray("data") ?: root.getAsJsonArray("models") ?: error("Missing model catalog")
         return rows.mapNotNull { raw ->
@@ -249,6 +290,7 @@ internal class ProviderGateway(private val request: GatewayRequest = providerReq
             val modelId = if (provider == GatewayProvider.ChatGPT) item.string("slug") else item.string("id")
             val id = modelId?.takeIf { it.isNotBlank() && it.length <= 200 }
                 ?: return@mapNotNull null
+            if (provider == GatewayProvider.OpenAI && id in openAiSpeechModels) return@mapNotNull null
             val capabilities = item["capabilities"] as? JsonObject
             val info = item["model_info"] as? JsonObject
             val tools = (item["supports_function_calling"] ?: capabilities?.get("tools") ?: info?.get("supports_function_calling"))

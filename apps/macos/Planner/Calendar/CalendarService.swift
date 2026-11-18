@@ -171,12 +171,12 @@ final class EventKitAdapter: CalendarStore {
         CalendarEvent(identifier: event.eventIdentifier ?? event.calendarItemIdentifier, externalIdentifier: event.calendarItemExternalIdentifier,
                       calendarID: event.calendar.calendarIdentifier, title: event.title ?? "", start: event.startDate, end: event.endDate,
                       allDay: event.isAllDay, notes: event.notes ?? "",
-                      recurring: Self.isRecurring(event),
+                      recurring: Self.isRecurring(hasRecurrenceRules: event.hasRecurrenceRules, isDetached: event.isDetached),
                       writable: event.calendar.allowsContentModifications, alarms: EventKitAlarms.snapshot(event.alarms ?? []))
     }
-    static func isRecurring(_ event: EKEvent) -> Bool {
+    static func isRecurring(hasRecurrenceRules: Bool, isDetached: Bool) -> Bool {
         // Дата вхождения сама по себе не задаёт повтор: ориентируемся на правила серии и её исключения.
-        event.hasRecurrenceRules || event.isDetached
+        hasRecurrenceRules || isDetached
     }
     private func editable(_ original: CalendarEvent) throws -> EKEvent {
         guard let event = store.event(withIdentifier: original.identifier) else { throw CalendarFailure(message: "Событие больше недоступно. Возможно, оно удалено или перемещено.") }

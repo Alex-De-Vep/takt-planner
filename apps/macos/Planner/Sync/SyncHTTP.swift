@@ -92,6 +92,7 @@ actor SyncHTTP {
     static let production = URL(string: "https://takt-server.tail037e91.ts.net")!
     private let origin: URL
     private let session: URLSession
+    private let eventSession: URLSession
     private let store: any SyncCredentialStore
     private var accessToken: String?
     private var expiry = Date.distantPast
@@ -103,6 +104,7 @@ actor SyncHTTP {
         self.store = store
         if let session {
             self.session = session
+            eventSession = session
         } else {
             let config = URLSessionConfiguration.ephemeral
             config.httpShouldSetCookies = false
@@ -110,6 +112,8 @@ actor SyncHTTP {
             config.timeoutIntervalForRequest = 30
             config.timeoutIntervalForResource = 90
             self.session = URLSession(configuration: config, delegate: SyncRedirectPolicy(), delegateQueue: nil)
+            config.timeoutIntervalForResource = 16 * 60
+            eventSession = URLSession(configuration: config, delegate: SyncRedirectPolicy(), delegateQueue: nil)
         }
     }
 
@@ -125,6 +129,7 @@ actor SyncHTTP {
     func close(removeCredential: Bool) throws {
         closed = true
         refreshTask?.cancel()
+        if eventSession !== session { eventSession.invalidateAndCancel() }
         accessToken = nil
         if removeCredential { try store.remove() }
     }
@@ -189,7 +194,40 @@ actor SyncHTTP {
         }
     }
 
-    private func request<T: Decodable & Sendable>(_ path: String, method: String, body: Data?, bearer: String?) async throws -> T {
+    func watchSyncEvents(_ receive: @Sendable (SyncStreamEvent) async -> Void) async throws {
+        let token = try await validAccess()
+        do {
+            try await readSyncEvents(bearer: token, receive: receive)
+        } catch let failure as SyncHTTPFailure where failure.status == 401 {
+            if accessToken == token { expiry = .distantPast }
+            let refreshed = try await validAccess()
+            do {
+                try await readSyncEvents(bearer: refreshed, receive: receive)
+            } catch let retry as SyncHTTPFailure where retry.status == 401 {
+                throw SyncProblem.signInRequired
+            }
+        }
+    }
+
+    private func readSyncEvents(bearer: String, receive: @Sendable (SyncStreamEvent) async -> Void) async throws {
+        var request = try makeRequest("/v1/notes/events", method: "GET", bearer: bearer)
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        let (bytes, response) = try await eventSession.bytes(for: request)
+        defer { bytes.task.cancel() }
+        guard let http = response as? HTTPURLResponse else { throw SyncProblem.invalidResponse }
+        guard http.statusCode == 200 else { throw Self.httpFailure(http) }
+        guard http.mimeType == "text/event-stream" else { throw SyncProblem.invalidResponse }
+
+        var parser = SyncStreamParser()
+        for try await byte in bytes {
+            if let event = try parser.append(byte) {
+                try Task.checkCancellation()
+                await receive(event)
+            }
+        }
+    }
+
+    private func makeRequest(_ path: String, method: String, bearer: String?) throws -> URLRequest {
         guard !closed, path.hasPrefix("/"), !path.hasPrefix("//"),
               let url = URL(string: path, relativeTo: origin)?.absoluteURL,
               url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port else {
@@ -197,26 +235,34 @@ actor SyncHTTP {
         }
         var request = URLRequest(url: url)
         request.httpMethod = method
+        if let bearer { request.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization") }
+        return request
+    }
+
+    private func request<T: Decodable & Sendable>(_ path: String, method: String, body: Data?, bearer: String?) async throws -> T {
+        var request = try makeRequest(path, method: method, bearer: bearer)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
-        if let bearer { request.setValue("Bearer " + bearer, forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
         guard !closed else { throw CancellationError() }
         guard let http = response as? HTTPURLResponse else { throw SyncProblem.invalidResponse }
         let decoder = JSONDecoder()
         if !(200..<300).contains(http.statusCode) {
-            let problem = (try? decoder.decode(SyncErrorEnvelope.self, from: data).error)
-            let delay = Int(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? problem?.retryAfterSeconds
-            throw SyncHTTPFailure(status: http.statusCode, problem: SyncAPIError(
-                code: problem?.code ?? "http_\(http.statusCode)",
-                message: problem?.message ?? "Сервер вернул ошибку \(http.statusCode).",
-                requestId: problem?.requestId, retryAfterSeconds: delay, attemptsRemaining: problem?.attemptsRemaining))
+            throw Self.httpFailure(http, problem: try? decoder.decode(SyncErrorEnvelope.self, from: data).error)
         }
         return try decoder.decode(T.self, from: data)
+    }
+
+    private static func httpFailure(_ http: HTTPURLResponse, problem: SyncAPIError? = nil) -> SyncHTTPFailure {
+        let delay = Int(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? problem?.retryAfterSeconds
+        return SyncHTTPFailure(status: http.statusCode, problem: SyncAPIError(
+            code: problem?.code ?? "http_\(http.statusCode)",
+            message: problem?.message ?? "Сервер вернул ошибку \(http.statusCode).",
+            requestId: problem?.requestId, retryAfterSeconds: delay, attemptsRemaining: problem?.attemptsRemaining))
     }
 }
 
