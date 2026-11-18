@@ -48,8 +48,10 @@ xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
 
 ```sh
 python3 apps/macos/scripts/prepare_showcase.py
-python3 apps/macos/scripts/build_release.py
+PLANNER_RELEASE_SIGNING_IDENTITY='<certificate fingerprint>' python3 apps/macos/scripts/build_release.py
 ```
+
+Для DMG с виджетом нужен сертификат подписи Apple. Для локальной сборки без сертификата передайте `--without-widget`.
 
 Демонстрационные приложения появятся в `apps/macos/.build/showcase/`, а DMG для Apple Silicon и его SHA-256 — в корневом `dist/`. Эксперименты и тесты с реальной моделью используют тестовые веса в `apps/macos/.build/`.
 

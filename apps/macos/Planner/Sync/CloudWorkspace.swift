@@ -105,6 +105,7 @@ final class CloudWorkspace {
         service.syncRepository = repo
         repo.didApplyTasks = { [weak service] ids in
             for id in ids { service?.notificationChanged?(id, false) }
+            service?.didSaveTasks?()
         }
         return (CloudLibrary(container: container, service: service), repo)
     }

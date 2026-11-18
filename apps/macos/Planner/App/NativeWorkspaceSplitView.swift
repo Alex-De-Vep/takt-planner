@@ -1174,7 +1174,10 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         item.maximumThickness = rightPanelMaximumWidth
         // Подтверждаем конечную секцию после системной анимации.
         setCalendarToolbar(column: !collapsed, visible: !collapsed)
-        if !collapsed { releaseRightPanelToolbar() }
+        if !collapsed {
+            (item.viewController as? CalendarSidebarController)?.updateColumnCorners()
+            releaseRightPanelToolbar()
+        }
         scheduleToolbarAlignment()
         finishCalendarHeaderTransition(afterLayout: wasAnimating)
         headerConfigurationChanged?()

@@ -2,6 +2,7 @@
 """Собирает отдельные приложения для скриншотов. Не запускает приложения или тесты."""
 from pathlib import Path
 import plistlib
+import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,9 +23,10 @@ def main():
             run('xcodebuild', '-project', ROOT / 'Planner.xcodeproj', '-scheme', 'Planner',
                 '-configuration', 'Debug', '-destination', 'platform=macOS,arch=arm64',
                 '-derivedDataPath', BUILD / 'DerivedData',
-                'PRODUCT_BUNDLE_IDENTIFIER=local.planner.Showcase',
+                'PLANNER_APP_BUNDLE_IDENTIFIER=local.planner.Showcase',
+                'PLANNER_WIDGET_APP_GROUP=group.local.planner.today.showcase',
                 'SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG SHOWCASE',
-                f'CODE_SIGN_ENTITLEMENTS={entitlements}', 'build', cwd=ROOT,
+                f'PLANNER_APP_ENTITLEMENTS={entitlements}', 'build', cwd=ROOT,
                 stdout=log, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError:
             print(log_path.read_text()[-10000:])
@@ -33,6 +35,8 @@ def main():
     for language, appearance in [('ru', 'light'), ('ru', 'dark'), ('en', 'light')]:
         app = BUILD / f'Takt-{language}-{appearance}.app'
         run('/usr/bin/ditto', source, app)
+        # The showcase uses an isolated bundle ID and an in-memory library.
+        shutil.rmtree(app / 'Contents/PlugIns', ignore_errors=True)
         info = app / 'Contents/Info.plist'
         metadata = plistlib.loads(info.read_bytes())
         metadata.update(CFBundleIdentifier=f'local.planner.Showcase.{language}.{appearance}',

@@ -14,14 +14,17 @@
 ```sh
 xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
   -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
-python3 apps/macos/scripts/build_release.py
+security find-identity -v -p codesigning
+PLANNER_RELEASE_SIGNING_IDENTITY='<certificate fingerprint>' python3 apps/macos/scripts/build_release.py
 ```
 
 Скрипт собирает Release для Apple Silicon (`arm64`), проверяет локализованные имена, ресурсы ИИ-помощника, сертификат GigaChat, подпись и разрешения. Затем он упаковывает DMG и проверяет его содержимое после монтирования только для чтения. Тесты и приложение не запускаются.
 
 В образ и в ресурсы приложения включаются `LICENSE` и `NOTICE`. Демонстрационные данные не входят в Release. Результаты находятся в `dist/`.
 
-По умолчанию используется подпись ad-hoc без нотариализации. Для локальных обновлений на Mac можно задать `PLANNER_RELEASE_SIGNING_IDENTITY` с отпечатком действующего сертификата Apple Development из `security find-identity -v -p codesigning`. Используйте одну команду разработчика и сохраняйте идентификатор приложения между обновлениями, чтобы macOS могла узнавать приложение при обращении к Связке ключей. При переходе с ad-hoc на сертификат macOS может запросить доступ к существующим записям. Для публичного распространения применяйте Developer ID и нотариализацию.
+Для локальной проверки виджета используйте сертификат Apple Development. Упаковщик подписывает приложение и расширение одной командой Apple Developer и формирует идентификатор App Group из её Team ID. macOS проверяет это соответствие при чтении задач. Для локального DMG без сертификата передайте `--without-widget`. В имени такого образа будет суффикс `-no-widget`.
+
+Сохраняйте команду разработчика и идентификатор приложения между обновлениями. При переходе с ad-hoc на сертификат macOS может запросить доступ к существующим записям в Связке ключей. Для публичного распространения используйте Developer ID и нотариализацию. При проверке установки добавьте виджет в macOS и убедитесь, что он показывает задачи из установленного приложения.
 
 ## GitHub Release
 
