@@ -7,6 +7,7 @@ import type { Database } from './db.js';
 import type { Config } from './config.js';
 import { decrypt } from './security.js';
 import { FileStore } from './files.js';
+import { purgeExpiredNotes } from './notes.js';
 export async function deliverOne(db:Database,config:Config,send?: (mail:any)=>Promise<unknown>) {
  const claim=await db.tx(async tx=>{
    const r=await tx.query(`SELECT * FROM jobs WHERE (user_id IS NULL OR EXISTS(SELECT 1 FROM users WHERE id=jobs.user_id AND deleted_at IS NULL)) AND completed_at IS NULL AND attempts<10 AND available_at<=now() AND (locked_until IS NULL OR locked_until<now()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`);
@@ -43,6 +44,7 @@ export async function cleanup(db:Database,store:FileStore) {
      for(const b of blobs.rows)await rm(store.blob(b.id),{force:true});for(const u of uploads.rows)await rm(store.upload(u.id),{recursive:true,force:true});
      await tx.query('DELETE FROM users WHERE id=$1',[r.rows[0].owner_id]);return;
    }
+   await purgeExpiredNotes(tx, lib.id);
    await tx.query(`UPDATE blobs b SET delete_after=now()+interval '30 days' WHERE b.library_id=$1 AND delete_after IS NULL AND NOT EXISTS(
      SELECT 1 FROM attachment_files a JOIN entities e ON e.library_id=a.library_id AND e.id=a.attachment_id WHERE a.blob_id=b.id AND e.deleted=false)`,[lib.id]);
    const old=await tx.query('SELECT id FROM blobs WHERE library_id=$1 AND delete_after<=now()',[lib.id]);

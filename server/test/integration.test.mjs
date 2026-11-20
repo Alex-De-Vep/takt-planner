@@ -100,6 +100,43 @@ test('notes sync across devices with idempotent writes, conflict checks and acco
   assert.deepEqual((await snapshot(first)).entities, []);
 });
 
+test('the note worker expires old trash and rejects resurrection from a stale device', async () => {
+  const user = await account();
+  const device = await login();
+  const now = Date.now() / 1000 - 978307200;
+  const old = now - 30 * 86400 - 60;
+  const encode = body => Buffer.from(JSON.stringify(body)).toString('base64');
+  const save = async (id, deletedAt) => {
+    const path = `/v1/notes/${id}`;
+    const body = { id, title: 'Private note', text: 'Private content', document: '', folder: 'inbox',
+      createdAt: old, updatedAt: now, pinned: true, deletedAt, richText: { version: 1, spans: [] } };
+    const response = await api('PUT', path, { baseRevision: null, data: encode(body) }, user);
+    assert.equal(response.statusCode, 200, response.body);
+    return { path, body, revision: response.json().revision };
+  };
+  const expired = await save(randomUUID(), old);
+  const recent = await save(randomUUID(), now - 29 * 86400);
+  const restored = await save(randomUUID(), now - 60);
+  const restoredBody = { ...restored.body, deletedAt: null };
+  assert.equal((await api('PUT', restored.path, { baseRevision: restored.revision, data: encode(restoredBody) }, user)).statusCode, 200);
+
+  await cleanup(db, store);
+
+  const received = (await api('GET', expired.path, undefined, device)).json();
+  const marker = JSON.parse(Buffer.from(received.data, 'base64'));
+  assert.equal(hash(Buffer.from(received.data, 'base64')), received.revision);
+  assert.notEqual(received.revision, expired.revision);
+  assert.deepEqual([marker.purged, marker.deletedAt, marker.title, marker.text, marker.document], [true, old, '', '', '']);
+  assert.deepEqual(marker.richText, { version: 1, spans: [] });
+  for (const revision of [expired.revision, received.revision]) {
+    const response = await api('PUT', expired.path, { baseRevision: revision, data: encode({ ...expired.body, deletedAt: null }) }, device);
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().error.code, 'note_conflict');
+  }
+  assert.equal((await api('GET', recent.path, undefined, device)).json().data, encode(recent.body));
+  assert.equal((await api('GET', restored.path, undefined, device)).json().data, encode(restoredBody));
+});
+
 test('shared rich notes keep their formatting when an older client tries to save', async () => {
   const mac = await account();
   const android = await login();

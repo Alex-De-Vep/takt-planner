@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 umask 077
 
-version=0.1.6
-previous=0.1.5
+version=0.1.7
+previous=0.1.6
 root=/opt/takt-server
 install_dir="$root/app"
 env_file="$root/config/server.env"
