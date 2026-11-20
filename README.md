@@ -11,9 +11,9 @@
   <strong><a href="#android">Android</a></strong> 8.0+ · test APK
 </p>
 
-Takt brings tasks, a focused daily list, and your calendar together on macOS and Android. On macOS, you can keep your task library on your device without an account. Enable cloud sync to pick up your tasks on Android.
+Takt brings tasks, rich notes, a focused daily list, and your calendar together on macOS and Android. On macOS, tasks and notes can stay on your device. Connect a Takt account to sync them between Mac and Android.
 
-[Features](#features) · [AI chat on macOS](#ai-chat-on-macos) · [Getting started](#getting-started) · [Build](#build)
+[Features](#features) · [Notes](#notes) · [AI chat on macOS](#ai-chat-on-macos) · [Getting started](#getting-started) · [Build](#build)
 
 ![Tasks with folders, a task editor, subtasks and the calendar panel](docs/screenshots/workspace-light-en.png)
 
@@ -31,6 +31,14 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 - **Time for tasks:** create standalone events or schedule multiple time blocks for a task. Edit writable one-off events, drag them between days and undo a move.
 - **Search:** find tasks by title and description within the current section.
 - **Native macOS:** light and dark appearances, glass sidebars, keyboard shortcuts and Russian/English localization.
+
+## Notes
+
+Open **All Notes** in the Mac sidebar or the **Notes** tab on Android. Notes support formatted text, lists, checklists, links, and images. Pin a note to keep it at the top. Move it between folders, or send it to **Recently Deleted**, where it can be restored for up to 30 days.
+
+- **On Mac:** pasted content adopts the note’s font, size, and color while keeping supported formatting and links. Use the folder picker above the title or drag the note onto a folder in the sidebar.
+- **Recordings:** record a voice note on either platform. On Mac, you can also record a browser call. Takt keeps the audio on your device until you approve sending it to your selected transcription provider.
+- **Cloud sync:** sign in to the same Takt account on both devices. Shared rich notes require Takt Server 0.1.4 or later. Check sync status at the bottom of the Mac sidebar. On Android, tap the warning in the Tasks or Notes header for details and a retry.
 
 ## AI chat on macOS
 
@@ -52,7 +60,7 @@ Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner
 
 Source version **0.1.3 (version code 4)**.
 
-The Android client runs on **Android 8.0 or later**. It includes task lists, subtasks, deadline reminders, a calendar, and an AI assistant. Sign in with the same account you use for cloud sync on macOS to see your tasks. After the first sync, Android queues edits while offline and sends them when you reconnect.
+The Android client runs on **Android 8.0 or later**. It includes task lists, subtasks, rich notes, deadline reminders, a calendar, and an AI assistant. Sign in with the same account you use for cloud sync on macOS to see your tasks and notes. After the first sync, Android queues edits while offline and sends them when you reconnect.
 
 - **Task editing.** Add a description when needed, edit checklist items on a separate screen, and keep the active text field visible above the keyboard. Task and checklist drafts are saved together when you confirm the task.
 - **Calendar events.** Choose a calendar for a new event, add a location or description, and delete writable one-off events with confirmation. Recurring events and read-only calendars are available for viewing.
@@ -100,10 +108,10 @@ Calendar events support multiple relative or absolute alerts. Editing or removin
 
 ## Privacy and current limitations
 
-Tasks are available on your device. When you enable cloud sync, the app server syncs the library. The app has no ads or analytics SDKs. Calendar events live in the system event store and may sync through your configured calendar provider. See the [privacy description](docs/privacy.md).
+Tasks and notes are available on your device. When you enable cloud sync, the app server syncs the library. The app has no ads or analytics SDKs. Calendar events live in the system event store and may sync through your configured calendar provider. See the [privacy description](docs/privacy.md).
 
 - Cloud task sync requires an account. On-device storage is available without registration.
-- Descriptions are plain text, without bold or italic formatting.
+- Task descriptions use plain text. Notes support rich formatting.
 - Recurring events, recurrence exceptions and read-only calendars can be viewed but not edited.
 - Deleting a task keeps its calendar events. Event scheduling and task completion are independent.
 - All future deadlines are submitted. If macOS limits pending requests, the nearest deadlines and repeating reminders take priority; the queue refills when the app launches, becomes active or tasks change. macOS permission and Focus settings control banner presentation.
