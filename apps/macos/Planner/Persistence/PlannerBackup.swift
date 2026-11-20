@@ -94,7 +94,7 @@ struct PlannerBackup: Codable, Sendable {
                                  lastTitle: $0.lastTitle, lastStart: $0.lastStart)
                 })
         }
-        var notes = service.notes.notes
+        var notes = service.notes.notes.filter { !$0.isPurged && !$0.trashHasExpired(at: .now) }
         let validFolders = Set(folders.map { "folder-" + $0.id.uuidString })
         for index in notes.indices where notes[index].folder.hasPrefix("folder-") && !validFolders.contains(notes[index].folder) {
             notes[index].folder = "inbox"

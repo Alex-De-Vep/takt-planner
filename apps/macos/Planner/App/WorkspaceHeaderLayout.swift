@@ -13,10 +13,6 @@ struct WorkspaceHeaderLayout: Equatable {
 
     // При скрытых папках место над списком занимают также кнопки окна и открытия панели.
     var minimumTaskWidth: CGFloat {
-        if fullScreen && sidebarVisible {
-            // В широкой шапке резервируем полное название, обычный поиск и отступы секции toolbar.
-            return min(420, max(340, ceil(preferredHeadingWidth) + Self.standardSearchWidth + Self.headingSearchSpacing + 36))
-        }
         return sidebarVisible ? 260 : (fullScreen ? 320 : 400)
     }
     var minimumMainWidth: CGFloat { (sidebarVisible ? 220 : 0) + minimumTaskWidth + 320 + 3 }

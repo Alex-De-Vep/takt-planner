@@ -14,12 +14,9 @@ struct TaskListView: View {
     let create: () -> Void
     let toggleToday: (PlannerTask) -> Void
     let toggleCompleted: (PlannerTask) -> Void
-    let delete: (PlannerTask) -> Void
     let deleteImmediately: (PlannerTask) -> Void
-    let folders: [TaskFolder]
     let dragScopeID: UUID
-    let move: (PlannerTask, TaskFilter) -> Void
-    let taskDrag: TaskDragState
+    let folderDrag: FolderDragState
 
     @State private var displayedScope: WorkspaceListScope?
     @State private var selectionRevision = 0
@@ -72,7 +69,7 @@ struct TaskListView: View {
         .animation(rowAnimation, value: rowIDs)
         .onChange(of: scope, initial: true) { _, value in displayedScope = value }
         .onDisappear {
-            taskDrag.finish(sourceViewID: dragSourceID)
+            folderDrag.finish(sourceViewID: dragSourceID)
             activeNativeFocus.transitions.detach()
             completedNativeFocus.transitions.detach()
         }
@@ -237,33 +234,22 @@ struct TaskListView: View {
                 .onDrag {
                     // Удалённая модель ещё может участвовать в анимации ухода строки.
                     guard task.modelContext != nil, !task.isDeleted else { return NSItemProvider() }
-                    let payload = TaskDragPayload(taskID: task.id, scopeID: dragScopeID)
+                    let payload = FolderDragPayload(kind: .task, itemID: task.id, scopeID: dragScopeID)
                     withImmediateNavigationUpdate {
-                        taskDrag.begin(payload: payload, sourceFolder: task.primaryFolder, sourceViewID: dragSourceID)
+                        folderDrag.begin(payload: payload, sourceFolderID: task.primaryFolder.id, sourceViewID: dragSourceID)
                         // Фокус уходит из папок сразу при начале drag, но открытая задача не меняется.
                         (area == .active ? activeNativeFocus : completedNativeFocus).takeFocus()
                         focusedList = area
                     }
                     return payload.provider()
                 } preview: {
-                    // Под курсором показываем значок документа вместо снимка строки.
-                    Image(systemName: "doc.text.fill")
-                        .font(.system(size: 30))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(PlannerStyle.accent)
-                        .frame(width: 40, height: 44)
-                }
-                .contextMenu {
-                    TaskMoveMenu(task: task, folders: folders, move: { move(task, $0) })
-                    Button(task.isFocused(on: now) ? strings["Убрать из «Сегодня»"] : strings["На сегодня"]) { toggleToday(task) }
-                    Divider()
-                    Button(strings["Удалить задачу…"], role: .destructive) { delete(task) }
+                    FolderDragPreview(kind: .task)
                 }
         }
     }
 
     private func selectRow(_ id: UUID, area: ListArea, focusList: Bool = true) {
-        guard taskDrag.context == nil else { return }
+        guard folderDrag.context == nil else { return }
         withImmediateNavigationUpdate {
             selectedID = id
             if focusList {

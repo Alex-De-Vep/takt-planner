@@ -1,4 +1,6 @@
 import AppKit
+import AVFoundation
+import Synchronization
 import Testing
 @testable import Planner
 
@@ -81,6 +83,40 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: audio.path))
     }
 
+    @Test func longRecordingIsRetriedFromTheMissingPartAndSavedInOrder() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = NoteStore()
+        let note = try #require(store.create(folder: "inbox"))
+        let source = directory.appending(path: "\(note).voice.\(UUID()).m4a")
+        let writer = try NoteCallAudio(url: source)
+        let second = Data(repeating: 0, count: NoteCallAudio.sampleRate * 4)
+        for _ in 0...300 { _ = try writer.append(second) }
+        writer.close()
+
+        let voice = NoteVoiceRecording(directory: directory)
+        voice.restoreDrafts(for: store.notes)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NoteSpeechFixture.self]
+        let http = AssistantGatewayHTTP(configuration: configuration)
+        let profile = AssistantGatewayProfile(id: UUID(), gateway: .openAI,
+            base: try #require(AssistantGateway.openAI.bases.first), key: "long-recording-fixture")
+
+        await voice.transcribe(note, store: store, profile: profile, modelID: "whisper-1", transport: http)
+        #expect(voice.errors[note] != nil)
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(voice.drafts[note]?.pieceTranscripts == ["First part", nil])
+        #expect(store.notes.first?.text.isEmpty == true)
+
+        await voice.transcribe(note, store: store, profile: profile, modelID: "whisper-1", transport: http)
+        #expect(voice.errors[note] == nil)
+        #expect(store.notes.first?.text == "First part\n\nLast part")
+        #expect(NoteSpeechFixture.longRecordingRequests.withLock { $0 } == 3)
+        #expect(!FileManager.default.fileExists(atPath: source.path))
+    }
+
     @Test func transcriptionSelectionSurvivesNewPreferencesInstance() throws {
         let suite = "note.transcription.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -95,6 +131,8 @@ import Testing
 
 
 private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
+    static let longRecordingRequests = Mutex(0)
+
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -114,6 +152,16 @@ private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
             payload = ""
         case ("api.openai.com", "/v1/models", "GET", "Bearer fixture"):
             payload = #"{"data":[{"id":"gpt-transcribe"},{"id":"gpt-4o"}]}"#
+        case ("api.openai.com", "/v1/audio/transcriptions", "POST", "Bearer long-recording-fixture"):
+            let requestNumber = Self.longRecordingRequests.withLock { count in
+                count += 1
+                return count
+            }
+            switch requestNumber {
+            case 1: payload = #"{"text":"First part"}"#
+            case 3: payload = #"{"text":"Last part"}"#
+            default: payload = nil
+            }
         case ("api.openai.com", "/v1/audio/transcriptions", "POST", "Bearer fixture"):
             payload = #"{"text":"OpenAI transcript"}"#
         default: payload = nil

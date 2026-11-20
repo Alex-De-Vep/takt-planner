@@ -72,6 +72,14 @@ struct SettingsView: View {
         .frame(minWidth: 700, idealWidth: 748, minHeight: 490, idealHeight: 590)
         .navigationTitle(strings["Настройки"])
         .onAppear { calendar.refresh() }
+        #if canImport(MLXLLM)
+        .onChange(of: preferences.assistantSettingsRequest, initial: true) { _, request in
+            if request != nil {
+                selection = .assistant
+                preferences.assistantSettingsRequest = nil
+            }
+        }
+        #endif
     }
 
     @ViewBuilder private var detail: some View {

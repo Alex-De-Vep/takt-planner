@@ -147,7 +147,6 @@ final class NoteBrowserCall {
         microphone = result.microphone
         writtenFrames += result.frames
         duration = Double(writtenFrames) / Double(NoteCallAudio.sampleRate)
-        if duration >= 2 * 60 * 60 { stop() }
     }
 
     #if DEBUG

@@ -493,6 +493,11 @@
 "Хранение и синхронизация" = "Storage and Sync";
 "Синхронизировано" = "Up to Date";
 "Синхронизация…" = "Syncing…";
+"Ошибка синхронизации" = "Sync failed";
+"Ожидание синхронизации" = "Waiting to sync";
+"Сервер занят. Синхронизация повторится автоматически." = "The server is busy. Sync will retry automatically.";
+"Нет подключения к сети. Синхронизация повторится после восстановления связи." = "No network connection. Sync will retry when the connection returns.";
+"Не удалось связаться с сервером. Проверьте подключение к сети." = "Could not reach the server. Check your network connection.";
 "Требуется вход" = "Sign-in Required";
 "Сохранено на Mac · ожидание обмена" = "Saved on Mac · Waiting to Sync";
 "Подключение синхронизации" = "Set Up Sync";
@@ -520,6 +525,7 @@
 "Эта версия приложения несовместима с сервером." = "This version of Takt is incompatible with the server.";
 "Войдите в аккаунт повторно." = "Sign in to your account again.";
 "Правка превышает допустимый размер запроса." = "The change exceeds the server’s request size limit.";
+"Этот сервер пока не поддерживает формат одной или нескольких заметок." = "This server does not yet support the format of one or more notes.";
 "Ответ относится к другой библиотеке." = "The response belongs to another library.";
 "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание." = "Set “Send the report” for 5:00 PM and get a reminder when it’s due.";
 "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30." = "Add “Meet with the team” tomorrow from 11:00 to 11:30 AM.";
@@ -669,6 +675,11 @@
 "Создайте заметку или откройте её из списка." = "Create a note or open one from the list.";
 
 "Не удалось сохранить заметки" = "Could not save notes";
+"Не удалось сохранить заметку" = "Could not save the note";
+"Заметка содержит оформление, которое пока нельзя перенести в общий редактор." = "The note contains formatting that the shared editor does not support yet.";
+"Не удалось прочитать структуру заметки." = "Could not read the note structure.";
+"Изображение превышает лимит общего редактора." = "The image exceeds the shared editor’s size limit.";
+"Заметка превышает лимит синхронизации." = "The note exceeds the sync size limit.";
 
 "Корзина пуста" = "Trash is empty";
 
@@ -705,6 +716,7 @@
 
 "Заметки сохраняются на этом Mac" = "Notes are saved on this Mac";
 "Заметки синхронизируются с аккаунтом" = "Notes sync with your account";
+"Заметки удаляются навсегда через 30 дней." = "Notes are permanently deleted after 30 days.";
 
 "Нумерованный список" = "Numbered list";
 
@@ -780,3 +792,42 @@
 "Загружаем модели…" = "Loading models…";
 "Нет доступных моделей" = "No models available";
 "Обновить подключение" = "Update connection";
+
+"ИИ-провайдеры" = "AI providers";
+"Провайдер" = "Provider";
+"Подключения провайдеров" = "Provider connections";
+"Подключения провайдеров…" = "Provider connections…";
+"Подключить провайдера" = "Connect a provider";
+"Модели для чата и расшифровки выбираются в разделе «Помощник»." = "Choose chat and transcription models in Assistant settings.";
+"Сначала подключите провайдера, затем выберите модели." = "Connect a provider first, then choose your models.";
+"Показывать в списке моделей" = "Show in the model list";
+"Поиск моделей" = "Search models";
+"Показать все" = "Show all";
+"Скрыть все" = "Hide all";
+"Показать найденные" = "Show matching models";
+"Скрыть найденные" = "Hide matching models";
+"Показано: %d из %d" = "Shown: %d of %d";
+"Скрытие модели не меняет текущий выбор." = "Hiding a model does not change the current selection.";
+"Настроить список моделей…" = "Customize model list…";
+"Нет отображаемых моделей" = "No models selected for display";
+"Выбор модели чата здесь и в чате синхронизирован. Список моделей можно настроить отдельно для чата и расшифровки." = "The chat model selection is shared with the chat. Customize model lists separately for chat and transcription.";
+
+"Подключить ИИ-провайдер" = "Connect an AI provider";
+"Все провайдеры подключены" = "All providers are connected";
+"Выбранные модели" = "Selected models";
+"Добавить модели" = "Add models";
+"Сначала подключите провайдера." = "Connect a provider first.";
+"Модели ещё не выбраны." = "No models selected yet.";
+"Убрать из списка" = "Remove from list";
+"Свернуть список" = "Collapse list";
+"Показать все модели (%d)" = "Show all models (%d)";
+"Активные модели" = "Active models";
+"Чат и расшифровка" = "Chat and transcription";
+"Только расшифровка" = "Transcription only";
+"Не поддерживает расшифровку" = "Does not support transcription";
+"Поддержка расшифровки не проверена" = "Transcription support unverified";
+"Расшифровка: часть %d из %d" = "Transcribing part %d of %d";
+"Без папки" = "No folder";
+"В корзину…" = "Move to Trash…";
+"Переместить заметку в корзину?" = "Move note to Trash?";
+"Заметку можно восстановить в разделе «Недавно удалённые»." = "You can restore the note from Recently Deleted.";

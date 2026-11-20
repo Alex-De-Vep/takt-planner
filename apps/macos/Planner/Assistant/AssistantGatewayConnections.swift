@@ -6,16 +6,28 @@ import Security
 final class AssistantGatewayConnections {
     private(set) var profiles: [AssistantGateway: AssistantGatewayProfile] = [:]
     private(set) var catalogs: [AssistantGateway: [AssistantGatewayModel]] = [:]
+    private(set) var speechCatalogs: [UUID: [AssistantTranscriptionModel]] = [:]
+    private(set) var speechLoading: Set<UUID> = []
+    private(set) var speechFailed: Set<UUID> = []
     private(set) var errors: [AssistantGateway: String] = [:]
     private(set) var busy: Set<AssistantGateway> = []
     private(set) var remaining: [AssistantGateway: Double] = [:]
     private(set) var copilotQuota: Double?
     private(set) var miniMaxQuota: [String: Double] = [:]
 
-    let http = AssistantGatewayHTTP()
+    let http: AssistantGatewayHTTP
     @ObservationIgnored private let keychain = AssistantGatewayKeychain()
     @ObservationIgnored private var loaded: Set<AssistantGateway> = []
     @ObservationIgnored private var operations: [AssistantGateway: Task<Void, Never>] = [:]
+
+    init(http: AssistantGatewayHTTP = AssistantGatewayHTTP(),
+         profiles: [AssistantGateway: AssistantGatewayProfile] = [:],
+         catalogs: [AssistantGateway: [AssistantGatewayModel]] = [:]) {
+        self.http = http
+        self.profiles = profiles
+        self.catalogs = catalogs
+        loaded = Set(profiles.keys)
+    }
 
     func activate() {
         #if !SHOWCASE
@@ -23,6 +35,25 @@ final class AssistantGatewayConnections {
             if profiles[gateway] != nil { refresh(gateway) }
         }
         #endif
+    }
+
+    func loadSpeechCatalogs(refresh: Bool = false) {
+        for profile in profiles.values where profile.gateway.supportsTranscription {
+            let id = profile.id
+            guard !speechLoading.contains(id), refresh || speechCatalogs[id] == nil && !speechFailed.contains(id) else { continue }
+            speechLoading.insert(id)
+            speechFailed.remove(id)
+            Task {
+                defer { speechLoading.remove(id) }
+                do {
+                    let models = try await http.transcriptionModels(profile)
+                    guard profiles[profile.gateway]?.id == id else { return }
+                    speechCatalogs[id] = models
+                } catch {
+                    if profiles[profile.gateway]?.id == id { speechFailed.insert(id) }
+                }
+            }
+        }
     }
 
     private func load(_ gateway: AssistantGateway) -> Bool {
@@ -109,6 +140,10 @@ final class AssistantGatewayConnections {
         try Task.checkCancellation()
         // Старое подключение остаётся рабочим, пока новое не проверено и не сохранено.
         try keychain.save(profile)
+        if let previousID = profiles[profile.gateway]?.id, previousID != profile.id {
+            speechCatalogs[previousID] = nil
+            speechFailed.remove(previousID)
+        }
         profiles[profile.gateway] = profile
         if profile.gateway == .copilot { copilotQuota = nil }
         if profile.gateway == .miniMaxPlan { miniMaxQuota = [:] }
@@ -160,6 +195,10 @@ final class AssistantGatewayConnections {
         guard !busy.contains(gateway) else { return }
         do {
             try keychain.remove(gateway)
+            if let id = profiles[gateway]?.id {
+                speechCatalogs[id] = nil
+                speechFailed.remove(id)
+            }
             profiles[gateway] = nil
             catalogs[gateway] = nil
             remaining[gateway] = nil

@@ -120,6 +120,52 @@ struct TaskListAnimationTests {
         #expect(table.visibleRect.minY >= offset - 1)
     }
 
+    @Test(arguments: [false, true], [3, 16])
+    func insertedTaskIsFullyVisibleWhenListIsAtTop(grouped: Bool, count: Int) async throws {
+        for disablesAnimations in [false, true] {
+            let fixture = try AnimationFixture()
+            defer { fixture.close() }
+            let filter: TaskFilter = grouped ? .today : .inbox
+            fixture.populateTasks(count: count)
+            fixture.update(filter: filter)
+            let probe = try #require(await fixture.waitForProbe(for: fixture.tasks[0].id))
+            try await Task.sleep(for: .milliseconds(250))
+            let table = try #require(probe.nativeFocus?.table)
+            try #require(table.visibleRect.minY <= table.rect(ofRow: 0).minY + 1)
+
+            let incoming = try fixture.createAssistantTask()
+            // Помощник не меняет выбранную задачу и не вызывает ScrollViewReader.scrollTo.
+            fixture.update(animated: true, filter: filter, disablesAnimations: disablesAnimations)
+            try await Task.sleep(for: .milliseconds(500))
+
+            let current = try #require(fixture.probe(for: incoming.id))
+            let row = table.rect(ofRow: table.row(for: current))
+            #expect(table.visibleRect.minY <= row.minY + 1)
+            #expect(table.visibleRect.maxY >= row.maxY - 1)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func insertedTaskDoesNotJumpToTopWhileReadingFurtherDown(grouped: Bool) async throws {
+        let fixture = try AnimationFixture()
+        defer { fixture.close() }
+        let filter: TaskFilter = grouped ? .today : .inbox
+        fixture.populateTasks(count: 20)
+        fixture.update(filter: filter)
+        let probe = try #require(await fixture.waitForProbe(for: fixture.tasks[0].id))
+        try await Task.sleep(for: .milliseconds(250))
+        let table = try #require(probe.nativeFocus?.table)
+        table.scrollRowToVisible(15)
+        try await Task.sleep(for: .milliseconds(250))
+        let offset = table.visibleRect.minY
+        try #require(offset > 100)
+
+        _ = try fixture.createAssistantTask()
+        fixture.update(animated: true, filter: filter)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(table.visibleRect.minY >= offset - 1)
+    }
+
     @Test func rapidInsertionsFinishAtTheCorrectPosition() async throws {
         let fixture = try AnimationFixture()
         defer { fixture.close() }
@@ -147,7 +193,7 @@ struct TaskListAnimationTests {
     let content = WorkspaceTaskContent()
     let host: NSHostingController<WorkspaceTaskRoot>
     let window: NSWindow
-    let drag = TaskDragState()
+    let drag = FolderDragState()
     init() throws {
         container = try PlannerPersistence.makeContainer(inMemory: true)
         tasks = (0..<3).map { PlannerTask(title: "Строка \($0)", now: .now.addingTimeInterval(-Double($0) * 60)) }
@@ -163,20 +209,41 @@ struct TaskListAnimationTests {
         window.setContentSize(NSSize(width: 360, height: 600))
         window.orderFront(nil)
     }
-    func update(animated: Bool = false) {
-        let snapshot = TaskListSnapshot(tasks: tasks, filter: .inbox, now: .now)
+    func populateTasks(count: Int) {
+        for index in tasks.count..<count {
+            let task = PlannerTask(title: "Строка \(index)", now: .now.addingTimeInterval(-Double(index) * 60))
+            container.mainContext.insert(task)
+            tasks.append(task)
+        }
+        for task in tasks { task.focusDay = PlannerTask.persistentTodayMark }
+    }
+    func createAssistantTask() throws -> PlannerTask {
+        let context = AssistantContext(now: .now, timeZoneID: "Europe/Moscow", language: "ru",
+            folders: [AssistantFolder(id: "inbox", name: "Входящие")], calendars: [],
+            defaultFolderID: "inbox", defaultCalendarID: nil, taskID: nil, taskTitle: nil,
+            durationMinutes: 60, reminderMinutes: nil)
+        let action = AssistantAction(proposal: .init(key: "new", kind: .task, title: "Задача из чата",
+            folderID: "inbox", today: true), context: context)
+        let task = try TaskService(context: container.mainContext).createAssistantTask(action, folders: [])
+        tasks.insert(task, at: 0)
+        return task
+    }
+    func update(animated: Bool = false, filter: TaskFilter = .inbox, disablesAnimations: Bool = false) {
+        let snapshot = TaskListSnapshot(tasks: tasks, filter: filter, now: .now)
         let list = TaskListView(selectedID: .constant(nil), isCompletedExpanded: .constant(false),
-            createdTaskID: nil, search: "", filter: .inbox, snapshot: snapshot, now: .now,
-            create: {}, toggleToday: { _ in }, toggleCompleted: { _ in }, delete: { _ in },
-            deleteImmediately: { _ in }, folders: [], dragScopeID: UUID(), move: { _, _ in }, taskDrag: drag)
-        content.update(AnyView(list), key: WorkspaceListAnimationKey(scope: .tasks(.inbox, search: ""),
+            createdTaskID: nil, search: "", filter: filter, snapshot: snapshot, now: .now,
+            create: {}, toggleToday: { _ in }, toggleCompleted: { _ in },
+            deleteImmediately: { _ in }, dragScopeID: UUID(), folderDrag: drag)
+        var transaction = Transaction(animation: animated ? .easeInOut(duration: 0.26) : nil)
+        transaction.disablesAnimations = disablesAnimations
+        content.update(AnyView(list), key: WorkspaceListAnimationKey(scope: .tasks(filter, search: ""),
             active: snapshot.activeTasks.map(\.id), completed: []),
-            transaction: Transaction(animation: animated ? .easeInOut(duration: 0.26) : nil), host: host.view)
+            transaction: transaction, host: host.view)
     }
     func updateNotes(_ store: NoteStore, selected: UUID? = nil, sortByDate: Bool = false) {
         let notes = sortByDate ? store.notes.sorted { $0.updatedAt > $1.updatedAt } : store.notes
         let scope = WorkspaceListScope.notes(.folder, folder: .inbox, search: "")
-        let list = NoteListView(store: store, notes: notes, folders: [], selection: .constant(selected),
+        let list = NoteListView(store: store, notes: notes, selection: .constant(selected),
             trash: false, createdNoteID: selected, scope: scope, create: {})
         content.update(AnyView(list), key: WorkspaceListAnimationKey(scope: scope,
             active: notes.map(\.id), completed: []),

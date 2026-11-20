@@ -22,7 +22,7 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 ## Features
 
 - **Folders:** each task belongs to Inbox, This Week, Month or a custom folder. Today shows starred tasks; All Tasks shows the full library ordered by creation date.
-- **Move tasks:** drag a task onto a sidebar folder, or use “Move to Folder” in its context menu or the toolbar “…” menu. Dropping onto Today adds a star and keeps the original folder.
+- **Move tasks:** drag a task onto a sidebar folder or click its current folder above the task title to choose a different one. Dropping onto Today adds a star and keeps the original folder.
 - **Focus:** starred tasks stay in Today until you unstar them, without changing their order.
 - **Descriptions and subtasks:** plain text with list continuation, plus a checklist with completion progress.
 - **Deadlines:** choose a date and optionally a time, independently of calendar events. System notifications follow deadline edits and are canceled when a task is completed or deleted.
@@ -42,13 +42,15 @@ Takt brings tasks, a focused daily list, and your calendar together on macOS and
 
 **macOS 26 or later and Apple Silicon.**
 
-Source version **0.3.27 (build 111)** · [Release history](docs/releases).
+Source version **0.3.37 (build 121)** · [Release notes](docs/releases/v0.3.37.md) · [Release history](docs/releases).
 
 Download the DMG from [**Releases**](https://github.com/Alex-De-Vep/takt-planner/releases), open it, drag **Takt** into **Applications**, then eject the disk image. Quit the app before replacing an earlier version.
 
-**Signing:** the prepared macOS 0.3.27 build is signed with Apple Development and is not notarized. Gatekeeper may restrict opening it on another Mac. For build details, see the [release guide](docs/releasing.md).
+**Signing:** the prepared macOS 0.3.37 build is signed with Apple Development and is not notarized. Gatekeeper may restrict opening it on another Mac. For build details, see the [release guide](docs/releasing.md).
 
 ## Android
+
+Source version **0.1.3 (version code 4)**.
 
 The Android client runs on **Android 8.0 or later**. It includes task lists, subtasks, deadline reminders, a calendar, and an AI assistant. Sign in with the same account you use for cloud sync on macOS to see your tasks. After the first sync, Android queues edits while offline and sends them when you reconnect.
 

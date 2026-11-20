@@ -15,6 +15,10 @@ import java.util.UUID
 private const val FOUNDATION_EPOCH = 978_307_200L
 internal const val NOTE_WITHOUT_FOLDER = "inbox"
 internal const val MAX_NOTE_BYTES = 8 * 1024 * 1024
+private const val NOTE_TRASH_RETENTION_SECONDS = 30 * 24 * 60 * 60
+
+internal fun noteTrashExpired(deletedAt: Double?, now: Double = noteTime()): Boolean =
+    deletedAt != null && now - deletedAt >= NOTE_TRASH_RETENTION_SECONDS
 
 internal fun noteTime() = (System.currentTimeMillis() - FOUNDATION_EPOCH * 1000) / 1000.0
 internal fun noteInstant(time: Double) = Instant.ofEpochMilli((time * 1000).toLong() + FOUNDATION_EPOCH * 1000)
@@ -33,10 +37,17 @@ internal data class NoteDocument(
     val deletedAt: Double? = null,
     val richText: SharedNoteText? = null,
     val lastVoiceTranscriptID: String? = null,
+    val purged: Boolean = false,
 ) {
+    fun withoutContent(): NoteDocument {
+        val time = deletedAt ?: updatedAt
+        return NoteDocument(id, NOTE_WITHOUT_FOLDER, createdAt = time, updatedAt = time, deletedAt = time,
+            richText = richText?.let { SharedNoteText(spans = emptyList()) }, purged = true)
+    }
+
     val summary get() = NoteSummary(
         id, folder.takeIf { it.startsWith("folder-") }?.removePrefix("folder-")?.lowercase(Locale.ROOT),
-        title.take(256), text.take(512).replace("\uFFFC", ""), pinned, updatedAt, deletedAt,
+        title.take(256), text.take(512).replace("\uFFFC", ""), pinned, updatedAt, deletedAt, purged = purged,
     )
 }
 
@@ -49,6 +60,7 @@ internal data class NoteSummary(
     val updatedAt: Double,
     val deletedAt: Double?,
     val digest: String = "",
+    val purged: Boolean = false,
 )
 
 internal data class StoredNote(val document: NoteDocument, val digest: String)
@@ -64,6 +76,7 @@ internal fun NoteDocument.wireBytes(): ByteArray = payload(
     "updatedAt" to JsonPrimitive(updatedAt),
 ).apply {
     deletedAt?.let { addProperty("deletedAt", it) }
+    if (purged) addProperty("purged", true)
     richText?.let { add("richText", json.toJsonTree(it)) }
     lastVoiceTranscriptID?.let { addProperty("lastVoiceTranscriptID", it) }
 }.toString().toByteArray()
@@ -79,7 +92,7 @@ internal fun decodeNote(bytes: ByteArray, id: String): NoteDocument {
         body.getAsJsonPrimitive("text").asString, document, body.getAsJsonPrimitive("pinned").asBoolean,
         body.getAsJsonPrimitive("createdAt").asDouble, body.getAsJsonPrimitive("updatedAt").asDouble,
         body.get("deletedAt")?.takeUnless { it.isJsonNull }?.asDouble,
-        richText, body.string("lastVoiceTranscriptID"),
+        richText, body.string("lastVoiceTranscriptID"), body.getAsJsonPrimitive("purged")?.asBoolean == true,
     ).also {
         if (richText != null) {
             check(document.isEmpty())

@@ -84,8 +84,72 @@ private extension NSTextView {
     }
 }
 
-private final class NoteTextView: NSTextView {
+final class NoteTextView: NSTextView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func readSelection(from pasteboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard isEditable else { return false }
+        // NSTextView can pass legacy pasteboard names even when the source uses modern types.
+        let format: NSPasteboard.PasteboardType = switch type.rawValue {
+        case "NSStringPboardType": .string
+        case "NeXT Rich Text Format v1.0 pasteboard type": .rtf
+        case "NeXT RTFD pasteboard type": .rtfd
+        case "Apple HTML pasteboard type": .html
+        default: type
+        }
+        let content: NSAttributedString?
+        switch format {
+        case .rtfd, .rtf:
+            content = pasteboard.data(forType: format).flatMap {
+                NSAttributedString(pasteboardPropertyList: $0, ofType: format)
+            }
+        case .html:
+            guard let data = pasteboard.data(forType: format) else {
+                return super.readSelection(from: pasteboard, type: type)
+            }
+            // Browsers can supply UTF-8 fragments without a charset declaration.
+            if String(data: data, encoding: .utf8) != nil {
+                content = try? NSAttributedString(data: data,
+                    options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue],
+                    documentAttributes: nil)
+            } else {
+                content = NSAttributedString(pasteboardPropertyList: data, ofType: format)
+            }
+        case .string:
+            content = pasteboard.string(forType: format).map { NSAttributedString(string: $0) }
+        default:
+            // Let AppKit handle image-only pasteboards and other native formats.
+            return super.readSelection(from: pasteboard, type: type)
+        }
+        guard let content else { return super.readSelection(from: pasteboard, type: type) }
+
+        let bodyFont = NSFont.systemFont(ofSize: 16)
+        let fonts = NSFontManager.shared
+        let styled = NSMutableAttributedString(string: content.string)
+        content.enumerateAttributes(in: NSRange(location: 0, length: content.length)) { original, range, _ in
+            var font = bodyFont
+            if let originalFont = original[.font] as? NSFont {
+                let traits = fonts.traits(of: originalFont)
+                if traits.contains(.boldFontMask) { font = fonts.convert(font, toHaveTrait: .boldFontMask) }
+                if traits.contains(.italicFontMask) { font = fonts.convert(font, toHaveTrait: .italicFontMask) }
+            }
+            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
+            attributes[.link] = original[.link]
+            attributes[.attachment] = original[.attachment]
+            if let underline = original[.underlineStyle] as? Int, underline & 0xFF != 0 {
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            styled.setAttributes(attributes, range: range)
+        }
+        let range = rangeForUserTextChange
+        guard range.location != NSNotFound else { return false }
+        breakUndoCoalescing()
+        guard performValidatedReplacement(in: range, with: styled) else { return false }
+        let insertionPoint = NSRange(location: range.location + styled.length, length: 0)
+        setSelectedRange(insertionPoint)
+        scrollRangeToVisible(insertionPoint)
+        return true
+    }
 
     override func insertNewline(_ sender: Any?) {
         let text = string as NSString
@@ -305,6 +369,7 @@ private struct NoteTitleEditor: NSViewRepresentable {
 struct NoteDetailView: View {
     @Environment(\.translations) private var strings
     let note: PlannerNote
+    let folders: [TaskFolder]
     let store: NoteStore
     let voice: NoteVoiceRecording
     let assistant: AssistantService
@@ -312,12 +377,25 @@ struct NoteDetailView: View {
     var focusTitle = false
     @State private var control = NoteEditorControl()
 
+    private var currentFolder: TaskFilter? {
+        if let folder = folders.first(where: { !$0.isDeleted && TaskFilter.folder($0.id).id == note.folder }) {
+            return .folder(folder.id)
+        }
+        return TaskFilter.systemFolders.first { $0.id == note.folder }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NoteTitleEditor(text: Binding(get: { note.title }, set: { title in store.update(note.id) { $0.title = title } }),
-                            placeholder: strings["Название"], editable: note.deletedAt == nil && !store.unreadable,
-                            focusOnCreation: focusTitle)
-                .padding(.horizontal, 32).padding(.top, 28)
+            VStack(alignment: .leading, spacing: 8) {
+                WorkspaceFolderMenu(kind: .note, current: currentFolder, folders: folders) {
+                    store.move(note.id, to: $0)
+                }
+                .disabled(note.deletedAt != nil || store.unreadable)
+                NoteTitleEditor(text: Binding(get: { note.title }, set: { title in store.update(note.id) { $0.title = title } }),
+                                placeholder: strings["Название"], editable: note.deletedAt == nil && !store.unreadable,
+                                focusOnCreation: focusTitle)
+            }
+            .padding(.horizontal, 32).padding(.top, 28)
             HStack(spacing: 14) {
                 Button { control.format("heading") } label: { Text("H").fontWeight(.bold) }.help(strings["Заголовок"])
                 Button { control.format("body") } label: { Text("Aa") }.help(strings["Обычный текст"])
@@ -335,13 +413,24 @@ struct NoteDetailView: View {
             .padding(.horizontal, 32).padding(.vertical, 18)
             .disabled(note.deletedAt != nil || store.unreadable)
             Divider().padding(.horizontal, 28)
+            if let error = store.saveError(for: note.id) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(strings["Не удалось сохранить заметку"]).fontWeight(.medium)
+                    Text(strings[error]).font(.caption).textSelection(.enabled)
+                    Button(strings["Повторить"]) { store.flush() }
+                }
+                .foregroundStyle(.red)
+                .padding(.horizontal, 32)
+                .padding(.vertical, 12)
+                .accessibilityIdentifier("note-save-error")
+            }
             NoteVoiceControls(note: note, store: store, voice: voice, assistant: assistant, preferences: preferences)
             NoteRichTextEditor(note: note, store: store, control: control).id(note.id)
             if note.deletedAt != nil {
                 HStack {
                     Text(strings["Заметка в корзине"]).foregroundStyle(.secondary)
                     Spacer()
-                    Button(strings["Восстановить"]) { store.update(note.id) { $0.deletedAt = nil }; store.flush() }
+                    Button(strings["Восстановить"]) { store.restoreFromTrash(note.id) }
                 }.padding()
             }
         }

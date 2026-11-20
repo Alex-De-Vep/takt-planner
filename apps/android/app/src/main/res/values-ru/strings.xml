@@ -78,6 +78,7 @@
     <string name="cloud_library_hint">Изменения синхронизируются автоматически, пока приложение открыто.</string>
     <string name="sign_in">Войти</string>
     <string name="sign_out">Выйти из аккаунта</string>
+    <string name="sync_issue">Проблемы с синхронизацией</string>
     <string name="sync_now">Синхронизировать</string>
     <string name="email">Электронная почта</string>
     <string name="password">Пароль</string>
@@ -237,11 +238,13 @@
     <string name="notes_trash">Корзина</string>
     <string name="notes_trash_empty">Корзина пуста</string>
     <string name="notes_trash_hint">Здесь появятся заметки, перемещённые в корзину.</string>
+    <string name="notes_trash_retention">Заметки удаляются навсегда через 30 дней.</string>
     <string name="note_actions">Другие действия</string>
     <string name="notes_loading">Заметки синхронизируются…</string>
     <string name="notes_pending">Изменения ждут синхронизации</string>
     <string name="notes_unsupported">Этот сервер Takt пока не поддерживает заметки.</string>
     <string name="notes_sync_error">Не удалось синхронизировать заметки.</string>
+    <string name="notes_sync_offline">Не удалось синхронизировать заметки. Проверьте подключение к сети.</string>
     <string name="note_too_large">Заметка слишком большая для синхронизации.</string>
     <string name="note_quota">Закончилось облачное место для заметок.</string>
     <string name="note_unavailable">Не удалось открыть заметку.</string>

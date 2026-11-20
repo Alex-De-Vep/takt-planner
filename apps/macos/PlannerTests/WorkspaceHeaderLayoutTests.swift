@@ -129,24 +129,29 @@ struct WorkspaceHeaderLayoutTests {
         #expect(controller.splitViewItems.count == 3)
     }
 
-    @Test func fullScreenReservesACompleteHeadingAndStandardSearchWidth() {
-        for heading in [CGFloat(95), 120, 175] {
+    @Test func fullScreenListCanShrinkAfterExpandingWithALongFolderName() {
+        for heading in [CGFloat(95), 120, 175, 182, 500] {
             let layout = WorkspaceHeaderLayout(sidebarVisible: true, fullScreen: true,
                                                calendarPlacement: .closed, preferredHeadingWidth: heading)
-            let widths = layout.contentWidths(available: layout.minimumTaskWidth - 36)
-            #expect(widths.heading >= heading)
-            #expect(widths.search == WorkspaceHeaderLayout.standardSearchWidth)
-            #expect(widths.heading + widths.search + WorkspaceHeaderLayout.headingSearchSpacing <= layout.minimumTaskWidth - 36)
+            let windowed = WorkspaceHeaderLayout(sidebarVisible: true, fullScreen: false,
+                                                 calendarPlacement: .closed, preferredHeadingWidth: heading)
+            #expect(layout.minimumTaskWidth == windowed.minimumTaskWidth)
+            #expect(layout.minimumTaskWidth == 260)
+            // Include expansion and contraction so the title never raises the column minimum.
+            for columnWidth in [CGFloat(260), 420, 340, 260] {
+                let available = columnWidth - 36
+                let widths = layout.contentWidths(available: available)
+                #expect(widths.heading >= WorkspaceHeaderLayout.minimumHeadingWidth)
+                #expect(widths.search >= WorkspaceHeaderLayout.minimumSearchWidth)
+                #expect(widths.search <= WorkspaceHeaderLayout.standardSearchWidth)
+                #expect(widths.heading + widths.search + WorkspaceHeaderLayout.headingSearchSpacing <= available)
+            }
+            if heading <= 182 {
+                let widths = layout.contentWidths(available: 420 - 36)
+                #expect(widths.heading >= heading)
+                #expect(widths.search == WorkspaceHeaderLayout.standardSearchWidth)
+            }
         }
-        // За пределами максимальной ширины колонки сохраняются минимальный поиск и подсказка полного названия.
-        let longHeading = WorkspaceHeaderLayout(sidebarVisible: true, fullScreen: true,
-                                                calendarPlacement: .closed, preferredHeadingWidth: 500)
-        #expect(longHeading.minimumTaskWidth == 420)
-        #expect(longHeading.contentWidths(available: 384).search == WorkspaceHeaderLayout.minimumSearchWidth)
-        // Обычное окно сохраняет прежние размеры, независимо от длинного названия.
-        let windowed = WorkspaceHeaderLayout(sidebarVisible: true, fullScreen: false,
-                                             calendarPlacement: .closed, preferredHeadingWidth: 500)
-        #expect(windowed.minimumTaskWidth == 260)
     }
 
     @Test func calendarTitleBelongsToItsToolbarSectionOnlyWhileOpen() throws {
@@ -284,11 +289,11 @@ struct WorkspaceHeaderLayoutTests {
             #expect(calendarSurface.contentView === calendarButton && calendarItem.view === calendarSurface)
             #expect(calendarButton.borderShape == (visible ? .capsule : .circle))
             controller.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
-                taskActions: AnyView(EmptyView()), isSidebarVisible: visible, newFolderTitle: "Новая папка",
+                isSidebarVisible: visible, newFolderTitle: "Новая папка",
                 toggleSidebarTitle: visible ? "Скрыть папки" : "Показать папки", folderTitle: "Входящие",
                 taskCountTitle: "Задач: 4", newTaskTitle: "Новая задача", newChecklistItemTitle: "Подзадача",
-                taskActionsTitle: "Действия", hasSelectedTask: true, newFolder: { createdFolders += 1 },
-                newTask: {}, newChecklistItem: {}, sidebarVisibilityChanged: { _ in })
+                deleteTaskTitle: "Действия", hasSelectedTask: true, newFolder: { createdFolders += 1 },
+                newTask: {}, newChecklistItem: {}, deleteTask: {}, sidebarVisibilityChanged: { _ in })
             #expect(folder.isHidden == !visible && !heading.isHidden)
             let toolbarIDs = controller.toolbarDefaultItemIdentifiers(toolbar)
             #expect(toolbarIDs.contains(.sidebarTrackingSeparator) == visible)

@@ -78,6 +78,7 @@
     <string name="cloud_library_hint">Changes sync automatically while the app is open.</string>
     <string name="sign_in">Sign in</string>
     <string name="sign_out">Sign out</string>
+    <string name="sync_issue">Sync problems</string>
     <string name="sync_now">Sync now</string>
     <string name="email">Email</string>
     <string name="password">Password</string>
@@ -237,11 +238,13 @@
     <string name="notes_trash">Trash</string>
     <string name="notes_trash_empty">Trash is empty</string>
     <string name="notes_trash_hint">Notes moved to Trash appear here.</string>
+    <string name="notes_trash_retention">Notes are permanently deleted after 30 days.</string>
     <string name="note_actions">More options</string>
     <string name="notes_loading">Syncing notes…</string>
     <string name="notes_pending">Changes waiting to sync</string>
     <string name="notes_unsupported">This Takt server does not support notes yet.</string>
     <string name="notes_sync_error">Could not sync notes.</string>
+    <string name="notes_sync_offline">Could not sync notes. Check your network connection.</string>
     <string name="note_too_large">This note exceeds the sync size limit.</string>
     <string name="note_quota">Your cloud note storage is full.</string>
     <string name="note_unavailable">This note could not be opened.</string>

@@ -271,8 +271,10 @@ internal class CloudSync(
             }
             notes.publish()
         } catch (failure: Exception) {
-            if (failure is ServerFailure && failure.status == 401) throw failure
-            notes.syncError(profile.workspace, R.string.notes_sync_error)
+            if (failure is ServerFailure && (failure.status == 401 || failure.retryAfter != null)) throw failure
+            val message = if (failure is IOException && failure !is ServerFailure) R.string.notes_sync_offline
+                else R.string.notes_sync_error
+            notes.syncError(profile.workspace, message)
         }
     }
 

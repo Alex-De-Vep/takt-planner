@@ -186,7 +186,7 @@ import XCTest
         XCTAssertTrue(second.waitForNonExistence(timeout: 5))
         XCTAssertTrue(title.waitForNonExistence(timeout: 5))
 
-        let trash = app.buttons["Недавно удалённые"].firstMatch
+        let trash = app.descendants(matching: .any)["sidebar-deleted-notes"].firstMatch
         trash.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
         XCTAssertTrue(removed.waitForExistence(timeout: 5))
         XCTAssertTrue(second.waitForExistence(timeout: 5))

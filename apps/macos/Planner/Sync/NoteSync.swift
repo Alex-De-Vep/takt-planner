@@ -38,6 +38,7 @@ struct NoteSync {
     /// A concurrent write is picked up on the next pass before any retry.
     func synchronize(maxBytes: Int, checkActive: () throws -> Void) async throws -> Bool {
         guard store.flush() else { throw BackupError.unsavedChanges }
+        store.purgeExpiredTrash()
         let index: Index = try await api.authorized("/v1/notes")
         try checkActive()
         var revisions: [UUID: String] = [:]
@@ -65,7 +66,6 @@ struct NoteSync {
         var blocked: Error?
         for note in store.notes {
             try checkActive()
-            if note.richText != nil && store.sharedFormatLimit == nil { continue }
             let data = try NoteStore.wireData(note)
             let digest = NoteStore.digest(data)
             let revision = revisions[note.id]
@@ -73,6 +73,10 @@ struct NoteSync {
                 if note.syncVersion?.revision != revision {
                     try store.acknowledge(note.id, revision: digest, digest: digest)
                 }
+                continue
+            }
+            if note.richText != nil && store.sharedFormatLimit == nil {
+                blocked = SyncProblem.unsupportedNoteFormat
                 continue
             }
             guard data.count <= maxBytes else {

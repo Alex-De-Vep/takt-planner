@@ -28,6 +28,11 @@
             <key>UTTypeConformsTo</key><array><string>public.data</string></array>
         </dict>
         <dict>
+            <key>UTTypeIdentifier</key><string>local.planner.note</string>
+            <key>UTTypeDescription</key><string>Takt note reference</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+        </dict>
+        <dict>
             <key>UTTypeIdentifier</key><string>local.planner.calendar-event</string>
             <key>UTTypeDescription</key><string>Takt calendar event</string>
             <key>UTTypeConformsTo</key><array><string>public.data</string></array>

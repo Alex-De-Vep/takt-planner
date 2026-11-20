@@ -14,6 +14,7 @@ import com.google.gson.JsonPrimitive
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -33,6 +34,7 @@ internal data class CloudState(
     val closing: Boolean = false,
     val busy: Boolean = false,
     val message: Int? = null,
+    val syncRetryAt: Long = 0,
     val accountLimits: Map<AccountActionKey, AccountLimit> = emptyMap(),
 )
 
@@ -60,6 +62,12 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     val error = _error.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                withContext(Dispatchers.IO) { runCatching { noteStore.publish() } }
+            }
+        }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { store.load() }
@@ -92,10 +100,15 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     fun closeDraft() { draft = null }
 
-    fun refresh() {
+    fun refresh() = synchronize(manual = false)
+
+    fun retrySync() = synchronize(manual = true)
+
+    private fun synchronize(manual: Boolean) {
         val profile = library.value.profile ?: return
-        if (System.currentTimeMillis() < nextSync) return
-        cloudAction {
+        val retryAt = if (manual) cloud.value.syncRetryAt else nextSync
+        if (SystemClock.elapsedRealtime() < retryAt) return
+        cloudAction(keepMessage = true) {
             sync.synchronize(profile)
         }
     }
@@ -155,16 +168,19 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     }
 
     private fun cloudAction(
-        done: () -> Unit = {}, closing: Boolean = false,
+        done: () -> Unit = {}, closing: Boolean = false, keepMessage: Boolean = false,
         accountAction: (() -> AccountActionKey)? = null, work: () -> Unit,
     ) {
         if (!network.tryLock()) return
-        _cloud.value = cloud.value.copy(busy = true, closing = closing, message = null)
+        _cloud.value = cloud.value.copy(
+            busy = true, closing = closing, message = cloud.value.message.takeIf { keepMessage },
+        )
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { work() }
                 nextSync = 0
                 failures = 0
+                _cloud.value = cloud.value.copy(message = null, syncRetryAt = 0)
                 loadConnection()
                 accountAction?.invoke()?.let { key ->
                     _cloud.value = cloud.value.copy(accountLimits = cloud.value.accountLimits - key)
@@ -175,7 +191,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 failures = (failures + 1).coerceAtMost(6)
                 val serverFailure = failure as? ServerFailure
                 val retryAfter = serverFailure?.retryAfter?.takeIf { it > 0 }
-                nextSync = System.currentTimeMillis() + (retryAfter ?: (2L shl failures)).coerceIn(1, 900) * 1000
+                nextSync = SystemClock.elapsedRealtime() + (retryAfter ?: (2L shl failures)).coerceIn(1, 900) * 1000
                 loadConnection()
                 val key = accountAction?.invoke()
                 if (key != null) {
@@ -185,6 +201,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
                 _cloud.value = cloud.value.copy(
                     message = if (key != null && retryAfter != null && serverFailure?.status == 429) null else cloudError(failure),
                     needsLibrary = serverFailure?.code == "library_not_initialized",
+                    syncRetryAt = if (retryAfter != null) nextSync else 0,
                 )
             } finally {
                 _cloud.value = cloud.value.copy(busy = false, closing = false)

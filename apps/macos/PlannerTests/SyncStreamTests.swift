@@ -87,8 +87,34 @@ struct SyncStreamTests {
         try await wait { notes.notes.first?.title == note.title && taskTitle() == "Task caught up on reconnect" }
     }
 
-    private func wait(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(5)
+    @Test func connectionFailureCanBeRetriedAndReturnsToUpToDate() async throws {
+        let server = SyncEventFixture.recovery
+        let container = try PlannerPersistence.makeContainer(inMemory: true)
+        let repository = try SyncRepository(context: container.mainContext, libraryID: server.library, deviceID: UUID().syncID)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SyncEventFixture.self]
+        let session = URLSession(configuration: configuration)
+        let api = SyncHTTP(origin: URL(string: "https://" + server.host)!, store: SyncEventCredential(), session: session)
+        try await api.install(SyncTokens(accessToken: "tasks", refreshToken: "refresh", expiresIn: 900))
+        let engine = SyncEngine(repository: repository, api: api)
+        defer {
+            engine.stop()
+            session.invalidateAndCancel()
+        }
+
+        server.setOffline(true)
+        engine.wake()
+        try await wait {
+            engine.status == .failed("Нет подключения к сети. Синхронизация повторится после восстановления связи.")
+        }
+
+        server.setOffline(false)
+        engine.retry()
+        try await wait(timeout: .seconds(1)) { engine.status == .upToDate }
+    }
+
+    private func wait(timeout: Duration = .seconds(5), _ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + timeout
         while !condition(), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
@@ -105,7 +131,8 @@ private struct SyncEventCredential: SyncCredentialStore {
 private final class SyncEventFixture: URLProtocol, @unchecked Sendable {
     static let tasksAndNotes = Server(host: "all-events.example.test", taskEvents: true)
     static let notesOnly = Server(host: "note-events.example.test", taskEvents: false)
-    private static let servers = [tasksAndNotes.host: tasksAndNotes, notesOnly.host: notesOnly]
+    static let recovery = Server(host: "sync-recovery.example.test", taskEvents: false)
+    private static let servers = [tasksAndNotes.host: tasksAndNotes, notesOnly.host: notesOnly, recovery.host: recovery]
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host.flatMap { servers[$0] } != nil
@@ -123,6 +150,7 @@ private final class SyncEventFixture: URLProtocol, @unchecked Sendable {
         private var taskTitle = ""
         private let lock = NSLock()
         private var requests: [String: Int] = [:]
+        private var offline = false
         private var note: (id: String, revision: String, data: String)?
         private weak var stream: SyncEventFixture?
 
@@ -137,6 +165,8 @@ private final class SyncEventFixture: URLProtocol, @unchecked Sendable {
                 taskTitle = title
             }
         }
+
+        func setOffline(_ offline: Bool) { lock.withLock { self.offline = offline } }
 
         func count(_ path: String) -> Int { lock.withLock { requests[path, default: 0] } }
 
@@ -166,6 +196,10 @@ private final class SyncEventFixture: URLProtocol, @unchecked Sendable {
             guard let url = connection.request.url else { return }
             let path = url.path
             let client = connection.client
+            if lock.withLock({ offline }) {
+                client?.urlProtocol(connection, didFailWithError: URLError(.notConnectedToInternet))
+                return
+            }
             let isStream = path == "/v1/notes/events"
             let type = isStream ? "text/event-stream" : "application/json"
             let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",

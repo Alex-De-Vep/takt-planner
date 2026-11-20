@@ -29,6 +29,7 @@ final class SyncEngine {
     private var streamedWork: Work = []
     private var stopped = false
     private var blockedUntil = Date.distantPast
+    private var serverRetryAt = Date.distantPast
     private var transientFailures = 0
 
     init(repository: SyncRepository, api: SyncHTTP, notes: NoteStore? = nil) {
@@ -69,6 +70,11 @@ final class SyncEngine {
         enqueue([.all, .configuration], after: delay)
     }
 
+    func retry() {
+        blockedUntil = .distantPast
+        wake()
+    }
+
     func wakeTasks(after delay: Duration = .zero) {
         enqueue(.tasks, after: delay)
     }
@@ -90,12 +96,13 @@ final class SyncEngine {
         let requested = Date.now.addingTimeInterval(Double(parts.seconds) + Double(parts.attoseconds) / 1e18)
         runAt = min(runAt ?? requested, requested)
         queued.formUnion(work)
+        if status == .upToDate, !running { status = .waiting }
         schedule()
     }
 
     private func schedule() {
         guard !stopped, !running, let runAt else { return }
-        let delay = max(0, max(runAt, blockedUntil).timeIntervalSinceNow)
+        let delay = max(0, max(runAt, blockedUntil, serverRetryAt).timeIntervalSinceNow)
         scheduled?.cancel()
         scheduled = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
@@ -121,27 +128,31 @@ final class SyncEngine {
             let counts = try repository.counts()
             pending = counts.pending
             status = counts.failed > 0 ? .failed("Часть изменений отклонена сервером.") :
-                (counts.pending == 0 ? .upToDate : .waiting)
+                (counts.pending == 0 && queued.intersection(.all).isEmpty ? .upToDate : .waiting)
             if counts.pending > counts.failed { enqueue(.tasks, after: .seconds(2)) }
         } catch is CancellationError {
             return
         } catch SyncProblem.signInRequired {
             status = .signIn
         } catch let failure as SyncHTTPFailure where failure.status == 429 {
-            blockedUntil = .now.addingTimeInterval(Double(max(1, failure.problem.retryAfterSeconds ?? 60)))
+            serverRetryAt = .now.addingTimeInterval(Double(max(1, failure.problem.retryAfterSeconds ?? 60)))
             enqueue(work, after: .zero)
-            status = .waiting
+            status = .failed("Сервер занят. Синхронизация повторится автоматически.")
         } catch let error as URLError {
             scheduleBackoff()
             enqueue(work, after: .zero)
-            status = [.notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost, .timedOut].contains(error.code)
-                ? .waiting : .failed(error.localizedDescription)
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                status = .failed("Нет подключения к сети. Синхронизация повторится после восстановления связи.")
+            case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .timedOut:
+                status = .failed("Не удалось связаться с сервером. Проверьте подключение к сети.")
+            default:
+                status = .failed(error.localizedDescription)
+            }
         } catch let failure as SyncHTTPFailure where failure.status < 500 {
             status = .failed(failure.localizedDescription)
-        } catch SyncProblem.oversizedMutation {
-            status = .failed(SyncProblem.oversizedMutation.localizedDescription)
-        } catch SyncProblem.incompatibleProtocol {
-            status = .failed(SyncProblem.incompatibleProtocol.localizedDescription)
+        } catch let problem as SyncProblem where [.oversizedMutation, .unsupportedNoteFormat, .incompatibleProtocol].contains(problem) {
+            status = .failed(problem.localizedDescription)
         } catch {
             scheduleBackoff()
             enqueue(work, after: .zero)

@@ -13,7 +13,7 @@
 - Select a task from the list. You can edit its title and description directly in the task pane, including after it is completed.
 - Click the circle in the task row or the **Completed** button, or press `⌘Enter` to toggle completion. Repeat the action to reopen the task.
 - Completed tasks are grouped under **Completed** at the bottom of the list. Click the header to expand or collapse the group.
-- Choose **Delete Task…** from the row’s context menu or the **…** menu above the task to confirm deletion. Pressing `Delete` with focus in the task list deletes the selected task immediately.
+- To delete a task with confirmation, open it and click the Trash button in the window toolbar. Pressing `Delete` with focus in the task list deletes the selected task immediately.
 - Deleting a task removes its subtasks and links. Its linked events remain in the system calendar.
 
 ## Text and subtasks
@@ -29,8 +29,10 @@
 
 - Each task has one main folder. Use **Inbox**, **This Week**, **Month** or one of your own folders. This Week and Month are permanent folders and keep their tasks across date changes.
 - Click the new-folder button in the toolbar or press `⇧⌘N` to create a folder. Right-click a folder to rename or delete it. Deleting a folder moves its tasks to Inbox.
-- To move a task, drag its row onto a sidebar folder, or choose **Move to Folder** from the row’s context menu or the **…** menu above the task.
+- To move a task, drag its row onto a sidebar folder or click the folder name above the open task’s title and choose another folder.
 - **All Tasks** shows the library ordered by creation date. Toolbar search looks in task titles and descriptions within the current view. Clear the search field to see the entire view again.
+
+In an open note, click the folder name above the title to choose another folder. Use the pin and Trash buttons in the window toolbar. To recover a note, open **Recently Deleted** and click **Restore**.
 
 ## Today
 
@@ -87,6 +89,8 @@
 - After you sign out, the open library remains on your Mac. Sync resumes when you sign in to the same account again. System calendars and links to calendar events are handled separately from task sync.
 
 ## Settings and shortcuts
+
+**Settings → Assistant** brings provider connections and model selection together. Click **Connect an AI provider**, choose a service, and complete the connection. Click a connected service to manage it. Add models in **Selected models** to make them available in the chat and transcription selectors. Settings and the current conversation share the chat model selection. A recording is saved as one file, and long audio is sent in parts after you confirm transcription.
 
 - Open Settings from **Takt → Settings…** or with `⌘,`. Change the interface language under **Account**. Your task and folder names stay as entered.
 - The **Help** button at the bottom of the Settings sidebar opens this guide.

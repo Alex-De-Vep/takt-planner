@@ -8,13 +8,15 @@ struct NoteListView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let store: NoteStore
     let notes: [PlannerNote]
-    let folders: [TaskFolder]
     @Binding var selection: UUID?
     let trash: Bool
     var createdNoteID: UUID? = nil
     var scope: WorkspaceListScope = .notes(.all, folder: nil, search: "")
+    var dragScopeID: UUID? = nil
+    var folderDrag: FolderDragState? = nil
     let create: () -> Void
 
+    @State private var dragSourceID = UUID()
     @State private var nativeFocus = WorkspaceListNativeFocus()
     @State private var displayedScope: WorkspaceListScope?
     @State private var selectionRevision = 0
@@ -29,7 +31,7 @@ struct NoteListView: View {
     private var listSelection: Binding<UUID?> {
         Binding(get: { selection.flatMap { rowIDs.contains($0) ? $0 : nil } }, set: { id in
             // List может сбросить подсветку при уходе фокуса. Открытая заметка при этом остаётся выбранной.
-            guard let id, rowIDs.contains(id) else { return }
+            guard folderDrag?.context == nil, let id, rowIDs.contains(id) else { return }
             // При удалении AppKit может предложить соседнюю строку. Без выбора принимаем только явную навигацию.
             let event = NSApp.currentEvent
             let arrow = event?.type == .keyDown && [UInt16(123), 124, 125, 126].contains(event?.keyCode ?? 0)
@@ -45,7 +47,7 @@ struct NoteListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let error = store.error {
+            if let error = store.libraryError {
                 VStack(alignment: .leading) {
                     Text(strings["Не удалось сохранить заметки"]).fontWeight(.medium)
                     Text(error).font(.caption).textSelection(.enabled)
@@ -72,8 +74,12 @@ struct NoteListView: View {
             .onChange(of: scope) {
                 nativeFocus.transitions.update(ids: rowIDs, scope: scope, animated: false)
             }
-            .onDisappear { nativeFocus.transitions.detach() }
-            Text(strings[store.syncEnabled ? "Заметки синхронизируются с аккаунтом" : "Заметки сохраняются на этом Mac"])
+            .onDisappear {
+                folderDrag?.finish(sourceViewID: dragSourceID)
+                nativeFocus.transitions.detach()
+            }
+            Text(strings[trash ? "Заметки удаляются навсегда через 30 дней."
+                         : store.syncEnabled ? "Заметки синхронизируются с аккаунтом" : "Заметки сохраняются на этом Mac"])
                 .font(.caption).foregroundStyle(.secondary).padding(10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -83,7 +89,7 @@ struct NoteListView: View {
         ScrollViewReader { proxy in
             List(selection: listSelection) {
                 ForEach(notes) { note in
-                    NoteListRow(note: note)
+                    draggableRow(note)
                         .tag(note.id)
                         .id(note.id)
                         .listRowInsets(EdgeInsets())
@@ -93,14 +99,18 @@ struct NoteListView: View {
                                 store.notes.contains { $0.id == note.id && ($0.deletedAt != nil) == trash }
                             }, nativeFocus: nativeFocus))
                         .onTapGesture {
+                            guard folderDrag?.context == nil else { return }
                             withImmediateNavigationUpdate {
                                 selection = note.id
                                 listFocused = true
                                 selectionRevision &+= 1
                             }
                         }
-                        .onDrag { NSItemProvider(object: ("takt-note:" + note.id.uuidString) as NSString) }
-                        .contextMenu { menu(for: note) }
+                        .contextMenu {
+                            if trash {
+                                Button(strings["Восстановить"]) { store.restoreFromTrash(note.id) }
+                            }
+                        }
                 }
             }
             .modifier(WorkspaceListAppearance())
@@ -116,24 +126,20 @@ struct NoteListView: View {
         }
     }
 
-    @ViewBuilder private func menu(for note: PlannerNote) -> some View {
-        if trash {
-            Button(strings["Восстановить"]) { store.update(note.id) { $0.deletedAt = nil }; store.flush() }
-        } else {
-            Button(strings[note.pinned ? "Открепить" : "Закрепить"]) {
-                store.update(note.id) { $0.pinned.toggle() }; store.flush()
-            }
-            Menu(strings["Переместить в папку"]) {
-                ForEach(folders) { folder in
-                    Button(folder.name) {
-                        store.update(note.id) { $0.folder = TaskFilter.folder(folder.id).id }
-                        store.flush()
-                    }
+    @ViewBuilder private func draggableRow(_ note: PlannerNote) -> some View {
+        if let dragScopeID, let folderDrag, !trash, !store.unreadable {
+            NoteListRow(note: note).onDrag {
+                guard let current = store.notes.first(where: { $0.id == note.id && $0.deletedAt == nil && !$0.isPurged }) else {
+                    return NSItemProvider()
                 }
+                let payload = FolderDragPayload(kind: .note, itemID: current.id, scopeID: dragScopeID)
+                folderDrag.begin(payload: payload, sourceFolderID: current.folder, sourceViewID: dragSourceID)
+                return payload.provider()
+            } preview: {
+                FolderDragPreview(kind: .note)
             }
-            Divider()
-            Button(strings["В корзину"], role: .destructive) { moveToTrash(note.id) }
-                .disabled(store.unreadable)
+        } else {
+            NoteListRow(note: note)
         }
     }
 

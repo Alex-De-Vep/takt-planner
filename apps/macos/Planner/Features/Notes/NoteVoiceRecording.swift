@@ -9,7 +9,6 @@ final class NoteVoiceRecording {
         let file: URL
         var transcript: String?
         var isCall = false
-        var pieces: [URL]?
         var pieceTranscripts: [String?] = []
         var transcriptionSource: String?
         var remoteCleanupFailed = false
@@ -28,11 +27,11 @@ final class NoteVoiceRecording {
 
     var isBusy: Bool { preparing || recordingID != nil || browserCall != nil }
     private(set) var transcribing: Set<UUID> = []
+    private(set) var transcriptionProgress: [UUID: (part: Int, total: Int)] = [:]
     private(set) var errors: [UUID: String] = [:]
     @ObservationIgnored private var recorder: (any NoteMicrophoneInput)?
     @ObservationIgnored private var recorderDelegate: MicrophoneDelegate?
     @ObservationIgnored private let directory: URL
-    @ObservationIgnored private let scratch = ScratchFiles()
 
     init(directory: URL? = nil) {
         self.directory = directory ?? FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-" + UUID().uuidString)
@@ -209,7 +208,7 @@ final class NoteVoiceRecording {
         }
         guard response == .OK, let destination = panel.url, destination.standardizedFileURL != file.standardizedFileURL else { return false }
         // Диалог подтвердил замену файла. Атомарная запись сохраняет старую копию при сбое.
-        try Data(contentsOf: file).write(to: destination, options: .atomic)
+        try Data(contentsOf: file, options: .alwaysMapped).write(to: destination, options: .atomic)
         return true
     }
 
@@ -221,9 +220,8 @@ final class NoteVoiceRecording {
     private func removeFile(_ noteID: UUID) {
         guard let draft = drafts[noteID] else { return }
         do {
-            // Исходник удаляется последним, чтобы оставался доступен при сбое очистки частей.
-            for file in (draft.pieces ?? []).filter({ $0 != draft.file }) + [draft.file] {
-                if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            if FileManager.default.fileExists(atPath: draft.file.path) {
+                try FileManager.default.removeItem(at: draft.file)
             }
             drafts[noteID] = nil
             errors[noteID] = nil
@@ -237,7 +235,10 @@ final class NoteVoiceRecording {
         guard let draft = drafts[noteID], !draft.saved, recordingID != noteID, !transcribing.contains(noteID) else { return }
         transcribing.insert(noteID)
         errors[noteID] = nil
-        defer { transcribing.remove(noteID) }
+        defer {
+            transcribing.remove(noteID)
+            transcriptionProgress[noteID] = nil
+        }
         do {
             if draft.transcript == nil {
                 try await transcribeRecording(noteID, profile: profile, modelID: modelID, transport: transport)
@@ -251,25 +252,24 @@ final class NoteVoiceRecording {
     private func transcribeRecording(_ noteID: UUID, profile: AssistantGatewayProfile, modelID: String,
                                 transport: AssistantGatewayHTTP) async throws {
         guard var draft = drafts[noteID] else { return }
-        if draft.pieces == nil {
-            let source = draft.file
-            let workingDirectory = scratch.directory
-            let pieces = try await Task.detached(priority: .utility) {
-                try NoteCallAudio.transcriptionPieces(source, outputDirectory: workingDirectory)
-            }.value
-            draft.pieces = pieces
-            draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
-            drafts[noteID] = draft
-        }
-        guard let pieces = draft.pieces else { return }
+        let plan = try NoteCallAudio.TranscriptionPlan(draft.file)
         let sourceID = profile.id.uuidString + ":" + modelID
-        if draft.transcriptionSource != sourceID {
+        if draft.transcriptionSource != sourceID || draft.pieceTranscripts.count != plan.count {
             draft.transcriptionSource = sourceID
-            draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
+            draft.pieceTranscripts = Array(repeating: nil, count: plan.count)
             drafts[noteID] = draft
         }
-        for (index, piece) in pieces.enumerated() where draft.pieceTranscripts[index] == nil {
-            let result = try await transport.transcribe(piece, profile: profile, modelID: modelID, allowEmpty: pieces.count > 1)
+        for index in 0..<plan.count where draft.pieceTranscripts[index] == nil {
+            try Task.checkCancellation()
+            if plan.count > 1 { transcriptionProgress[noteID] = (index + 1, plan.count) }
+            let preparation = Task.detached(priority: .utility) { try plan.preparePart(at: index) }
+            let piece = try await withTaskCancellationHandler {
+                try await preparation.value
+            } onCancel: {
+                preparation.cancel()
+            }
+            defer { if piece != plan.source { try? FileManager.default.removeItem(at: piece) } }
+            let result = try await transport.transcribe(piece, profile: profile, modelID: modelID, allowEmpty: plan.count > 1)
             draft.pieceTranscripts[index] = result.text
             draft.remoteCleanupFailed = draft.remoteCleanupFailed || result.remoteCleanupFailed
             drafts[noteID] = draft
@@ -277,7 +277,7 @@ final class NoteVoiceRecording {
         let text = draft.pieceTranscripts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
         guard !text.isEmpty else {
             // После пустого ответа всех частей можно выбрать другую модель и повторить.
-            draft.pieceTranscripts = Array(repeating: nil, count: pieces.count)
+            draft.pieceTranscripts = Array(repeating: nil, count: plan.count)
             drafts[noteID] = draft
             throw AssistantFailure(message: "Сервис вернул пустую расшифровку.")
         }
@@ -301,13 +301,6 @@ final class NoteVoiceRecording {
         if draft.remoteCleanupFailed, errors[noteID] == nil {
             errors[noteID] = "Не удалось удалить загруженный файл из GigaChat."
         }
-    }
-
-    // Части для загрузки можно пересоздать из локального оригинала.
-    private final class ScratchFiles {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-Parts-" + UUID().uuidString)
-
-        deinit { try? FileManager.default.removeItem(at: directory) }
     }
 
     private final class MicrophoneDelegate: NSObject, AVAudioRecorderDelegate {
@@ -370,6 +363,7 @@ enum NoteRecordingTestAudio {
 #endif
 
 struct NoteVoiceControls: View {
+    @Environment(\.openSettings) private var openSettings
     @Environment(\.translations) private var strings
     let note: PlannerNote
     let store: NoteStore
@@ -419,8 +413,21 @@ struct NoteVoiceControls: View {
         .padding(16)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
         .sheet(isPresented: $choosingModel, onDismiss: openConfirmationIfReady) {
-            AssistantModelConnections(service: assistant, russian: preferences.language.resolvedCode == "ru",
-                                      preferences: preferences, purpose: .transcription)
+            VStack(alignment: .leading, spacing: 14) {
+                Text(strings["Выберите модель для расшифровки"]).font(.headline)
+                AssistantSpeechModelMenu(service: assistant, preferences: preferences)
+                HStack {
+                    Button(strings["Настроить список моделей…"]) {
+                        choosingModel = false
+                        preferences.assistantSettingsRequest = UUID()
+                        openSettings()
+                    }
+                    Spacer()
+                    Button(strings["Готово"]) { choosingModel = false }.keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(20).frame(width: 410)
+            .onAppear { assistant.gateways.loadSpeechCatalogs() }
         }
         .sheet(item: $confirmation) { selection in
             NoteVoiceConfirmation(provider: selection.gateway.name, saveCopy: {
@@ -446,7 +453,9 @@ struct NoteVoiceControls: View {
     private func draftActions(_ draft: NoteVoiceRecording.Draft) -> some View {
         if voice.transcribing.contains(note.id) {
             ProgressView().controlSize(.small)
-            Text(strings["Расшифровка…"])
+            if let progress = voice.transcriptionProgress[note.id] {
+                Text(strings.format("Расшифровка: часть %d из %d", progress.part, progress.total))
+            } else { Text(strings["Расшифровка…"]) }
         } else if draft.saved {
             Button(strings["Удалить запись"]) { voice.discard(note.id) }
         } else if draft.transcript != nil {

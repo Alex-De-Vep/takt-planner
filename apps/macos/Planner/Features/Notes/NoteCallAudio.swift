@@ -43,37 +43,52 @@ final class NoteCallAudio {
 
     func close() { writer = nil }
 
-    /// Отдельные короткие запросы позволяют повторить сбойный отрезок длинной записи.
-    static func transcriptionPieces(_ source: URL, outputDirectory: URL? = nil,
-                                    framesPerPiece: AVAudioFramePosition = framesPerPiece) throws -> [URL] {
-        let reader = try AVAudioFile(forReading: source)
-        guard framesPerPiece > 0, let buffer = AVAudioPCMBuffer(pcmFormat: reader.processingFormat, frameCapacity: 8192) else {
-            throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+    /// План строится по исходному файлу. Одновременно на диске нужен только один фрагмент.
+    struct TranscriptionPlan: Sendable {
+        let source: URL
+        let totalFrames: AVAudioFramePosition
+        let framesPerPart: AVAudioFramePosition
+        var count: Int { Int((totalFrames - 1) / framesPerPart + 1) }
+
+        init(_ source: URL, framesPerPart: AVAudioFramePosition = NoteCallAudio.framesPerPiece) throws {
+            let reader = try AVAudioFile(forReading: source)
+            guard reader.length > 0, framesPerPart > 0 else {
+                throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+            }
+            self.source = source
+            totalFrames = reader.length
+            self.framesPerPart = framesPerPart
         }
-        if reader.length <= framesPerPiece { return [source] }
-        let directory = outputDirectory ?? source.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                                attributes: [.posixPermissions: 0o700])
-        var files: [URL] = []
-        do {
-            while reader.framePosition < reader.length {
-                try Task.checkCancellation()
-                let url = directory.appending(path: UUID().uuidString + ".m4a")
-                files.append(url)
-                let writer = try AVAudioFile(forWriting: url, settings: settings(channels: Int(reader.processingFormat.channelCount)))
-                let end = min(reader.length, reader.framePosition + framesPerPiece)
+
+        func preparePart(at index: Int) throws -> URL {
+            try Task.checkCancellation()
+            if count == 1 { return source }
+            let reader = try AVAudioFile(forReading: source)
+            let start = AVAudioFramePosition(index) * framesPerPart
+            let end = min(totalFrames, start + framesPerPart)
+            let format = reader.processingFormat
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8192) else {
+                throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+            }
+            let url = FileManager.default.temporaryDirectory.appending(path: "Takt-Voice-Part-" + UUID().uuidString + ".m4a")
+            do {
+                reader.framePosition = start
+                var settings = NoteCallAudio.settings(channels: Int(format.channelCount))
+                settings[AVSampleRateKey] = format.sampleRate
+                let writer = try AVAudioFile(forWriting: url, settings: settings)
                 while reader.framePosition < end {
+                    try Task.checkCancellation()
                     try reader.read(into: buffer, frameCount: AVAudioFrameCount(min(8192, end - reader.framePosition)))
                     guard buffer.frameLength > 0 else {
                         throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
                     }
                     try writer.write(from: buffer)
                 }
+                return url
+            } catch {
+                try? FileManager.default.removeItem(at: url)
+                throw error
             }
-            return files
-        } catch {
-            for file in files { try? FileManager.default.removeItem(at: file) }
-            throw error
         }
     }
 

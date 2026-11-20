@@ -8,6 +8,8 @@ struct TaskDetailView: View {
     let service: TaskService
     let now: Date
     let focusTitle: Bool
+    let folders: [TaskFolder]
+    let move: (TaskFilter) -> Void
     let toggleToday: () -> Void
     let editorStore: TaskEditorStore
     let calendar: CalendarService
@@ -21,7 +23,6 @@ struct TaskDetailView: View {
     var body: some View {
         let taskID = task.id
         VStack(spacing: 0) {
-            // Название папки и меню вынесены в шапку окна: здесь начинаются действия самой задачи.
             HStack(spacing: 10) {
                 TaskActionButton(title: strings["Выполнено"], symbol: task.isCompleted ? "checkmark.circle.fill" : "circle", active: task.isCompleted, isCompletion: true) {
                     service.toggleCompleted(task)
@@ -43,12 +44,15 @@ struct TaskDetailView: View {
                             .font(.system(size: 11)).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity)
                             .padding(.top, 24)
-                        PlainTextTaskEditor(taskID: task.id, isTitle: true, store: editorStore,
-                            text: Binding(get: { service.title(for: task) }, set: { service.editTitle(task, text: $0) }),
-                            requestFocus: $titleFocused, placeholder: strings["Название задачи"],
-                            submit: { descriptionFocused = true }, toggleCompleted: { service.toggleCompleted(task) },
-                            endEditing: { service.flushText(.title(taskID)) })
-                            .id(task.id.uuidString + ".title")
+                        VStack(alignment: .leading, spacing: 8) {
+                            WorkspaceFolderMenu(kind: .task, current: task.primaryFolder, folders: folders, move: move)
+                            PlainTextTaskEditor(taskID: task.id, isTitle: true, store: editorStore,
+                                text: Binding(get: { service.title(for: task) }, set: { service.editTitle(task, text: $0) }),
+                                requestFocus: $titleFocused, placeholder: strings["Название задачи"],
+                                submit: { descriptionFocused = true }, toggleCompleted: { service.toggleCompleted(task) },
+                                endEditing: { service.flushText(.title(taskID)) })
+                                .id(task.id.uuidString + ".title")
+                        }
                         PlainTextTaskEditor(taskID: task.id, isTitle: false, store: editorStore,
                             text: Binding(get: { service.description(for: task) }, set: { service.editDescription(task, text: $0) }),
                             requestFocus: $descriptionFocused, placeholder: strings["Описание задачи"],

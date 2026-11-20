@@ -51,7 +51,9 @@ struct NoteCallTests {
         let source = try AVAudioFile(forReading: file)
         #expect(source.processingFormat.channelCount == 2)
         #expect(source.length == 24_000)
-        let parts = try NoteCallAudio.transcriptionPieces(file, framesPerPiece: 12_000)
+        let plan = try NoteCallAudio.TranscriptionPlan(file, framesPerPart: 12_000)
+        let parts = try (0..<plan.count).map { try plan.preparePart(at: $0) }
+        defer { for part in parts { try? FileManager.default.removeItem(at: part) } }
         #expect(parts.count == 2)
         let readers = try parts.map { try AVAudioFile(forReading: $0) }
         #expect(readers.allSatisfy { $0.length == 12_000 && $0.processingFormat.channelCount == 2 })
@@ -109,13 +111,13 @@ struct NoteCallTests {
             ])
             try writer.write(from: buffer)
         }
-        let parts = try NoteCallAudio.transcriptionPieces(file, outputDirectory: directory.appending(path: "parts"),
-                                                          framesPerPiece: 12_000)
-        #expect(parts.count == 2)
-        for part in parts {
-            let reader = try AVAudioFile(forReading: part)
-            #expect(reader.fileFormat.channelCount == 1)
-            #expect(reader.length == 12_000)
-        }
+        let plan = try NoteCallAudio.TranscriptionPlan(file, framesPerPart: 10_000)
+        let parts = try (0..<plan.count).map { try plan.preparePart(at: $0) }
+        defer { for part in parts { try? FileManager.default.removeItem(at: part) } }
+        #expect(parts.count == 3)
+        let readers = try parts.map { try AVAudioFile(forReading: $0) }
+        #expect(readers.allSatisfy { $0.fileFormat.channelCount == 1 })
+        #expect(readers.map(\.length) == [10_000, 10_000, 4_000])
+        #expect(try AVAudioFile(forReading: file).length == 24_000)
     }
 }

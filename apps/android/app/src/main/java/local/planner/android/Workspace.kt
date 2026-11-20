@@ -1,5 +1,6 @@
 package local.planner.android
 
+import android.os.SystemClock
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,12 +27,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -49,6 +52,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -69,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.delay
 
 private enum class Tab(val label: Int, val icon: Int) {
     Tasks(R.string.tasks, R.drawable.ic_list),
@@ -88,6 +93,7 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     var noteTrash by rememberSaveable { mutableStateOf(false) }
     val notes by model.notes.collectAsState()
     val noteState = notes.takeIf { it.workspace == library.workspace } ?: NotesState()
+    val syncStatus: @Composable () -> Unit = { SyncWarning(library, noteState, cloud, model::retrySync) }
     val noteFolder = selectedNoteFolder?.takeIf { id -> library.folders.any { it.id == id } }
     var route by rememberSaveable { mutableStateOf<String?>(null) }
     var managing by rememberSaveable { mutableStateOf(false) }
@@ -185,6 +191,7 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                         when (tab) {
                             Tab.Tasks -> TaskList(
                                 library, section, { selectedSection = it }, { managing = true }, { route = it }, model,
+                                syncStatus = syncStatus,
                             )
                             Tab.Notes -> NotesScreen(
                                 library, noteState, cloud, noteFolder, noteTrash,
@@ -192,7 +199,7 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
                                     if (noteTrash) selectedNoteFolder = null
                                     noteTrash = !noteTrash
                                 },
-                                manage = { managing = true }, model = model,
+                                manage = { managing = true }, model = model, syncStatus = syncStatus,
                             )
                             Tab.Events -> CalendarScreen(calendar, calendarDate, { calendarDateText = it.toString() },
                                 openEvent, { calendarSettings = true }, calendarRefresh)
@@ -228,7 +235,7 @@ internal fun sectionName(section: String, library: Library): String =
 @Composable
 private fun TaskList(
     library: Library, section: String, select: (String) -> Unit, manage: () -> Unit, open: (String) -> Unit,
-    model: PlannerModel,
+    model: PlannerModel, syncStatus: @Composable () -> Unit,
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable(section) { mutableStateOf("") }
@@ -240,7 +247,7 @@ private fun TaskList(
         )
     }
     val (done, active) = tasks.partition(Entity::completed)
-    Heading(sectionName(section, library)) {
+    Heading(sectionName(section, library), status = syncStatus) {
         ActionIcon(if (searching) R.drawable.ic_close else R.drawable.ic_search,
             if (searching) R.string.close_search else R.string.search) {
             searching = !searching
@@ -379,14 +386,56 @@ private fun TaskRow(
 }
 
 @Composable
-internal fun Heading(title: String, actions: @Composable () -> Unit = {}) {
+internal fun Heading(title: String, status: @Composable () -> Unit = {}, actions: @Composable () -> Unit = {}) {
     Row(
         Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 18.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            status()
+        }
         actions()
+    }
+}
+
+@Composable
+private fun SyncWarning(library: Library, notes: NotesState, cloud: CloudState, retry: () -> Unit) {
+    val messages = listOfNotNull(cloud.message, notes.error?.takeUnless { it == R.string.storage_error }).distinct()
+    if (messages.isEmpty() && library.rejected == 0) return
+
+    var showDetails by remember { mutableStateOf(false) }
+    ActionIcon(R.drawable.ic_sync_warning, R.string.sync_issue, tint = MaterialTheme.colorScheme.error) {
+        showDetails = true
+    }
+    if (showDetails) {
+        val waiting by produceState(cloud.syncRetryAt > SystemClock.elapsedRealtime(), cloud.syncRetryAt) {
+            value = cloud.syncRetryAt > SystemClock.elapsedRealtime()
+            delay((cloud.syncRetryAt - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+            value = false
+        }
+        val pending = library.pending + notes.pending
+        AlertDialog(
+            onDismissRequest = { showDetails = false },
+            title = { Text(stringResource(R.string.sync_issue)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    messages.forEach { Text(stringResource(it)) }
+                    if (pending > 0) Text(stringResource(R.string.pending, pending))
+                    if (library.rejected > 0) Text(stringResource(R.string.rejected, library.rejected))
+                    if (cloud.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = retry, enabled = !cloud.busy && !waiting) {
+                    Text(stringResource(R.string.sync_now))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDetails = false }) { Text(stringResource(R.string.close)) }
+            },
+        )
     }
 }
 

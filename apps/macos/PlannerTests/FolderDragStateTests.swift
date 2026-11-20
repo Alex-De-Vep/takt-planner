@@ -4,15 +4,15 @@ import Testing
 
 /// В тестах контекст переноса работает без мониторинга мыши и обращения к личной библиотеке.
 @MainActor
-struct TaskDragStateTests {
+struct FolderDragStateTests {
     @Test func sourceFolderIsInactiveAndOtherDestinationsAreHighlighted() throws {
-        let state = TaskDragState(monitorInput: false)
+        let state = FolderDragState(monitorInput: false)
         let folder = TaskFilter.folder(UUID())
-        let payload = TaskDragPayload(taskID: UUID(), scopeID: UUID())
+        let payload = FolderDragPayload(kind: .task, itemID: UUID(), scopeID: UUID())
         #expect(state.feedback(for: .week) == .none)
-        state.begin(payload: payload, sourceFolder: folder, sourceViewID: UUID())
+        state.begin(payload: payload, sourceFolderID: folder.id, sourceViewID: UUID())
         let context = try #require(state.context)
-        #expect(context.payload == payload && context.sourceFolder == folder)
+        #expect(context.payload == payload && context.sourceFolderID == folder.id)
         #expect(state.feedback(for: folder) == .sameFolder)
         #expect(state.feedback(for: .inbox) == .destination)
         #expect(state.feedback(for: .week) == .destination)
@@ -22,12 +22,25 @@ struct TaskDragStateTests {
         #expect(state.context == nil && state.feedback(for: folder) == .none)
     }
 
+    @Test func noteDragOffersOnlyCustomFolders() throws {
+        let drag = FolderDragState(monitorInput: false)
+        let source = TaskFilter.folder(UUID())
+        let note = FolderDragPayload(kind: .note, itemID: UUID(), scopeID: UUID())
+        #expect(FolderDragPayload.decode(try JSONEncoder().encode(note)) == note)
+        #expect(note.provider().hasItemConformingToTypeIdentifier("local.planner.note"))
+        #expect(!note.provider().hasItemConformingToTypeIdentifier("local.planner.task"))
+        drag.begin(payload: note, sourceFolderID: source.id, sourceViewID: UUID())
+        #expect(drag.feedback(for: source) == .sameFolder)
+        #expect(drag.feedback(for: .folder(UUID())) == .destination)
+        for system in TaskFilter.smartFilters { #expect(drag.feedback(for: system) == .none) }
+    }
+
     @Test func staleCleanupAndClosingAnotherWindowDoNotEndNewDrag() throws {
-        let state = TaskDragState(monitorInput: false)
+        let state = FolderDragState(monitorInput: false)
         let firstSource = UUID(), secondSource = UUID()
-        state.begin(payload: .init(taskID: UUID(), scopeID: UUID()), sourceFolder: .week, sourceViewID: firstSource)
+        state.begin(payload: .init(kind: .task, itemID: UUID(), scopeID: UUID()), sourceFolderID: TaskFilter.week.id, sourceViewID: firstSource)
         let old = try #require(state.context)
-        state.begin(payload: .init(taskID: UUID(), scopeID: UUID()), sourceFolder: .month, sourceViewID: secondSource)
+        state.begin(payload: .init(kind: .task, itemID: UUID(), scopeID: UUID()), sourceFolderID: TaskFilter.month.id, sourceViewID: secondSource)
         let current = try #require(state.context)
         state.finish(token: old.token)
         state.finish(sourceViewID: firstSource)
@@ -38,8 +51,8 @@ struct TaskDragStateTests {
     }
 
     @Test func mouseReleaseOutsideDestinationEndsDragButHoldingDoesNot() throws {
-        let state = TaskDragState(monitorInput: false)
-        state.begin(payload: .init(taskID: UUID(), scopeID: UUID()), sourceFolder: .inbox, sourceViewID: UUID())
+        let state = FolderDragState(monitorInput: false)
+        state.begin(payload: .init(kind: .task, itemID: UUID(), scopeID: UUID()), sourceFolderID: TaskFilter.inbox.id, sourceViewID: UUID())
         let context = try #require(state.context)
         state.mouseButtonsChanged(1, token: context.token)
         state.mouseButtonsChanged(3, token: context.token)

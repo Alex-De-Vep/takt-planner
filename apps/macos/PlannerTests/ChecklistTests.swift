@@ -140,10 +140,10 @@ struct ChecklistTests {
         #expect(item.isHidden && !button.isEnabled)
         var added = 0
         controller.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
-                          taskActions: AnyView(EmptyView()), isSidebarVisible: true, newFolderTitle: "Папка",
+                          isSidebarVisible: true, newFolderTitle: "Папка",
                           toggleSidebarTitle: "Панель", folderTitle: "Входящие", taskCountTitle: "1",
-                          newTaskTitle: "Задача", newChecklistItemTitle: "Подзадача", taskActionsTitle: "Действия",
-                          hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: { added += 1 },
+                          newTaskTitle: "Задача", newChecklistItemTitle: "Подзадача", deleteTaskTitle: "Действия",
+                          hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: { added += 1 }, deleteTask: {},
                           sidebarVisibilityChanged: { _ in })
         #expect(!item.isHidden && button.isEnabled && button.image != nil)
         button.performClick(nil)

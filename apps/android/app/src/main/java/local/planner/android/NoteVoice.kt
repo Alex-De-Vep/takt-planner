@@ -19,6 +19,11 @@ internal const val VOICE_MAX_BYTES = 8 * 1024 * 1024
 private const val VOICE_MAX_DURATION = 15 * 60 * 1000
 internal data class VoiceClip(val file: File, val durationMs: Long)
 
+internal fun noteAudioFile(context: Context, workspace: String, noteID: String): File {
+    val scope = noteDigest(workspace.toByteArray())
+    return File(context.filesDir, "note-audio/$scope/$noteID.m4a")
+}
+
 internal class NoteVoice(private val context: Context) {
     var clip by mutableStateOf<VoiceClip?>(null)
         private set
@@ -35,8 +40,7 @@ internal class NoteVoice(private val context: Context) {
 
     fun bind(workspace: String, noteId: String) {
         close()
-        val scope = noteDigest(workspace.toByteArray())
-        val file = File(context.filesDir, "note-audio/$scope/$noteId.m4a")
+        val file = noteAudioFile(context, workspace, noteId)
         destination = file
         clip = readClip(file)
     }

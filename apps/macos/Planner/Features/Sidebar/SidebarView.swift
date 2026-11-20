@@ -1,57 +1,60 @@
-import AppKit
 import SwiftUI
-import UniformTypeIdentifiers
+
+enum SidebarSelection: Hashable {
+    case taskFilter(TaskFilter)
+    case allNotes
+    case deletedNotes
+}
 
 /// Системные разделы и пользовательские папки используют одинаковые строки и счётчики.
 struct SidebarView: View {
     @Environment(\.translations) private var strings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var selection: TaskFilter?
+    @Binding var selection: SidebarSelection?
     let folders: [TaskFolder]
     let tasks: [PlannerTask]
     let now: Date
     let renameFolder: (TaskFolder) -> Void
     let deleteFolder: (TaskFolder) -> Void
-    let receiveTask: (TaskDragPayload, TaskFilter) -> Void
-    let taskDrag: TaskDragState
-    var notesActive = false
+    let receiveItem: (FolderDragPayload, TaskFilter) -> Void
+    let dragScopeID: UUID
+    let folderDrag: FolderDragState
     var notes: [PlannerNote] = []
-    var showAllNotes: (() -> Void)?
-    var showDeletedNotes: (() -> Void)?
-    var receiveNote: (@MainActor @Sendable (UUID, TaskFilter) -> Void)?
-    @State private var targetedFolder: TaskFilter?
+    var syncEngine: SyncEngine? = nil
+    private struct Hover {
+        let folder: TaskFilter
+        let token: UUID?
+        let feedback: FolderDragState.Feedback
+    }
+    @State private var hover: Hover?
 
     // При переносе выбранной остаётся открытая папка: назначение не подменяет selection.
-    private var folderSelection: Binding<TaskFilter?> {
+    private var listSelection: Binding<SidebarSelection?> {
         Binding(get: { selection }, set: { value in
-            guard taskDrag.context == nil, targetedFolder == nil else { return }
+            guard folderDrag.context == nil, hover == nil else { return }
             withImmediateNavigationUpdate { selection = value }
         })
     }
 
     private var deleteSelectedFolder: (() -> Void)? {
         // Только пользовательская папка в списке может вызвать диалог удаления.
-        guard taskDrag.context == nil, case .folder(let id)? = selection,
+        guard folderDrag.context == nil, hover == nil, case .taskFilter(.folder(let id))? = selection,
               let folder = folders.first(where: { $0.id == id && !$0.isDeleted }) else { return nil }
         return { deleteFolder(folder) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            List(selection: folderSelection) {
+            List(selection: listSelection) {
                 Section(strings["Задачи"]) {
                     ForEach(TaskFilter.smartFilters) { filter in
-                        row(filter).tag(filter)
+                        row(filter).tag(SidebarSelection.taskFilter(filter))
                             .accessibilityIdentifier("sidebar-\(filter.id)")
                     }
                 }
-                if let showAllNotes, let showDeletedNotes {
-                    Section(strings["Заметки"]) {
-                        Button(action: showAllNotes) { Label(strings["Все заметки"], systemImage: "note.text") }
-                            .buttonStyle(.plain)
-                        Button(action: showDeletedNotes) { Label(strings["Недавно удалённые"], systemImage: "trash") }
-                            .buttonStyle(.plain)
-                    }
+                Section(strings["Заметки"]) {
+                    noteFilter(.allNotes, title: strings["Все заметки"], symbol: "note.text", identifier: "sidebar-all-notes")
+                    noteFilter(.deletedNotes, title: strings["Недавно удалённые"], symbol: "trash", identifier: "sidebar-deleted-notes")
                 }
                 Section(strings["Мои папки"]) {
                     if folders.isEmpty {
@@ -61,7 +64,7 @@ struct SidebarView: View {
                             .padding(.vertical, 4)
                     }
                     ForEach(folders) { folder in
-                        row(.folder(folder.id)).tag(TaskFilter.folder(folder.id))
+                        row(.folder(folder.id)).tag(SidebarSelection.taskFilter(.folder(folder.id)))
                             .accessibilityIdentifier("folder-row-\(folder.name)")
                             .contextMenu {
                                 Button(strings["Переименовать"]) { renameFolder(folder) }
@@ -73,15 +76,25 @@ struct SidebarView: View {
             .listStyle(.sidebar)
             // Стекло рисует полноразмерный NSSplitViewItem, а не отдельная область внутри списка.
             .scrollContentBackground(.hidden)
-            .listItemTint(.monochrome)
             .animation(PlannerMotion.animation(reduceMotion: reduceMotion), value: folders.map(\.id))
+            // Сначала сбрасываем анимацию внешней транзакции, затем List добавляет её только при смене папок.
+            .transaction { $0.animation = nil }
             .onDeleteCommand(perform: deleteSelectedFolder)
             .accessibilityIdentifier("sidebar-list")
+            if let syncEngine {
+                SidebarSyncStatus(engine: syncEngine)
+            }
         }
-        .onChange(of: taskDrag.context?.token) {
-            withImmediateNavigationUpdate { targetedFolder = nil }
+        .onChange(of: folderDrag.context?.token) { _, token in
+            if hover?.token != token { hover = nil }
         }
-        .onDisappear { targetedFolder = nil }
+        .onDisappear { hover = nil }
+    }
+
+    private func noteFilter(_ filter: SidebarSelection, title: String, symbol: String, identifier: String) -> some View {
+        SidebarFolderRow(title: title, symbol: symbol, selected: selection == filter)
+            .tag(filter)
+            .accessibilityIdentifier(identifier)
     }
 
     private func row(_ filter: TaskFilter) -> some View {
@@ -91,81 +104,166 @@ struct SidebarView: View {
         let countDescription = noteCount.map { strings.format("Задач: %d, заметок: %d", count, $0) }
             ?? strings.format("Задач: %d", count)
         return SidebarFolderRow(title: filter.title(in: folders, using: strings), symbol: filter.symbol,
-                                countText: countText, countDescription: countDescription, selected: selection == filter,
-                                feedback: targetedFolder == filter ? taskDrag.feedback(for: filter) : .none)
-        .onDrop(of: [UTType.utf8PlainText], isTargeted: nil) { providers in
-            guard notesActive, filter.acceptsNotes, let receiveNote, let provider = providers.first else { return false }
-            _ = provider.loadObject(ofClass: String.self) { value, _ in
-                guard let value, value.hasPrefix("takt-note:"), let id = UUID(uuidString: String(value.dropFirst(10))) else { return }
-                DispatchQueue.main.async { receiveNote(id, filter) }
-            }
-            return true
-        }
-        .onDrop(of: [.plannerTask], delegate: TaskFolderDropDelegate(destination: filter,
-            targeted: Binding(get: { targetedFolder == filter }, set: { active in
-                if active { targetedFolder = filter }
-                else if targetedFolder == filter { targetedFolder = nil }
-            }), receive: receiveTask, taskDrag: taskDrag))
+                                countText: countText, countDescription: countDescription, selected: selection == .taskFilter(filter),
+                                feedback: hover?.folder == filter && hover?.token == folderDrag.context?.token
+                                    ? hover?.feedback ?? .none : .none)
+        .onDrop(of: FolderDragPayload.Kind.allCases.map(\.type), delegate: FolderDropDelegate(destination: filter,
+            scopeID: dragScopeID, drag: folderDrag, setTargeted: { active in
+                if active {
+                    // AppKit может переиспользовать провайдер при повторном drag и не вызвать замыкание источника.
+                    let feedback = folderDrag.feedback(for: filter)
+                    hover = Hover(folder: filter, token: folderDrag.context?.token,
+                                  feedback: feedback == .sameFolder ? .sameFolder : .destination)
+                } else if hover?.folder == filter {
+                    hover = nil
+                }
+            }, receive: receiveItem))
     }
 }
 
-/// Оформление читается внутри строки List, где backgroundProminence соответствует её нативному фону.
+struct SidebarSyncStatus: View {
+    @Environment(\.translations) private var strings
+    @State private var showsDetails = false
+    let engine: SyncEngine
+
+    private var issue: String? {
+        switch engine.status {
+        case .signIn: strings["Войдите в аккаунт повторно."]
+        case .failed(let message): strings[message]
+        default: nil
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider().padding(.horizontal, 12)
+            Group {
+                if issue != nil {
+                    Button { showsDetails.toggle() } label: {
+                        Label(strings["Ошибка синхронизации"], systemImage: "exclamationmark.circle.fill")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("sidebar-sync-error")
+                } else {
+                    statusLabel
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("sidebar-sync-status")
+                }
+            }
+            .font(.caption)
+            .frame(minHeight: 34)
+            .padding(.horizontal, 16)
+            .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(strings["Синхронизация"]).font(.headline)
+                    if let issue {
+                        Text(issue)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    } else {
+                        statusLabel
+                    }
+                    if engine.pending > 0 {
+                        LabeledContent(strings["Ожидают отправки"], value: engine.pending.formatted())
+                            .foregroundStyle(.secondary)
+                    }
+                    switch engine.status {
+                    case .signIn:
+                        SettingsLink { Text(strings["Настройки"]) }
+                    case .failed:
+                        Button(strings["Синхронизировать"]) { engine.retry() }
+                            .accessibilityIdentifier("sidebar-sync-retry")
+                    default:
+                        EmptyView()
+                    }
+                }
+                .padding(16)
+                .frame(width: 280, alignment: .leading)
+                .accessibilityIdentifier("sidebar-sync-details")
+            }
+        }
+        .padding(.bottom, 8)
+    }
+
+    @ViewBuilder private var statusLabel: some View {
+        switch engine.status {
+        case .syncing:
+            HStack(spacing: 7) {
+                ProgressView().controlSize(.small).accessibilityHidden(true)
+                Text(strings["Синхронизация…"])
+            }
+        case .upToDate:
+            Label {
+                Text(strings["Синхронизировано"])
+            } icon: {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+        default:
+            Label(strings["Ожидание синхронизации"], systemImage: "arrow.trianglehead.clockwise")
+        }
+    }
+}
+
 private struct SidebarFolderRow: View {
     let title: String
     let symbol: String
-    let countText: String?
-    let countDescription: String
+    var countText: String?
+    var countDescription = ""
     let selected: Bool
-    let feedback: TaskDragState.Feedback
+    var feedback: FolderDragState.Feedback = .none
+
+    private static let selectionBackground = PlannerStyle.color(light: 0x7650B5, dark: 0x7759A6)
+
+    private var hasAccentBackground: Bool { selected || feedback == .destination }
+
+    private var foreground: Color {
+        if hasAccentBackground { return .white }
+        if feedback == .sameFolder { return PlannerStyle.accent }
+        // The system foreground follows AppKit selection even before List updates its binding.
+        return .primary
+    }
+
+    private var background: Color {
+        if feedback == .destination { return PlannerStyle.accent }
+        if selected { return Self.selectionBackground }
+        if feedback == .sameFolder { return Color(nsColor: .unemphasizedSelectedContentBackgroundColor) }
+        return .clear
+    }
 
     var body: some View {
         HStack(spacing: 6) {
             Label(title, systemImage: symbol)
                 .labelStyle(SidebarRowLabelStyle())
                 .lineLimit(1)
-                .foregroundStyle(SidebarFolderForeground(selected: selected, feedback: feedback))
+                .foregroundStyle(foreground)
             Spacer(minLength: 4)
             if let countText {
                 Text(countText).font(.caption).monospacedDigit()
                     .fixedSize()
                     .help(countDescription)
                     .accessibilityLabel(countDescription)
-                    .foregroundStyle(feedback == .destination
-                        ? AnyShapeStyle(Color.white.opacity(0.8)) : AnyShapeStyle(HierarchicalShapeStyle.secondary))
+                    .foregroundStyle(hasAccentBackground
+                        ? Color.white.opacity(0.8) : Color.secondary)
             }
         }
         .padding(.vertical, 3)
-        .foregroundStyle(.primary)
         .contentShape(Rectangle())
-        // listRowBackground занимает всю строку; повторяем боковые отступы нативного выделения sidebar.
-        .listRowBackground(dropBackground.padding(.horizontal, 10))
-        // Фон и содержимое меняют состояние одной транзакцией, без отдельного перехода цвета.
+        // List сохраняет выбор и клавиатурную навигацию; видимый фон меняется вместе с цветом текста.
+        .listItemTint(.fixed(.clear))
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(background)
+                .padding(.horizontal, 10)
+                .transaction {
+                    $0.animation = nil
+                    $0.disablesAnimations = true
+                }
+        )
         .transaction { $0.animation = nil }
-    }
-
-    @ViewBuilder private var dropBackground: some View {
-        if feedback == .destination {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(PlannerStyle.accent)
-        } else if feedback == .sameFolder, !selected {
-            // Из «Сегодня» и «Всех задач» можно навести на владельца, который сейчас не открыт.
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .unemphasizedSelectedContentBackgroundColor))
-        }
-    }
-}
-
-private struct SidebarFolderForeground: ShapeStyle {
-    let selected: Bool
-    let feedback: TaskDragState.Feedback
-
-    func resolve(in environment: EnvironmentValues) -> some ShapeStyle {
-        if feedback == .destination { return AnyShapeStyle(Color.white) }
-        // Не подменяем системный цвет на ещё акцентном фоне уходящей строки.
-        // primary переключается вместе с backgroundProminence, а не с общим фокусом панели.
-        if environment.backgroundProminence == .increased { return AnyShapeStyle(HierarchicalShapeStyle.primary) }
-        return selected || feedback == .sameFolder
-            ? AnyShapeStyle(PlannerStyle.accent) : AnyShapeStyle(HierarchicalShapeStyle.primary)
     }
 }
 

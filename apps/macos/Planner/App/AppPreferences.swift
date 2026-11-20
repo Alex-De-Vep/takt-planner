@@ -14,6 +14,13 @@ final class AppPreferences {
         get { rightPanel == .calendar }
         set { if newValue { rightPanel = .calendar } else if rightPanel == .calendar { rightPanel = nil } }
     }
+    var assistantSettingsRequest: UUID?
+    var manualSpeechModels: [AssistantTranscriptionSelection] {
+        didSet { defaults.set(try? JSONEncoder().encode(manualSpeechModels), forKey: "assistantManualSpeechModels") }
+    }
+    var assistantModelVisibility: AssistantModelVisibility {
+        didSet { defaults.set(try? JSONEncoder().encode(assistantModelVisibility), forKey: "assistantModelVisibility") }
+    }
     var transcriptionModel: AssistantTranscriptionSelection? {
         didSet { defaults.set(transcriptionModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "assistantTranscriptionModel") }
     }
@@ -60,6 +67,10 @@ final class AppPreferences {
         reviewWeekdaysOnly = defaults.bool(forKey: "reviewWeekdaysOnly")
         language = AppLanguage(rawValue: defaults.string(forKey: "appLanguage") ?? "") ?? .system
         rightPanel = defaults.string(forKey: "rightPanel").flatMap(RightPanel.init(rawValue:))
+        manualSpeechModels = defaults.data(forKey: "assistantManualSpeechModels")
+            .flatMap { try? JSONDecoder().decode([AssistantTranscriptionSelection].self, from: $0) } ?? []
+        assistantModelVisibility = defaults.data(forKey: "assistantModelVisibility")
+            .flatMap { try? JSONDecoder().decode(AssistantModelVisibility.self, from: $0) } ?? AssistantModelVisibility()
         transcriptionModel = defaults.data(forKey: "assistantTranscriptionModel")
             .flatMap { try? JSONDecoder().decode(AssistantTranscriptionSelection.self, from: $0) }
         assistantWidth = min(520, max(360, defaults.object(forKey: "assistantWidth") as? Double ?? 420))

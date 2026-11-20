@@ -14,8 +14,9 @@ struct WorkspaceView: View {
     let calendar: CalendarService
     @Bindable var preferences: AppPreferences
     @Bindable var notifications: PlannerNotifications
-    let taskDrag: TaskDragState
+    let folderDrag: FolderDragState
     let assistant: AssistantService
+    let syncEngine: SyncEngine?
     @Query private var eventLinks: [TaskEventLink]
     @State private var calendarState = CalendarPanelState()
     @State private var editorStore = TaskEditorStore()
@@ -27,6 +28,7 @@ struct WorkspaceView: View {
     @State private var showFolderEditor = false
     @State private var deletingFolder: TaskFolder?
     @State private var deletingTask: PlannerTask?
+    @State private var trashingNoteID: UUID?
     @State private var checklistFocusID: UUID?
     @State private var showsNotes = false
     @State private var noteScope = NoteScope.folder
@@ -38,6 +40,7 @@ struct WorkspaceView: View {
 
     private var visibleNotes: [PlannerNote] {
         service.notes.notes.filter { note in
+            guard !note.isPurged else { return false }
             let deleted = note.deletedAt != nil
             guard deleted == (noteScope == .trash) else { return false }
             guard noteScope != .folder || (filter.acceptsNotes && note.folder == filter.id) else { return false }
@@ -72,6 +75,20 @@ struct WorkspaceView: View {
         }
         if showsNotes && noteScope != .folder { return nil }
         return filter.isPrimaryFolder ? filter : nil
+    }
+
+    private var noteToolbarActions: WorkspaceNoteToolbarActions? {
+        guard let note = editableNote else { return nil }
+        return WorkspaceNoteToolbarActions(
+            pinTitle: strings[note.pinned ? "Открепить" : "Закрепить"],
+            isPinned: note.pinned,
+            trashTitle: strings["В корзину…"],
+            togglePin: {
+                service.notes.update(note.id) { $0.pinned.toggle() }
+                service.notes.flush()
+            },
+            moveToTrash: { trashingNoteID = note.id }
+        )
     }
 
     private var noteRecordingActions: WorkspaceNoteRecordingActions? {
@@ -134,8 +151,21 @@ struct WorkspaceView: View {
     private var selectedTask: PlannerTask? { showsNotes ? nil : tasks.first { $0.id == state.selectedTaskID } }
 
     // Запись через эти привязки сразу обновляет все связанные значения, без цепочки onChange.
-    private var filterSelection: Binding<TaskFilter?> {
-        Binding(get: { state.filter }, set: { if let filter = $0 { selectFilter(filter) } })
+    private var sidebarSelection: Binding<SidebarSelection?> {
+        Binding(get: {
+            if showsNotes {
+                if noteScope == .all { return .allNotes }
+                if noteScope == .trash { return .deletedNotes }
+            }
+            return state.filter.map(SidebarSelection.taskFilter)
+        }, set: { selection in
+            switch selection {
+            case .taskFilter(let filter): selectFilter(filter)
+            case .allNotes: selectNoteScope(.all)
+            case .deletedNotes: selectNoteScope(.trash)
+            case nil: break
+            }
+        })
     }
 
     private var taskSelection: Binding<UUID?> {
@@ -179,6 +209,12 @@ struct WorkspaceView: View {
                 TodayWidgetPublisher.publish(from: service.context)
             }
             .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: DispatchQueue.main)) { _ in now = .now }
+            .task {
+                while !Task.isCancelled {
+                    service.notes.purgeExpiredTrash()
+                    do { try await Task.sleep(for: .seconds(60)) } catch { break }
+                }
+            }
             .onChange(of: notifications.openRevision) { openNotificationTask() }
             .onAppear { openNotificationTask() }
             .onChange(of: visibleNotes.map(\.id)) {
@@ -220,33 +256,27 @@ struct WorkspaceView: View {
             taskCountTitle: showsNotes ? strings.format("Заметок: %d", visibleNotes.count) : strings.format("Задач: %d", taskList.activeCount),
             newTaskTitle: strings[showsNotes ? "Новая заметка" : "Новая задача"],
             newChecklistItemTitle: strings["Добавить подзадачу"],
-            taskActionsTitle: strings["Действия с задачей"],
+            deleteTaskTitle: strings["Удалить задачу…"],
             deadlineTitle: strings["Срок задачи"],
             hasSelectedTask: selectedTask != nil,
             noteRecording: noteRecordingActions,
+            noteActions: noteToolbarActions,
             listAnimationKey: listAnimationKey,
             newFolder: newFolder,
             newTask: showsNotes ? createNote : newTask,
-            newChecklistItem: { addChecklistItem(after: nil) }
+            newChecklistItem: { addChecklistItem(after: nil) },
+            deleteTask: { deletingTask = selectedTask }
         ) {
-            SidebarView(selection: filterSelection, folders: folders, tasks: tasks, now: now, renameFolder: { folder in
+            SidebarView(selection: sidebarSelection, folders: folders, tasks: tasks, now: now, renameFolder: { folder in
                 editingFolder = folder; showFolderEditor = true
-            }, deleteFolder: { deletingFolder = $0 }, receiveTask: receiveTask, taskDrag: taskDrag,
-                notesActive: showsNotes, notes: service.notes.notes, showAllNotes: {
-                    noteScope = .all; contentMode.wrappedValue = true; noteSearch = ""
-                }, showDeletedNotes: {
-                    noteScope = .trash; contentMode.wrappedValue = true; noteSearch = ""
-                }, receiveNote: { id, destination in
-                    guard destination.acceptsNotes else { return }
-                    service.notes.update(id) { $0.folder = destination.id }
-                    service.notes.flush()
-                })
+            }, deleteFolder: { deletingFolder = $0 }, receiveItem: receiveFolderItem,
+                dragScopeID: service.dragScopeID, folderDrag: folderDrag, notes: service.notes.notes, syncEngine: syncEngine)
         } tasks: {
             workspaceList
         } detail: {
             if showsNotes {
                 if let note = selectedNote {
-                    NoteDetailView(note: note, store: service.notes, voice: service.notes.voice, assistant: assistant,
+                    NoteDetailView(note: note, folders: folders, store: service.notes, voice: service.notes.voice, assistant: assistant,
                                    preferences: preferences, focusTitle: note.id == createdNoteID).id(note.id)
                 } else {
                     ContentUnavailableView(strings["Выберите заметку"], systemImage: "note.text",
@@ -255,16 +285,13 @@ struct WorkspaceView: View {
                 }
             } else if let task = selectedTask {
                 TaskDetailView(task: task, service: service, now: now, focusTitle: task.id == state.createdTaskID,
+                    folders: folders, move: { moveTask(task, to: $0) },
                     toggleToday: { toggleToday(task) }, editorStore: editorStore, calendar: calendar, openEvent: openEvent,
                     checklistFocusID: checklistFocusID, addChecklistItem: addChecklistItem)
             } else {
                 ContentUnavailableView(strings["Выберите задачу"], systemImage: "square.and.pencil", description: Text(strings["Откройте задачу из списка или создайте новую."]))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(PlannerStyle.paper)
-            }
-        } taskActions: {
-            if let task = selectedTask {
-                TaskActionsMenu(task: task, folders: folders, move: { moveTask(task, to: $0) }, delete: { deletingTask = task })
             }
         } deadline: {
             if let task = selectedTask {
@@ -335,9 +362,10 @@ struct WorkspaceView: View {
     }
 
     private var notesPage: some View {
-        NoteListView(store: service.notes, notes: visibleNotes, folders: folders,
+        NoteListView(store: service.notes, notes: visibleNotes,
                      selection: noteSelection, trash: noteScope == .trash,
-                     createdNoteID: noteScope == .folder ? createdNoteID : nil, scope: noteListScope, create: createNote)
+                     createdNoteID: noteScope == .folder ? createdNoteID : nil, scope: noteListScope,
+                     dragScopeID: service.dragScopeID, folderDrag: folderDrag, create: createNote)
             .background(PlannerStyle.listBackground)
     }
 
@@ -347,8 +375,7 @@ struct WorkspaceView: View {
                      createdTaskID: state.createdTaskID,
                      search: state.search, filter: filter, snapshot: taskList, now: now,
                      create: newTask, toggleToday: toggleToday, toggleCompleted: { service.toggleCompleted($0) },
-                     delete: { deletingTask = $0 }, deleteImmediately: deleteTask,
-                     folders: folders, dragScopeID: service.dragScopeID, move: moveTask, taskDrag: taskDrag)
+                     deleteImmediately: deleteTask, dragScopeID: service.dragScopeID, folderDrag: folderDrag)
     }
 
     /// Диалоги вынесены отдельно: основной экран остаётся читаемым и быстро компилируется.
@@ -396,6 +423,20 @@ struct WorkspaceView: View {
             }
             Button(strings["Отмена"], role: .cancel) { deletingTask = nil }
         } message: { Text(strings["Задача будет удалена с этого Mac."]) }
+        .alert(strings["Переместить заметку в корзину?"], isPresented: Binding(get: { trashingNoteID != nil }, set: { if !$0 { trashingNoteID = nil } })) {
+            Button(strings["В корзину"], role: .destructive) {
+                if let id = trashingNoteID {
+                    if selectedNoteID == id {
+                        withImmediateNavigationUpdate { selectedNoteID = nil }
+                        if !service.notes.moveToTrash(id) { withImmediateNavigationUpdate { selectedNoteID = id } }
+                    } else {
+                        service.notes.moveToTrash(id)
+                    }
+                }
+                trashingNoteID = nil
+            }
+            Button(strings["Отмена"], role: .cancel) { trashingNoteID = nil }
+        } message: { Text(strings["Заметку можно восстановить в разделе «Недавно удалённые»."]) }
     }
 
     private func openNotificationTask() {
@@ -436,6 +477,12 @@ struct WorkspaceView: View {
         }
     }
 
+    private func selectNoteScope(_ scope: NoteScope) {
+        noteScope = scope
+        contentMode.wrappedValue = true
+        noteSearch = ""
+    }
+
     private func selectFilter(_ filter: TaskFilter) {
         service.notes.flush()
         noteScope = .folder
@@ -455,11 +502,18 @@ struct WorkspaceView: View {
         }
     }
 
-    private func receiveTask(_ payload: TaskDragPayload, to destination: TaskFilter) {
-        guard let id = payload.taskID(in: service.dragScopeID),
-              let task = tasks.first(where: { $0.id == id && !$0.isDeleted }) else { return }
-        if destination == .today { service.markToday(task) }
-        else if destination.isPrimaryFolder { moveTask(task, to: destination) }
+    private func receiveFolderItem(_ payload: FolderDragPayload, to destination: TaskFilter) {
+        guard let id = payload.itemID(in: service.dragScopeID), payload.kind.accepts(destination) else { return }
+        switch payload.kind {
+        case .task:
+            guard let task = tasks.first(where: { $0.id == id && !$0.isDeleted }) else { return }
+            if destination == .today { service.markToday(task) }
+            else { moveTask(task, to: destination) }
+        case .note:
+            guard case .folder(let folderID) = destination,
+                  folders.contains(where: { $0.id == folderID && !$0.isDeleted }) else { return }
+            service.notes.move(id, to: destination)
+        }
     }
 
     private func toggleToday(_ task: PlannerTask) {

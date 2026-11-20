@@ -3,11 +3,11 @@ import Observation
 
 /// Только состояние текущего жеста: идентификаторы и папка, без сохранения в библиотеку.
 @MainActor @Observable
-final class TaskDragState {
+final class FolderDragState {
     struct Context: Equatable {
         let token = UUID()
-        let payload: TaskDragPayload
-        let sourceFolder: TaskFilter
+        let payload: FolderDragPayload
+        let sourceFolderID: String
         let sourceViewID: UUID
     }
     enum Feedback: Equatable { case none, destination, sameFolder }
@@ -19,16 +19,16 @@ final class TaskDragState {
 
     init(monitorInput: Bool = true) { self.monitorInput = monitorInput }
 
-    func begin(payload: TaskDragPayload, sourceFolder: TaskFilter, sourceViewID: UUID) {
+    func begin(payload: FolderDragPayload, sourceFolderID: String, sourceViewID: UUID) {
         finish()
-        let context = Context(payload: payload, sourceFolder: sourceFolder, sourceViewID: sourceViewID)
+        let context = Context(payload: payload, sourceFolderID: sourceFolderID, sourceViewID: sourceViewID)
         withImmediateNavigationUpdate { self.context = context }
         if monitorInput { observeEnd(token: context.token) }
     }
 
     func feedback(for folder: TaskFilter) -> Feedback {
-        guard let context, folder.acceptsTaskDrop else { return .none }
-        if folder.isPrimaryFolder, folder == context.sourceFolder { return .sameFolder }
+        guard let context, context.payload.kind.accepts(folder) else { return .none }
+        if folder.id == context.sourceFolderID { return .sameFolder }
         return .destination
     }
 

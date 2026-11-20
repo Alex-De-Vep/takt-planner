@@ -58,41 +58,26 @@ struct SharedNoteText: Codable, Equatable, Sendable {
 
     static func encode(_ content: NSAttributedString) throws -> Self {
         let manager = NSFontManager.shared
-        let bodyFont = NSFont.systemFont(ofSize: 16)
         var spans = [Span]()
         var failure: Error?
         content.enumerateAttributes(in: NSRange(location: 0, length: content.length)) { attributes, range, stop in
             do {
-                let supported: Set<NSAttributedString.Key> = [.font, .foregroundColor, .paragraphStyle, .link, .attachment, .underlineStyle]
-                guard Set(attributes.keys).isSubset(of: supported) else { throw Failure.unsupportedStyle }
-                if let paragraph = attributes[.paragraphStyle] as? NSParagraphStyle {
-                    guard paragraph.isEqual(NSParagraphStyle.default) else { throw Failure.unsupportedStyle }
-                }
-                if let color = attributes[.foregroundColor] as? NSColor {
-                    let rgb = color.usingColorSpace(.sRGB)
-                    guard color == .labelColor || color == .textColor || color == .linkColor ||
-                            (rgb?.redComponent == 0 && rgb?.greenComponent == 0 && rgb?.blueComponent == 0 &&
-                             rgb?.alphaComponent == 1) else { throw Failure.unsupportedStyle }
-                }
+                // Paste can include fonts, colors and paragraph styles outside the shared format.
+                // Keep the original text and project its formatting onto the supported styles.
                 var span = Span(start: range.location, end: NSMaxRange(range))
                 if let font = attributes[.font] as? NSFont {
-                    guard font.familyName == bodyFont.familyName,
-                          font.pointSize.rounded() == font.pointSize, (8...72).contains(font.pointSize) else {
-                        throw Failure.unsupportedStyle
-                    }
                     let traits = manager.traits(of: font)
                     if traits.contains(.boldFontMask) { span.bold = true }
                     if traits.contains(.italicFontMask) { span.italic = true }
-                    if font.pointSize != 16 { span.size = Int(font.pointSize) }
+                    let size = font.pointSize.rounded()
+                    if (8...72).contains(size), size != 16 { span.size = Int(size) }
                 }
-                if let underline = attributes[.underlineStyle] as? Int, underline != 0 {
-                    guard underline == NSUnderlineStyle.single.rawValue else { throw Failure.unsupportedStyle }
+                if let underline = attributes[.underlineStyle] as? Int, underline & 0xFF != 0 {
                     span.underline = true
                 }
                 if let rawLink = attributes[.link] {
                     let link = (rawLink as? URL)?.absoluteString ?? rawLink as? String ?? ""
-                    guard Self.url(link) != nil else { throw Failure.unsupportedStyle }
-                    span.link = link
+                    if Self.url(link) != nil { span.link = link }
                 }
                 if let attachment = attributes[.attachment] as? NSTextAttachment {
                     guard let raw = attachment.fileWrapper?.regularFileContents,

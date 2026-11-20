@@ -68,8 +68,8 @@ def verify(app, widget_group):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
     assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == DISPLAY_NAME
-    assert metadata['CFBundleShortVersionString'] == '0.3.27'
-    assert metadata['CFBundleVersion'] == '111'
+    assert metadata['CFBundleShortVersionString'] == '0.3.37'
+    assert metadata['CFBundleVersion'] == '121'
     assert metadata['LSMinimumSystemVersion'] == '26.0'
     for language in ('ru', 'en'):
         localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
@@ -196,8 +196,10 @@ def main():
             'Помощник создаёт задачи и дорабатывает их текст только после подтверждения предложений.\n'
             'Доработка новой задачи меняет черновик: создание остаётся отдельным действием.\n'
             'Отдельная AI Preview и её данные не переносятся в основную библиотеку.\n'
-            'Откройте кнопку чата в шапке и нажмите «Скачать и включить». Загрузка модели — около 3,06 GB.\n'
-            'Локальная модель работает на Mac. Облачные модели подключаются в настройках помощника.\n'
+            'Подключите аккаунты и API-ключи в Настройки → Помощник.\n'
+            'Выберите модели чата и расшифровки в Настройки → Помощник.\n'
+            'Добавьте нужные модели в общий список для чата и расшифровки.\n'
+            'Выбор модели чата общий для настроек и текущего разговора.\n'
             'Перед созданием задач и событий проверьте предложения.\n'
             'При разрешении EventKit события сохраняются в настоящие системные календари.\n'
             + ('Сборка подписана ad-hoc и не нотариализована.\n' if identity == '-' else

@@ -12,7 +12,7 @@ final class AssistantService {
     var storageFailed = false
     let localModel: ModelManager?
     let cloud = AssistantCloudConnection()
-    let gateways = AssistantGatewayConnections()
+    let gateways: AssistantGatewayConnections
     var cloudPreview = ""
     @ObservationIgnored private let store: AssistantStore
     @ObservationIgnored private var unsavedDrafts: [UUID: AssistantStore.Draft] = [:]
@@ -21,7 +21,9 @@ final class AssistantService {
     var currentIndex: Int? { archive.threads.firstIndex { $0.id == archive.currentID } }
     var current: AssistantThread? { currentIndex.map { archive.threads[$0] } }
 
-    init(model: ModelManager? = nil, store: AssistantStore = AssistantStore()) {
+    init(model: ModelManager? = nil, store: AssistantStore = AssistantStore(),
+         gateways: AssistantGatewayConnections = AssistantGatewayConnections()) {
+        self.gateways = gateways
         // Локальный движок доступен только при явной подстановке в тестах.
         self.localModel = model; self.store = store
         model?.cancelGeneration = { [weak self] in self?.stop() }

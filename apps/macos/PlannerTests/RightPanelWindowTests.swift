@@ -14,9 +14,9 @@ struct RightPanelWindowTests {
         let size = NSSize(width: 1050, height: 700)
         container.view.frame.size = size
         workspace.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
-            taskActions: AnyView(EmptyView()), isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
+            isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
             folderTitle: "Входящие", taskCountTitle: "Задач: 1", newTaskTitle: "Создать", newChecklistItemTitle: "Подзадача",
-            taskActionsTitle: "Действия с задачей", hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: {},
+            deleteTaskTitle: "Действия с задачей", hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: {}, deleteTask: {},
             sidebarVisibilityChanged: { _ in })
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -103,9 +103,9 @@ struct RightPanelWindowTests {
         container.view.frame.size = size
         let workspace = container.workspace
         workspace.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
-            taskActions: AnyView(EmptyView()), isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
+            isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
             folderTitle: "Входящие", taskCountTitle: "Задач: 1", newTaskTitle: "Создать", newChecklistItemTitle: "Подзадача",
-            taskActionsTitle: "Действия с задачей", hasSelectedTask: false, newFolder: {}, newTask: {}, newChecklistItem: {},
+            deleteTaskTitle: "Действия с задачей", hasSelectedTask: false, newFolder: {}, newTask: {}, newChecklistItem: {}, deleteTask: {},
             sidebarVisibilityChanged: { _ in })
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -152,9 +152,9 @@ struct RightPanelWindowTests {
         container.view.frame = NSRect(x: 0, y: 0, width: width, height: 700)
         let workspace = container.workspace
         workspace.update(sidebar: AnyView(EmptyView()), tasks: AnyView(EmptyView()), detail: AnyView(EmptyView()),
-            taskActions: AnyView(EmptyView()), isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
+            isSidebarVisible: true, newFolderTitle: "Папка", toggleSidebarTitle: "Папки",
             folderTitle: "Входящие", taskCountTitle: "Задач: 1", newTaskTitle: "Создать", newChecklistItemTitle: "Подзадача",
-            taskActionsTitle: "Действия с задачей", hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: {},
+            deleteTaskTitle: "Действия с задачей", hasSelectedTask: true, newFolder: {}, newTask: {}, newChecklistItem: {}, deleteTask: {},
             sidebarVisibilityChanged: { _ in })
 
         var presentations: [RightPanel?] = []

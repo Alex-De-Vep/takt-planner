@@ -3,6 +3,7 @@ import AppKit
 
 /// Чат занимает ту же оболочку правой панели, что и календарь; собственную шапку окна не рисуем.
 struct AssistantPanel: View {
+    @Environment(\.openSettings) private var openSettings
     @Environment(\.translations) private var strings
     @Bindable var service: AssistantService
     @Bindable var preferences: AppPreferences
@@ -20,7 +21,6 @@ struct AssistantPanel: View {
     @State private var editing: AssistantAction?
     @State private var showDrafts = false
     @State private var showClear = false
-    @State private var showModelConnections = false
     private var folderOptions: [AssistantFolder] { AssistantService.folders(folders, preferences: preferences) }
     private var calendarOptions: [AssistantCalendar] { calendar.calendars.filter(\.writable).map { AssistantCalendar(id: $0.id, name: $0.title) } }
     private var isCloud: Bool { service.current?.usesCloudModel == true }
@@ -59,10 +59,6 @@ struct AssistantPanel: View {
             modelFooter
         }
         .background(Color.clear)
-        .sheet(isPresented: $showModelConnections) {
-            AssistantModelConnections(service: service, russian: preferences.language.resolvedCode == "ru",
-                boundAccountID: service.chatGPTAccountID, preferences: preferences, dismissOnChatSelection: true)
-        }
         .sheet(item: $editing) { action in
             AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,
                 actions: service.current?.actions ?? [], save: {
@@ -90,6 +86,11 @@ struct AssistantPanel: View {
     private func restoreNoteContext() {
         useNote = true
         if openNote != nil { useFolder = true }
+    }
+
+    private func openAssistantSettings() {
+        preferences.assistantSettingsRequest = UUID()
+        openSettings()
     }
 
     private func prepareConversation() {
@@ -236,7 +237,7 @@ struct AssistantPanel: View {
             } else if service.cloud.busy || !service.gateways.busy.isEmpty {
                 ProgressView().controlSize(.small)
             } else {
-                Button(strings["Подключить модель"]) { showModelConnections = true }
+                Button(strings["Подключить ИИ-провайдер"], action: openAssistantSettings)
                     .buttonStyle(.borderedProminent)
             }
         }.padding(.vertical, 12)
@@ -360,18 +361,18 @@ struct AssistantPanel: View {
                         } else if service.gatewayProfile != nil {
                             Text(strings["Выберите доступную модель в меню"]).foregroundStyle(.secondary)
                         } else {
-                            Button(strings["Подключения моделей…"]) { showModelConnections = true }.buttonStyle(.borderless)
+                            Button(strings["Подключения провайдеров…"], action: openAssistantSettings).buttonStyle(.borderless)
                         }
                     } else if service.cloud.isConnected && (service.chatGPTAccountID.map { $0 == service.cloud.account?.id } ?? true) {
                         Text(strings["Данные запроса отправляются в OpenAI"]).foregroundStyle(.secondary)
                     } else if !service.generating {
-                        Button(strings["Подключения моделей…"]) { showModelConnections = true }.buttonStyle(.borderless)
+                        Button(strings["Подключения провайдеров…"], action: openAssistantSettings).buttonStyle(.borderless)
                     }
                     Spacer(minLength: 4)
                 }.font(.caption2)
             }
             HStack {
-                AssistantModelPicker(service: service) { showModelConnections = true }.disabled(editing != nil)
+                AssistantModelPicker(service: service, preferences: preferences) { openAssistantSettings() }.disabled(editing != nil)
                 if isCloud { AssistantUsageButton(service: service) }
                 Spacer(minLength: 0)
                 if service.hasAvailableCloudModel || isCloud {

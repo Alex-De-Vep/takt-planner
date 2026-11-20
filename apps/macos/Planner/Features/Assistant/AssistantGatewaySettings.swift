@@ -10,19 +10,16 @@ struct AssistantGatewaySettings: View {
     @State private var folderID = ""
     @State private var gigaScope: GigaChatScope = .personal
     @State private var copied = false
-    @State private var editedModelID: String?
     let service: AssistantService
     let gateway: AssistantGateway
     @State private var savingConnection = false
     let russian: Bool
-    var isTranscription = false
 
     private var connections: AssistantGatewayConnections { service.gateways }
     private var profile: AssistantGatewayProfile? { connections.profiles[gateway] }
     private var models: [AssistantGatewayModel] { connections.catalogs[gateway] ?? [] }
     private var busy: Bool { connections.busy.contains(gateway) }
     private var locked: Bool { busy || service.generating || service.applying }
-    private var manualModels: [AssistantGatewayModel] { models.filter { $0.reportedTools == nil } }
     private var selectedBase: URL? {
         gateway == .liteLLM ? AssistantGatewayProfile.liteLLMBase(address) : base ?? gateway.bases.first
     }
@@ -38,7 +35,7 @@ struct AssistantGatewaySettings: View {
                 if gateway == .openAI {
                     Text(strings["Для расшифровки через OpenAI используется отдельный API-ключ."])
                         .font(.caption).foregroundStyle(.secondary)
-                } else if !isTranscription, connections.catalogs[gateway] != nil {
+                } else if connections.catalogs[gateway] != nil {
                     Text(models.isEmpty ? strings["В каталоге нет текстовых моделей."]
                          : strings.format("Доступные модели: %d", models.count))
                         .foregroundStyle(.secondary)
@@ -54,8 +51,7 @@ struct AssistantGatewaySettings: View {
             } else if gateway != .openRouter {
                 keyForm
             }
-            if let profile {
-                if !isTranscription, !manualModels.isEmpty { capabilities(profile) }
+            if profile != nil {
                 Button(strings["Отключить"], role: .destructive) {
                     connections.disconnect(gateway)
                     resetForm(nil)
@@ -139,6 +135,7 @@ struct AssistantGatewaySettings: View {
                 }
             }
         }
+        .textFieldStyle(.roundedBorder)
         .disabled(busy)
     }
 
@@ -181,21 +178,4 @@ struct AssistantGatewaySettings: View {
         }
     }
 
-    private func capabilities(_ profile: AssistantGatewayProfile) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            let currentID = manualModels.first(where: { $0.id == editedModelID })?.id ?? manualModels.first?.id
-            Picker(strings["Модель"], selection: Binding(get: { currentID }, set: { editedModelID = $0 })) {
-                ForEach(manualModels) { model in Text(model.name).tag(Optional(model.id)) }
-            }
-            if let currentID {
-                Toggle(strings["Разрешить работу с задачами"], isOn: Binding(
-                    get: { profile.toolModelIDs.contains(currentID) },
-                    set: { connections.setTools($0, gateway: gateway, modelID: currentID) }
-                ))
-            }
-            Text(strings["Включите для модели, которая поддерживает вызов функций. Остальные модели доступны для диалога."])
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-        }.disabled(locked)
-    }
 }

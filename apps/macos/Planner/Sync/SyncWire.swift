@@ -138,13 +138,14 @@ struct SyncLibrary: Codable, Sendable {
 }
 
 enum SyncProblem: LocalizedError {
-    case invalidResponse, incompatibleProtocol, signInRequired, oversizedMutation, accountMismatch, libraryReset
+    case invalidResponse, incompatibleProtocol, signInRequired, oversizedMutation, unsupportedNoteFormat, accountMismatch, libraryReset
     var errorDescription: String? {
         switch self {
         case .invalidResponse: "Сервер вернул неожиданные данные."
         case .incompatibleProtocol: "Эта версия приложения несовместима с сервером."
         case .signInRequired: "Войдите в аккаунт повторно."
         case .oversizedMutation: "Правка превышает допустимый размер запроса."
+        case .unsupportedNoteFormat: "Этот сервер пока не поддерживает формат одной или нескольких заметок."
         case .accountMismatch: "Ответ относится к другой библиотеке."
         case .libraryReset: "Облачная библиотека изменилась. Локальные данные сохранены. Создайте резервную копию перед повторным подключением."
         }

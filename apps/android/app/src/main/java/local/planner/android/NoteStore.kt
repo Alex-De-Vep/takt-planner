@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import androidx.core.database.sqlite.transaction
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -22,7 +23,7 @@ internal data class NotesState(
 internal data class PendingNote(val id: String, val data: ByteArray, val digest: String)
 internal class NoteTooLarge : IllegalArgumentException()
 
-internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db", null, 2) {
+internal class NoteStore(private val context: Context) : SQLiteOpenHelper(context, "notes.db", null, 2) {
     private val _state = MutableStateFlow(NotesState())
     val state = _state.asStateFlow()
 
@@ -91,7 +92,8 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
     fun read(workspace: String, id: String): StoredNote? {
         val db = readableDatabase
         val version = db.version(workspace, id) ?: return null
-        return StoredNote(decodeNote(db.body(workspace, id), id), version.digest)
+        val note = decodeNote(db.body(workspace, id), id)
+        return StoredNote(note, version.digest).takeUnless { note.purged || noteTrashExpired(note.deletedAt) }
     }
 
     @Synchronized
@@ -99,6 +101,8 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
         val limit = _state.value.takeIf { it.workspace == workspace }?.limit ?: error("Notes unavailable")
         val saved = writableDatabase.transaction {
             val current = version(workspace, note.id)
+            val existing = current?.let { decodeNote(body(workspace, note.id), note.id) }
+            check(existing == null || (!existing.purged && !noteTrashExpired(existing.deletedAt)))
             val conflict = current?.digest != original?.digest
             val next = if (conflict) note.copy(id = newId()) else note
             next.richText?.validate(next.text)
@@ -121,22 +125,27 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
     @Synchronized
     fun receive(workspace: String, id: String, revision: String, bytes: ByteArray) {
         check(noteDigest(bytes) == revision)
-        val incoming = decodeNote(bytes, id)
+        val received = decodeNote(bytes, id)
+        val incoming = if (received.purged || noteTrashExpired(received.deletedAt)) received.withoutContent() else received
+        val incomingBytes = if (incoming == received) bytes else incoming.wireBytes()
+        val incomingDigest = if (incoming == received) revision else noteDigest(incomingBytes)
         val copied = writableDatabase.transaction {
             val current = version(workspace, id)
             if (current?.digest == revision) {
                 setRevision(workspace, id, revision)
                 return@transaction false
             }
-            val conflict = current != null && current.digest != current.revision
+            val local = current?.takeIf { it.digest != it.revision }?.let { decodeNote(body(workspace, id), id) }
+            val conflict = local != null && !local.purged && !incoming.purged
             if (conflict) {
-                val copy = decodeNote(body(workspace, id), id).copy(id = newId())
+                val copy = local.copy(id = newId())
                 val copyBytes = copy.wireBytes()
                 write(workspace, copy, copyBytes, null, noteDigest(copyBytes))
             }
-            write(workspace, incoming, bytes, revision, revision)
+            write(workspace, incoming, incomingBytes, revision, incomingDigest)
             conflict
         }
+        if (incoming.purged) discardAudio(workspace, id)
         if (copied) _state.value = _state.value.copy(conflicts = _state.value.conflicts + 1)
     }
 
@@ -170,7 +179,27 @@ internal class NoteStore(context: Context) : SQLiteOpenHelper(context, "notes.db
                 while (cursor.moveToNext()) add(json.fromJson(cursor.getString(0), NoteSummary::class.java))
             }
         }
-        _state.value = current.copy(entries = entries, pending = pending(current.workspace).size)
+        val expired = entries.filter { !it.purged && noteTrashExpired(it.deletedAt) }
+        if (expired.isNotEmpty()) {
+            writableDatabase.transaction {
+                for (entry in expired) {
+                    val revision = version(current.workspace, entry.id)?.revision
+                    val note = decodeNote(body(current.workspace, entry.id), entry.id).withoutContent()
+                    val bytes = note.wireBytes()
+                    write(current.workspace, note, bytes, revision, noteDigest(bytes))
+                }
+            }
+            for (entry in expired) discardAudio(current.workspace, entry.id)
+        }
+        _state.value = current.copy(entries = entries.filter { !it.purged && !noteTrashExpired(it.deletedAt) },
+            pending = pending(current.workspace).size)
+    }
+
+    private fun discardAudio(workspace: String, id: String) {
+        noteAudioFile(context, workspace, id).let { file ->
+            file.delete()
+            File(file.parentFile, "${file.nameWithoutExtension}.part.m4a").delete()
+        }
     }
 
     private data class Version(val revision: String?, val digest: String)

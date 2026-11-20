@@ -4,6 +4,24 @@ import Testing
 @testable import Planner
 
 @MainActor struct NoteTests {
+    @Test func movingNotePreservesItsContentAndRejectsTrashAndSystemFolders() throws {
+        let store = NoteStore()
+        let source = TaskFilter.folder(UUID())
+        let destination = TaskFilter.folder(UUID())
+        let note = try #require(store.create(folder: source.id))
+        store.update(note) { $0.title = "Meeting" }
+        try store.applyText("Keep this text", to: note, append: false)
+        #expect(!store.move(note, to: .today))
+        #expect(store.move(note, to: destination))
+        #expect(store.notes.first?.id == note)
+        #expect(store.notes.first?.folder == destination.id)
+        #expect(store.notes.first?.title == "Meeting")
+        #expect(store.notes.first?.text == "Keep this text")
+        #expect(store.moveToTrash(note))
+        #expect(!store.move(note, to: source))
+        #expect(store.notes.first?.folder == destination.id)
+    }
+
     @Test func onlyNewCloudNotesUseSharedFormatEvenWhileLoadingServerConfig() throws {
         let store = NoteStore()
         let oldID = try #require(store.create(folder: "inbox"))
@@ -37,6 +55,138 @@ import Testing
         #expect(restored.attributedText().attribute(.link, at: 3, effectiveRange: nil) as? URL == URL(string: "https://example.test"))
     }
 
+    @Test func sharedNoteSavesPastedRichTextWithSupportedStyles() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "Notes.json")
+        let store = NoteStore(url: url)
+        store.awaitingCloudNoteFormat = true
+        let id = try #require(store.create(folder: "inbox"))
+
+        let text = "Здравствуйте! 🚀\n\nСвязаться по почте"
+        let link = try #require(URL(string: "mailto:author@example.test"))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.paragraphSpacing = 12
+        let font = try #require(NSFont(name: "Helvetica-Bold", size: 17.5))
+        let value = NSMutableAttributedString(string: text, attributes: [
+            .font: font, .foregroundColor: NSColor.blue, .backgroundColor: NSColor.yellow,
+            .paragraphStyle: paragraph, .kern: 0.5,
+        ])
+        let linkRange = (text as NSString).range(of: "по почте")
+        value.addAttributes([.link: link, .underlineStyle: NSUnderlineStyle.double.rawValue], range: linkRange)
+        let rtf = try value.data(from: NSRange(location: 0, length: value.length),
+                                 documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+        let pasted = try #require(NSAttributedString(rtf: rtf, documentAttributes: nil))
+
+        store.edit(id, content: pasted)
+        #expect(store.flush())
+        #expect(store.error == nil)
+
+        let note = try #require(NoteStore(url: url).notes.first)
+        #expect(note.text == text)
+        #expect(note.document.isEmpty)
+        let restored = note.attributedText()
+        let restoredFont = try #require(restored.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        #expect(NSFontManager.shared.traits(of: restoredFont).contains(.boldFontMask))
+        #expect(restoredFont.pointSize == 18)
+        #expect(restored.attribute(.backgroundColor, at: 0, effectiveRange: nil) == nil)
+        #expect(restored.attribute(.link, at: linkRange.location, effectiveRange: nil) as? URL == link)
+        #expect(restored.attribute(.underlineStyle, at: linkRange.location, effectiveRange: nil) as? Int == NSUnderlineStyle.single.rawValue)
+    }
+
+    @Test func editorMatchesPastedTextToNoteStyleBeforeSaving() throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let text = "Привет 🙂 — почта"
+        let link = try #require(URL(string: "mailto:author@example.test"))
+        let originalFont = try #require(NSFont(name: "Helvetica-Bold", size: 32))
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.paragraphSpacing = 20
+        let content = NSMutableAttributedString(string: text, attributes: [
+            .font: originalFont, .foregroundColor: NSColor.red, .backgroundColor: NSColor.yellow,
+            .paragraphStyle: paragraph,
+        ])
+        let linkRange = (text as NSString).range(of: "почта")
+        content.addAttributes([.link: link, .underlineStyle: NSUnderlineStyle.single.rawValue], range: linkRange)
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+            bytesPerRow: 0, bitsPerPixel: 0))
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let wrapper = FileWrapper(regularFileWithContents: png)
+        wrapper.preferredFilename = "image.png"
+        content.append(NSAttributedString(attachment: NSTextAttachment(fileWrapper: wrapper)))
+        let rtfd = try content.data(from: NSRange(location: 0, length: content.length),
+                                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd])
+        pasteboard.clearContents()
+        #expect(pasteboard.setData(rtfd, forType: .rtfd))
+
+        let editor = NoteTextView()
+        editor.isRichText = true
+        editor.importsGraphics = true
+        editor.string = "До заменить после"
+        let selection = (editor.string as NSString).range(of: "заменить")
+        editor.setSelectedRange(selection)
+        editor.typingAttributes[.font] = NSFont.systemFont(ofSize: 24)
+        #expect(editor.readSelection(from: pasteboard))
+        #expect(editor.selectedRange() == NSRange(location: selection.location + content.length, length: 0))
+
+        let result = editor.attributedString()
+        #expect(result.string == "До " + content.string + " после")
+        let font = try #require(result.attribute(.font, at: selection.location, effectiveRange: nil) as? NSFont)
+        #expect(font.familyName == NSFont.systemFont(ofSize: 16).familyName)
+        #expect(font.pointSize == 16)
+        #expect(NSFontManager.shared.traits(of: font).contains(.boldFontMask))
+        #expect(result.attribute(.foregroundColor, at: selection.location, effectiveRange: nil) as? NSColor == .labelColor)
+        #expect(result.attribute(.backgroundColor, at: selection.location, effectiveRange: nil) == nil)
+        #expect(result.attribute(.link, at: selection.location + linkRange.location, effectiveRange: nil) as? URL == link)
+        #expect(result.attribute(.attachment, at: selection.location + content.length - 1, effectiveRange: nil) != nil)
+
+        let store = NoteStore()
+        store.awaitingCloudNoteFormat = true
+        let id = try #require(store.create(folder: "inbox"))
+        store.edit(id, content: result)
+        #expect(store.flush())
+        #expect(store.notes.first?.text == result.string)
+    }
+
+    @Test func editorPreservesCyrillicInHTMLPasteWithoutCharset() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        let html = #"<p style="color: red"><a href="mailto:author@example.test">Связаться</a></p>"#
+        pasteboard.clearContents()
+        #expect(pasteboard.setData(Data(html.utf8), forType: .html))
+        let editor = NoteTextView()
+        editor.isRichText = true
+        #expect(editor.readSelection(from: pasteboard))
+        let result = editor.attributedString()
+        #expect(result.string.trimmingCharacters(in: .newlines) == "Связаться")
+        #expect(result.attribute(.link, at: 0, effectiveRange: nil) as? URL == URL(string: "mailto:author@example.test"))
+    }
+
+    @Test func bodySaveFailureIsScopedToItsNoteAndClearsAfterRetry() throws {
+        let store = NoteStore()
+        store.awaitingCloudNoteFormat = true
+        let affected = try #require(store.create(folder: "inbox"))
+        let other = try #require(store.create(folder: "inbox"))
+        store.sharedFormatLimit = 1
+        let content = NSAttributedString(string: "Unsaved draft")
+        store.edit(affected, content: content)
+
+        #expect(!store.flush())
+        #expect(store.error == SharedNoteText.Failure.noteTooLarge.localizedDescription)
+        #expect(store.saveError(for: affected) == store.error)
+        #expect(store.saveError(for: other) == nil)
+        #expect(store.libraryError == nil)
+        let note = try #require(store.notes.first { $0.id == affected })
+        #expect(store.content(note).string == content.string)
+        #expect(note.text.isEmpty)
+
+        store.sharedFormatLimit = nil
+        #expect(store.flush())
+        #expect(store.saveError(for: affected) == nil)
+        #expect(store.notes.first { $0.id == affected }?.text == content.string)
+    }
+
     @Test func conflictKeepsOfflineEditAfterRestartAndCloudTrashCanBeRestored() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: "TaktNotes-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -63,6 +213,29 @@ import Testing
         try synced.applyRemote(first, revision: restored)
         #expect(synced.notes.count == 2)
         #expect(synced.notes.first { $0.id == localID }?.deletedAt == nil)
+    }
+
+    @Test func trashExpiresAtThirtyDaysAndCannotBeRestored() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appending(path: "Notes.json")
+        let store = NoteStore(url: url)
+        let id = try #require(store.create(folder: "inbox"))
+        let recent = try #require(store.create(folder: "inbox"))
+        store.update(id) { $0.title = "Expired title"; $0.text = "Expired body" }
+        #expect(store.moveToTrash(id))
+        let deleted = try #require(store.notes.first { $0.id == id }?.deletedAt)
+        store.update(recent) { $0.deletedAt = deleted.addingTimeInterval(60) }
+        let deadline = deleted.addingTimeInterval(30 * 24 * 60 * 60)
+        store.purgeExpiredTrash(now: deadline.addingTimeInterval(-1))
+        #expect(store.notes.first { $0.id == id }?.text == "Expired body")
+        store.purgeExpiredTrash(now: deadline)
+        let reopened = NoteStore(url: url)
+        let marker = try #require(reopened.notes.first { $0.id == id })
+        #expect(marker.isPurged && marker.text.isEmpty && marker.title.isEmpty && marker.document.isEmpty)
+        reopened.restoreFromTrash(id)
+        #expect(reopened.notes.first { $0.id == id }?.deletedAt == deleted)
+        #expect(reopened.notes.first { $0.id == recent }?.isPurged == false)
     }
 
     @Test func richContentAndLatestEditsSurviveRestart() throws {
@@ -211,10 +384,10 @@ import Testing
         defer { try? FileManager.default.removeItem(at: assistantURL) }
         let assistant = AssistantService(store: AssistantStore(url: assistantURL))
         let root = HStack(spacing: 0) {
-            NoteListView(store: store, notes: store.notes, folders: [], selection: .constant(id), trash: false, create: {})
+            NoteListView(store: store, notes: store.notes, selection: .constant(id), trash: false, create: {})
                 .frame(width: 280)
             Divider()
-            NoteDetailView(note: note, store: store, voice: NoteVoiceRecording(), assistant: assistant,
+            NoteDetailView(note: note, folders: [], store: store, voice: NoteVoiceRecording(), assistant: assistant,
                            preferences: AppPreferences()).frame(width: 650)
         }.frame(height: 600).background(Color(nsColor: .windowBackgroundColor)).tint(PlannerStyle.accent)
         let host = NSHostingView(rootView: root)

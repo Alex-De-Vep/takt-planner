@@ -165,7 +165,7 @@ struct PlannerApp: App {
     @State private var preferences = AppPreferences()
     @State private var calendar = CalendarService()
     @State private var notifications = PlannerNotifications()
-    @State private var taskDrag = TaskDragState()
+    @State private var folderDrag = FolderDragState()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -254,7 +254,8 @@ struct PlannerApp: App {
 
     @ViewBuilder private var workspace: some View {
             if let container = runtime.container, let service = runtime.service, let assistant = runtime.assistant {
-                WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications, taskDrag: taskDrag, assistant: assistant)
+                WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications,
+                              folderDrag: folderDrag, assistant: assistant, syncEngine: runtime.cloud.engine)
                     .modifier(NotificationLifecycle(service: service, preferences: preferences, notifications: notifications))
                     .modelContainer(container)
                     .id(ObjectIdentifier(container))

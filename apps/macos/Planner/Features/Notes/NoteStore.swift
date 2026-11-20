@@ -20,6 +20,19 @@ struct PlannerNote: Codable, Identifiable, Sendable {
     var syncVersion: NoteSyncVersion?
     var lastVoiceTranscriptID: UUID?
     var richText: SharedNoteText?
+    var purged: Bool?
+
+    var isPurged: Bool { purged == true }
+
+    func trashHasExpired(at time: Date) -> Bool {
+        deletedAt.map { time.timeIntervalSince($0) >= 30 * 24 * 60 * 60 } ?? false
+    }
+
+    func withoutContent() -> PlannerNote {
+        let time = deletedAt ?? updatedAt
+        return PlannerNote(id: id, createdAt: time, updatedAt: time, deletedAt: time,
+                           syncVersion: syncVersion, richText: richText.map { _ in SharedNoteText(spans: []) }, purged: true)
+    }
 
     var displayTitle: String { title.trimmingCharacters(in: .whitespacesAndNewlines) }
     var assistantContentVersion: String {
@@ -54,7 +67,18 @@ struct PlannerNote: Codable, Identifiable, Sendable {
 @MainActor @Observable
 final class NoteStore {
     private(set) var notes: [PlannerNote] = []
-    private(set) var error: String?
+    private struct SaveFailure {
+        let message: String
+        var noteID: UUID? = nil
+    }
+
+    private var failure: SaveFailure?
+    var error: String? { failure?.message }
+    var libraryError: String? { failure?.noteID == nil ? error : nil }
+
+    func saveError(for noteID: UUID) -> String? {
+        failure?.noteID == noteID ? error : nil
+    }
     private(set) var unreadable = false
     var syncEnabled = false
     var awaitingCloudNoteFormat = false
@@ -76,9 +100,10 @@ final class NoteStore {
             try Self.validate(notes)
             voice.restoreDrafts(for: notes)
         } catch {
-            self.error = error.localizedDescription
+            failure = SaveFailure(message: error.localizedDescription)
             unreadable = true
         }
+        purgeExpiredTrash()
     }
 
     static func validate(_ notes: [PlannerNote]) throws {
@@ -110,17 +135,36 @@ final class NoteStore {
     }
 
     func edit(_ id: UUID, content: NSAttributedString) {
-        guard !unreadable, notes.contains(where: { $0.id == id }) else { return }
+        guard !unreadable, notes.contains(where: { $0.id == id && $0.deletedAt == nil }) else { return }
         pending[id] = NSAttributedString(attributedString: content)
         scheduleSave()
     }
 
     func update(_ id: UUID, _ change: (inout PlannerNote) -> Void) {
-        guard !unreadable, let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        guard !unreadable, let index = notes.firstIndex(where: { $0.id == id && !$0.isPurged }) else { return }
         change(&notes[index])
         notes[index].updatedAt = .now
         dirty = true
         scheduleSave()
+    }
+
+    @discardableResult func move(_ id: UUID, to folder: TaskFilter) -> Bool {
+        guard folder.acceptsNotes, flush(),
+              let index = notes.firstIndex(where: { $0.id == id && $0.deletedAt == nil && !$0.isPurged }) else {
+            return false
+        }
+        if notes[index].folder == folder.id { return true }
+        var next = notes
+        next[index].folder = folder.id
+        next[index].updatedAt = .now
+        do {
+            try save(next)
+            syncQueued?()
+            return true
+        } catch {
+            failure = SaveFailure(message: error.localizedDescription)
+            return false
+        }
     }
 
     @discardableResult func moveToTrash(_ id: UUID) -> Bool {
@@ -136,9 +180,31 @@ final class NoteStore {
             syncQueued?()
             return true
         } catch {
-            self.error = error.localizedDescription
+            failure = SaveFailure(message: error.localizedDescription)
             return false
         }
+    }
+
+    func restoreFromTrash(_ id: UUID) {
+        purgeExpiredTrash()
+        guard let note = notes.first(where: { $0.id == id }), !note.isPurged,
+              note.deletedAt != nil, !note.trashHasExpired(at: .now) else { return }
+        update(id) { $0.deletedAt = nil }
+        flush()
+    }
+
+    func purgeExpiredTrash(now: Date = .now) {
+        guard !unreadable else { return }
+        if notes.contains(where: { !$0.isPurged && $0.trashHasExpired(at: now) }) {
+            guard flush() else { return }
+            do {
+                try save(notes.map { !$0.isPurged && $0.trashHasExpired(at: now) ? $0.withoutContent() : $0 })
+                syncQueued?()
+            } catch {
+                failure = SaveFailure(message: error.localizedDescription)
+            }
+        }
+        for note in notes where note.isPurged { voice.discard(note.id) }
     }
 
     private func scheduleSave() {
@@ -154,20 +220,23 @@ final class NoteStore {
         saveTask = nil
         guard !unreadable else { return false }
         guard dirty || !pending.isEmpty else { return true }
+        var currentNoteID: UUID?
         do {
             var next = notes
             for (id, value) in pending {
                 guard let index = next.firstIndex(where: { $0.id == id }) else { continue }
+                currentNoteID = id
                 try setBody(value, in: &next[index])
                 next[index].updatedAt = .now
             }
+            currentNoteID = nil
             try save(next)
             pending.removeAll()
             dirty = false
             syncQueued?()
             return true
         } catch {
-            self.error = error.localizedDescription
+            failure = SaveFailure(message: error.localizedDescription, noteID: currentNoteID)
             return false
         }
     }
@@ -229,7 +298,7 @@ final class NoteStore {
     func mergeLocal(_ source: [PlannerNote]) throws {
         guard flush() else { throw BackupError.unsavedChanges }
         let ids = Set(notes.map(\.id))
-        let additions = source.filter { !ids.contains($0.id) }.map { note in
+        let additions = source.filter { !ids.contains($0.id) && !$0.isPurged && !$0.trashHasExpired(at: .now) }.map { note in
             var copy = note
             copy.syncVersion = nil
             copy.lastVoiceTranscriptID = nil
@@ -247,10 +316,11 @@ final class NoteStore {
         incoming.lastVoiceTranscriptID = previous?.lastVoiceTranscriptID
         let digest = try Self.digest(Self.wireData(note))
         incoming.syncVersion = NoteSyncVersion(revision: revision, localDigest: digest)
+        if incoming.isPurged || incoming.trashHasExpired(at: .now) { incoming = incoming.withoutContent() }
         if let index = notes.firstIndex(where: { $0.id == note.id }) {
             var local = notes[index]
             let localDigest = try Self.digest(Self.wireData(local))
-            if digest != localDigest && localDigest != local.syncVersion?.localDigest {
+            if !incoming.isPurged && !local.isPurged && digest != localDigest && localDigest != local.syncVersion?.localDigest {
                 local.id = UUID()
                 local.syncVersion = nil
                 local.lastVoiceTranscriptID = nil
@@ -261,6 +331,7 @@ final class NoteStore {
             next.append(incoming)
         }
         try save(next)
+        if incoming.isPurged { voice.discard(incoming.id) }
         if let previous, previous.document != incoming.document || previous.text != incoming.text ||
             previous.richText != incoming.richText {
             remoteEdits[note.id] = UUID()
@@ -294,6 +365,6 @@ final class NoteStore {
             try JSONEncoder().encode(next).write(to: url, options: .atomic)
         }
         notes = next
-        error = nil
+        failure = nil
     }
 }

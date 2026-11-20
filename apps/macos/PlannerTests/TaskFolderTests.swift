@@ -117,12 +117,12 @@ import PlannerLocalization
     }
 
     @Test func dragReferenceIsLocalAndRejectsForeignOrMalformedPayloads() throws {
-        let payload = TaskDragPayload(taskID: UUID(), scopeID: UUID())
-        #expect(TaskDragPayload.decode(try JSONEncoder().encode(payload)) == payload)
-        #expect(payload.taskID(in: payload.scopeID) == payload.taskID)
-        #expect(payload.taskID(in: UUID()) == nil)
-        #expect(TaskDragPayload.decode(Data("not a task".utf8)) == nil)
-        #expect(TaskDragPayload.decode(Data(repeating: 0, count: 1025)) == nil)
+        let payload = FolderDragPayload(kind: .task, itemID: UUID(), scopeID: UUID())
+        #expect(FolderDragPayload.decode(try JSONEncoder().encode(payload)) == payload)
+        #expect(payload.itemID(in: payload.scopeID) == payload.itemID)
+        #expect(payload.itemID(in: UUID()) == nil)
+        #expect(FolderDragPayload.decode(Data("not a task".utf8)) == nil)
+        #expect(FolderDragPayload.decode(Data(repeating: 0, count: 1025)) == nil)
         #expect(payload.provider().hasItemConformingToTypeIdentifier("local.planner.task"))
         #expect(TaskFilter.today.acceptsTaskDrop && !TaskFilter.all.acceptsTaskDrop)
         #expect(TaskFilter.systemFolders.allSatisfy { $0.isPrimaryFolder })

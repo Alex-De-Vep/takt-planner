@@ -63,6 +63,7 @@ import kotlinx.coroutines.delay
 internal fun NotesScreen(
     library: Library, state: NotesState, cloud: CloudState, folder: String?, trash: Boolean,
     select: (String?) -> Unit, toggleTrash: () -> Unit, manage: () -> Unit, model: PlannerModel,
+    syncStatus: @Composable () -> Unit,
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -77,7 +78,7 @@ internal fun NotesScreen(
     val matches = result?.takeIf { it.first == search }?.second
     val status = state.error ?: cloud.message
     BackHandler(trash, onBack = toggleTrash)
-    Heading(stringResource(if (trash) R.string.notes_trash else R.string.notes)) {
+    Heading(stringResource(if (trash) R.string.notes_trash else R.string.notes), status = syncStatus) {
         if (state.limit != null) {
             if (state.pending > 0) {
                 if (cloud.busy) {
@@ -87,7 +88,7 @@ internal fun NotesScreen(
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    ActionIcon(R.drawable.ic_sync, R.string.notes_pending, onClick = model::refresh)
+                    ActionIcon(R.drawable.ic_sync, R.string.notes_pending, onClick = model::retrySync)
                 }
             }
             ActionIcon(if (searching) R.drawable.ic_close else R.drawable.ic_search,
@@ -128,10 +129,14 @@ internal fun NotesScreen(
         Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 92.dp),
     ) {
-        if (status != null) item {
-            Text(stringResource(status), color = MaterialTheme.colorScheme.error,
+        if (state.error == R.string.storage_error) item {
+            Text(stringResource(R.string.storage_error), color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(vertical = 8.dp))
-            TextButton(onClick = model::refresh, enabled = !cloud.busy) { Text(stringResource(R.string.retry)) }
+            TextButton(onClick = model::retrySync, enabled = !cloud.busy) { Text(stringResource(R.string.retry)) }
+        }
+        if (trash && state.limit != null) item {
+            Text(stringResource(R.string.notes_trash_retention), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
         }
         if (state.conflicts > 0) item {
             Text(stringResource(R.string.note_conflict_copy), style = MaterialTheme.typography.bodyMedium,
