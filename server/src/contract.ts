@@ -41,7 +41,10 @@ export const contractSchemas=[stampSchema,mutationSchema,...entities,entity,erro
  named('StorageResponse',object({quotaBytes:integer,maxFileBytes:integer,activeBytes:integer,retainedBytes:integer,reservedBytes:integer})),
  named('HealthResponse',object({status:str,version:str},['status'])),
  named('NoteIndexResponse',object({notes:array(object({id,revision:noteRevision}))})),
- named('NoteResponse',object({revision:noteRevision,data:noteData})),
+ named('NoteResponse',{
+  description:'Notes in Recently Deleted expire after 30 days. An expired note is represented by a new revision with an empty note body and purged=true in the decoded data. It cannot be modified or restored.',
+  ...object({revision:noteRevision,data:noteData})
+ }),
  named('NoteWriteResponse',object({revision:noteRevision})),
  named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer,maxNoteFormatVersion:integer,noteEventsVersion:integer,taskEventsVersion:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
 ];
