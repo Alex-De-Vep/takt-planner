@@ -6175,7 +6175,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "Notes in Recently Deleted expire after 30 days. An expired note is represented by a new revision with an empty note body and purged=true in the decoded data. It cannot be modified or restored.",
             "content": {
               "application/json": {
                 "schema": {
