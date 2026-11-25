@@ -5,6 +5,7 @@ enum NoteScope: Hashable { case folder, all, trash }
 
 struct NoteListView: View {
     @Environment(\.translations) private var strings
+    @Environment(\.appearsActive) private var appearsActive
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let store: NoteStore
     let notes: [PlannerNote]
@@ -89,15 +90,17 @@ struct NoteListView: View {
         ScrollViewReader { proxy in
             List(selection: listSelection) {
                 ForEach(notes) { note in
-                    draggableRow(note)
+                    let usesMintSelection = selection == note.id && listFocused && appearsActive
+                    draggableRow(note, usesMintSelection: usesMintSelection)
                         .tag(note.id)
                         .id(note.id)
                         .listRowInsets(EdgeInsets())
-                        .listItemTint(.fixed(.clear))
-                        .listRowBackground(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(selection == note.id ? PlannerStyle.noteAccent : Color.clear)
-                        )
+                        .listItemTint(usesMintSelection ? .fixed(.clear) : nil)
+                        .listRowBackground(usesMintSelection
+                            ? RoundedRectangle(cornerRadius: 8, style: .circular)
+                                .fill(PlannerStyle.noteAccent)
+                                .padding(.horizontal, 10)
+                            : nil)
                         .listRowSeparator(.visible, edges: .bottom)
                         .background(WorkspaceRowSelectionSync(rowID: note.id, selectedID: $selection,
                             revision: selectionRevision, isEligible: {
@@ -131,8 +134,8 @@ struct NoteListView: View {
         }
     }
 
-    @ViewBuilder private func draggableRow(_ note: PlannerNote) -> some View {
-        let row = NoteListRow(note: note, isSelected: selection == note.id)
+    @ViewBuilder private func draggableRow(_ note: PlannerNote, usesMintSelection: Bool) -> some View {
+        let row = NoteListRow(note: note, usesMintSelection: usesMintSelection)
         if let dragScopeID, let folderDrag, !trash, !store.unreadable {
             row.onDrag {
                 guard let current = store.notes.first(where: { $0.id == note.id && $0.deletedAt == nil && !$0.isPurged }) else {
@@ -160,21 +163,23 @@ struct NoteListView: View {
 
 private struct NoteListRow: View {
     @Environment(\.translations) private var strings
+    @Environment(\.backgroundProminence) private var backgroundProminence
     let note: PlannerNote
-    let isSelected: Bool
+    let usesMintSelection: Bool
 
-    private var supportingText: Color { isSelected ? .white : .secondary }
+    private var supportingText: Color { usesMintSelection ? .white : .secondary }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 if note.pinned {
                     Image(systemName: "pin.fill").font(.caption)
-                        .foregroundStyle(isSelected ? Color.white : PlannerStyle.noteAccentForeground)
+                        .foregroundStyle(usesMintSelection ? Color.white
+                            : backgroundProminence == .increased ? Color.primary : PlannerStyle.noteAccentForeground)
                 }
                 Text(note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle)
                     .font(.system(size: 13, weight: .semibold)).lineLimit(2)
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                    .foregroundStyle(usesMintSelection ? Color.white : Color.primary)
             }
             Text(note.text.isEmpty ? strings["Пустая заметка"] : note.text.replacingOccurrences(of: "\n", with: " "))
                 .lineLimit(2)
