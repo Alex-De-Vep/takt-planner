@@ -270,7 +270,8 @@ struct WorkspaceView: View {
             SidebarView(selection: sidebarSelection, folders: folders, tasks: tasks, now: now, renameFolder: { folder in
                 editingFolder = folder; showFolderEditor = true
             }, deleteFolder: { deletingFolder = $0 }, receiveItem: receiveFolderItem,
-                dragScopeID: service.dragScopeID, folderDrag: folderDrag, notes: service.notes.notes, syncEngine: syncEngine)
+                dragScopeID: service.dragScopeID, folderDrag: folderDrag, notes: service.notes.notes,
+                syncEngine: syncEngine, showsNotes: showsNotes)
         } tasks: {
             workspaceList
         } detail: {
@@ -566,7 +567,7 @@ private struct WorkspaceModeSwitch: View {
         .background {
             GeometryReader { geometry in
                 selection(width: geometry.size.width)
-                    .foregroundStyle(PlannerStyle.color(light: 0x714BB0, dark: 0x7954B7))
+                    .foregroundStyle(showsNotes ? PlannerStyle.noteAccent : PlannerStyle.color(light: 0x714BB0, dark: 0x7954B7))
             }
         }
         .overlay {

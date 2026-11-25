@@ -93,6 +93,11 @@ struct NoteListView: View {
                         .tag(note.id)
                         .id(note.id)
                         .listRowInsets(EdgeInsets())
+                        .listItemTint(.fixed(.clear))
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(selection == note.id ? PlannerStyle.noteSelection : Color.clear)
+                        )
                         .listRowSeparator(.visible, edges: .bottom)
                         .background(WorkspaceRowSelectionSync(rowID: note.id, selectedID: $selection,
                             revision: selectionRevision, isEligible: {
@@ -154,7 +159,6 @@ struct NoteListView: View {
 
 private struct NoteListRow: View {
     @Environment(\.translations) private var strings
-    @Environment(\.backgroundProminence) private var backgroundProminence
     let note: PlannerNote
 
     var body: some View {
@@ -162,7 +166,7 @@ private struct NoteListRow: View {
             HStack(spacing: 6) {
                 if note.pinned {
                     Image(systemName: "pin.fill").font(.caption)
-                        .foregroundStyle(backgroundProminence == .increased ? Color.primary : PlannerStyle.accent)
+                        .foregroundStyle(PlannerStyle.noteAccentForeground)
                 }
                 Text(note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle)
                     .font(.system(size: 13, weight: .semibold)).lineLimit(2)

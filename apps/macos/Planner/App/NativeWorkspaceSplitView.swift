@@ -430,7 +430,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         if let noteActions {
             updateHostedAction(title: noteActions.pinTitle, symbol: noteActions.isPinned ? "pin.fill" : "pin",
                 identifier: "pin-note-button", item: pinNoteToolbarItem, host: pinNoteHost,
-                selector: #selector(toggleNotePin), active: noteActions.isPinned) { [weak self] in
+                selector: #selector(toggleNotePin),
+                foreground: noteActions.isPinned ? PlannerStyle.noteAccentForeground : .primary) { [weak self] in
                     self?.toggleNotePin()
                 }
         }
@@ -848,7 +849,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     }
 
     private func updateHostedAction(title: String, symbol: String, identifier: String, item: NSToolbarItem,
-                                    host: NSHostingView<AnyView>, selector: Selector, active: Bool = false,
+                                    host: NSHostingView<AnyView>, selector: Selector, foreground: Color = .primary,
                                     action: @escaping () -> Void) {
         guard item.label != title else { return }
         item.label = title
@@ -863,7 +864,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             Button(action: action) {
                 Image(systemName: symbol)
                     .font(.system(size: 17))
-                    .foregroundStyle(active ? PlannerStyle.accent : Color.primary)
+                    .foregroundStyle(foreground)
                     .frame(width: WorkspaceToolbarButtonSurface.diameter, height: WorkspaceToolbarButtonSurface.diameter)
                     .contentShape(Circle())
             }

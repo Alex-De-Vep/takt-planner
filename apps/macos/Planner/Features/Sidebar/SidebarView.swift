@@ -21,6 +21,7 @@ struct SidebarView: View {
     let folderDrag: FolderDragState
     var notes: [PlannerNote] = []
     var syncEngine: SyncEngine? = nil
+    var showsNotes = false
     private struct Hover {
         let folder: TaskFilter
         let token: UUID?
@@ -92,7 +93,7 @@ struct SidebarView: View {
     }
 
     private func noteFilter(_ filter: SidebarSelection, title: String, symbol: String, identifier: String) -> some View {
-        SidebarFolderRow(title: title, symbol: symbol, selected: selection == filter)
+        SidebarFolderRow(title: title, symbol: symbol, selected: selection == filter, usesNoteAccent: true)
             .tag(filter)
             .accessibilityIdentifier(identifier)
     }
@@ -106,7 +107,8 @@ struct SidebarView: View {
         return SidebarFolderRow(title: filter.title(in: folders, using: strings), symbol: filter.symbol,
                                 countText: countText, countDescription: countDescription, selected: selection == .taskFilter(filter),
                                 feedback: hover?.folder == filter && hover?.token == folderDrag.context?.token
-                                    ? hover?.feedback ?? .none : .none)
+                                    ? hover?.feedback ?? .none : .none,
+                                usesNoteAccent: showsNotes && filter.acceptsNotes)
         .onDrop(of: FolderDragPayload.Kind.allCases.map(\.type), delegate: FolderDropDelegate(destination: filter,
             scopeID: dragScopeID, drag: folderDrag, setTargeted: { active in
                 if active {
@@ -215,6 +217,7 @@ private struct SidebarFolderRow: View {
     var countDescription = ""
     let selected: Bool
     var feedback: FolderDragState.Feedback = .none
+    var usesNoteAccent = false
 
     private static let selectionBackground = PlannerStyle.color(light: 0x7650B5, dark: 0x7759A6)
 
@@ -229,7 +232,7 @@ private struct SidebarFolderRow: View {
 
     private var background: Color {
         if feedback == .destination { return PlannerStyle.accent }
-        if selected { return Self.selectionBackground }
+        if selected { return usesNoteAccent ? PlannerStyle.noteAccent : Self.selectionBackground }
         if feedback == .sameFolder { return Color(nsColor: .unemphasizedSelectedContentBackgroundColor) }
         return .clear
     }
