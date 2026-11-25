@@ -163,18 +163,18 @@ private struct NoteListRow: View {
     let note: PlannerNote
     let isSelected: Bool
 
-    private var supportingText: Color { isSelected ? PlannerStyle.selectedNoteText : .secondary }
+    private var supportingText: Color { isSelected ? .white : .secondary }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 if note.pinned {
                     Image(systemName: "pin.fill").font(.caption)
-                        .foregroundStyle(isSelected ? PlannerStyle.selectedNoteText : PlannerStyle.noteAccentForeground)
+                        .foregroundStyle(isSelected ? Color.white : PlannerStyle.noteAccentForeground)
                 }
                 Text(note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle)
                     .font(.system(size: 13, weight: .semibold)).lineLimit(2)
-                    .foregroundStyle(isSelected ? PlannerStyle.selectedNoteText : Color.primary)
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
             }
             Text(note.text.isEmpty ? strings["Пустая заметка"] : note.text.replacingOccurrences(of: "\n", with: " "))
                 .lineLimit(2)
