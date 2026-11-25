@@ -175,7 +175,7 @@ private struct NoteListRow: View {
                 if note.pinned {
                     Image(systemName: "pin.fill").font(.caption)
                         .foregroundStyle(usesMintSelection ? Color.white
-                            : backgroundProminence == .increased ? Color.primary : PlannerStyle.noteAccentForeground)
+                            : backgroundProminence == .increased ? Color.primary : PlannerStyle.noteControlAccent)
                 }
                 Text(note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle)
                     .font(.system(size: 13, weight: .semibold)).lineLimit(2)
