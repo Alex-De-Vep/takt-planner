@@ -431,7 +431,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             updateHostedAction(title: noteActions.pinTitle, symbol: noteActions.isPinned ? "pin.fill" : "pin",
                 identifier: "pin-note-button", item: pinNoteToolbarItem, host: pinNoteHost,
                 selector: #selector(toggleNotePin),
-                foreground: noteActions.isPinned ? PlannerStyle.noteAccentForeground : .primary) { [weak self] in
+                foreground: noteActions.isPinned ? PlannerStyle.noteControlAccent : .primary) { [weak self] in
                     self?.toggleNotePin()
                 }
         }

@@ -26,7 +26,8 @@ struct WorkspaceFolderMenu: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .foregroundStyle(kind == .note ? PlannerStyle.noteAccentForeground : Color.secondary)
+        .tint(kind == .note ? PlannerStyle.noteControlAccent : PlannerStyle.accent)
+        .foregroundStyle(kind == .note ? PlannerStyle.noteControlAccent : Color.secondary)
         .help(strings["Переместить в папку"] + " · " + title)
         .accessibilityLabel(strings["Папка"])
         .accessibilityValue(title)
