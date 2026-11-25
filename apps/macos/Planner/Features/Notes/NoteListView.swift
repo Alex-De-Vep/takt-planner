@@ -96,7 +96,7 @@ struct NoteListView: View {
                         .listItemTint(.fixed(.clear))
                         .listRowBackground(
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(selection == note.id ? PlannerStyle.noteSelection : Color.clear)
+                                .fill(selection == note.id ? PlannerStyle.noteAccent : Color.clear)
                         )
                         .listRowSeparator(.visible, edges: .bottom)
                         .background(WorkspaceRowSelectionSync(rowID: note.id, selectedID: $selection,
@@ -132,8 +132,9 @@ struct NoteListView: View {
     }
 
     @ViewBuilder private func draggableRow(_ note: PlannerNote) -> some View {
+        let row = NoteListRow(note: note, isSelected: selection == note.id)
         if let dragScopeID, let folderDrag, !trash, !store.unreadable {
-            NoteListRow(note: note).onDrag {
+            row.onDrag {
                 guard let current = store.notes.first(where: { $0.id == note.id && $0.deletedAt == nil && !$0.isPurged }) else {
                     return NSItemProvider()
                 }
@@ -144,7 +145,7 @@ struct NoteListView: View {
                 FolderDragPreview(kind: .note)
             }
         } else {
-            NoteListRow(note: note)
+            row
         }
     }
 
@@ -160,22 +161,26 @@ struct NoteListView: View {
 private struct NoteListRow: View {
     @Environment(\.translations) private var strings
     let note: PlannerNote
+    let isSelected: Bool
+
+    private var supportingText: Color { isSelected ? PlannerStyle.selectedNoteText : .secondary }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 if note.pinned {
                     Image(systemName: "pin.fill").font(.caption)
-                        .foregroundStyle(PlannerStyle.noteAccentForeground)
+                        .foregroundStyle(isSelected ? PlannerStyle.selectedNoteText : PlannerStyle.noteAccentForeground)
                 }
                 Text(note.displayTitle.isEmpty ? strings["Новая заметка"] : note.displayTitle)
                     .font(.system(size: 13, weight: .semibold)).lineLimit(2)
+                    .foregroundStyle(isSelected ? PlannerStyle.selectedNoteText : Color.primary)
             }
             Text(note.text.isEmpty ? strings["Пустая заметка"] : note.text.replacingOccurrences(of: "\n", with: " "))
                 .lineLimit(2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(supportingText)
             Text(note.updatedAt, format: .dateTime.day().month(.twoDigits))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(supportingText)
         }
         .font(.system(size: 11))
         .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
