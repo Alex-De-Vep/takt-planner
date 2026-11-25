@@ -4,7 +4,7 @@ import SwiftUI
 /// Спокойные поверхности в духе «Заметок» и собственный фиолетовый акцент в обеих темах macOS.
 enum PlannerStyle {
     static let accent = Color("AccentColor")
-    static let noteAccent = color(light: 0x447E73, dark: 0x397E68)
+    static let noteAccent = color(light: 0x7BC8AB, dark: 0x397E68)
     static let noteAccentForeground = color(light: 0x26644E, dark: 0x70BFA2)
     // Подложка панели папок и список используют одну поверхность в обеих темах.
     static let workspaceBackground = nativeColor(light: 0xFAFAFA, dark: 0x242426)
