@@ -64,7 +64,7 @@ struct NoteListView: View {
                         if !trash {
                             Button(action: create) {
                                 Text(strings["Новая заметка"])
-                                    .foregroundStyle(PlannerStyle.noteActionForeground)
+                                    .foregroundStyle(.white)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(PlannerStyle.noteAccent)
