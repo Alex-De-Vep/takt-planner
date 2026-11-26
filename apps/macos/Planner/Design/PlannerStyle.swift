@@ -4,12 +4,15 @@ import SwiftUI
 /// Спокойные поверхности в духе «Заметок» и собственный фиолетовый акцент в обеих темах macOS.
 enum PlannerStyle {
     static let accent = Color("AccentColor")
-    private static let blueAccentLight: UInt32 = 0x2E58FF
-    static let blueAccent = color(light: blueAccentLight, dark: 0x8EA9FF)
-    static let blueAccentForeground = color(light: 0xFFFFFF, dark: 0x151B2D)
+    private static let assistantAccentLight: UInt32 = 0x2E58FF
+    static let assistantAccent = color(light: assistantAccentLight, dark: 0x8EA9FF)
+    private static let calendarAccentLight: UInt32 = 0x456FAF
+    static let calendarAccent = color(light: calendarAccentLight, dark: 0x8EB9F2)
+    static let calendarControlTint = Color(nsColor: rgb(calendarAccentLight))
+    static let calendarAccentForeground = color(light: 0xFFFFFF, dark: 0x151B2D)
     static let assistantUserMessageBackground = color(light: 0xEDF1F8, dark: 0x282C37)
     static let assistantGradient = LinearGradient(stops: [
-        (blueAccentLight, 0.000), (0x584FFF, 0.083), (0x7446FC, 0.167),
+        (assistantAccentLight, 0.000), (0x584FFF, 0.083), (0x7446FC, 0.167),
         (0x8C3DF4, 0.250), (0xA134E8, 0.333), (0xB42BD9, 0.417),
         (0xC51FC6, 0.500), (0xD410B1, 0.583), (0xE0009A, 0.667),
         (0xEA0080, 0.750), (0xF20066, 0.833), (0xF90046, 0.917), (0xFF0000, 1.000)

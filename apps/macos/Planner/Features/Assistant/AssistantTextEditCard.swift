@@ -36,7 +36,7 @@ struct AssistantTextEditCard: View {
         .font(.callout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(PlannerStyle.blueAccent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        .background(PlannerStyle.assistantAccent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityIdentifier("assistant-text-review")
     }
 }

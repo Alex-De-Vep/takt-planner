@@ -102,7 +102,7 @@ private struct CalendarAgendaDay: View {
                             .font(.system(size: 12, weight: .semibold))
                         Spacer()
                         if Calendar.current.isDateInToday(day) { Text(strings["Сегодня"]).font(.caption2) }
-                    }.foregroundStyle(selected ? PlannerStyle.blueAccent : .secondary)
+                    }.foregroundStyle(selected ? PlannerStyle.calendarAccent : .secondary)
                         .contentShape(Rectangle()).padding(.vertical, 10)
                 }.buttonStyle(.plain)
                     .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(strings.language.locale)))
@@ -124,8 +124,8 @@ private struct CalendarAgendaDay: View {
         }
         .padding(.horizontal, horizontal ? 12 : 4)
         .frame(maxWidth: .infinity, minHeight: minimumHeight, alignment: .topLeading)
-        .background(targeted ? PlannerStyle.blueAccent.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8))
-        .overlay { if targeted { RoundedRectangle(cornerRadius: 8).strokeBorder(PlannerStyle.blueAccent, lineWidth: 1) } }
+        .background(targeted ? PlannerStyle.calendarAccent.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8))
+        .overlay { if targeted { RoundedRectangle(cornerRadius: 8).strokeBorder(PlannerStyle.calendarAccent, lineWidth: 1) } }
         .contentShape(Rectangle())
         .onDrop(of: [.plannerCalendarEvent], delegate: CalendarEventDropDelegate(day: day, enabled: canMove,
             targeted: $targeted, autoscroll: autoscroll, move: moveEvent))
@@ -166,7 +166,7 @@ private struct CalendarAgendaDay: View {
             eventContent(event)
             if let task = links.first(where: { $0.eventIdentifier == event.identifier })?.task {
                 Button { openTask(task) } label: { Image(systemName: "checklist") }
-                    .buttonStyle(.plain).foregroundStyle(PlannerStyle.blueAccent)
+                    .buttonStyle(.plain).foregroundStyle(PlannerStyle.calendarAccent)
                     .help(strings["Открыть связанную задачу"])
                     .accessibilityLabel(strings["Открыть связанную задачу"])
             }

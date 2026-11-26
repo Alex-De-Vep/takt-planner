@@ -37,10 +37,10 @@ struct CalendarEventSheet: View {
                 Button(strings[session.savedEvent != nil ? "Оставить без связи" : "Отмена"]) { dismiss() }.keyboardShortcut(.cancelAction)
                 if editing {
                     Button(strings[session.savedEvent == nil ? "Сохранить" : "Повторить сохранение связи"]) { save() }
-                        .keyboardShortcut(.defaultAction)
+                        .keyboardShortcut(.defaultAction).tint(PlannerStyle.calendarControlTint)
                         .disabled(unavailable || calendar.access != .full || (session.savedEvent == nil && calendar.creationCalendar(preferred: draft.calendarID) == nil))
                 } else if current?.readOnlyReason == nil, !unavailable {
-                    Button(strings["Редактировать"]) { beginEditing() }.keyboardShortcut(.defaultAction)
+                    Button(strings["Редактировать"]) { beginEditing() }.keyboardShortcut(.defaultAction).tint(PlannerStyle.calendarControlTint)
                 }
             }
         }.padding(24).frame(width: 480)

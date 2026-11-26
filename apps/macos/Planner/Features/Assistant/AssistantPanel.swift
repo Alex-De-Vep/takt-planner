@@ -59,7 +59,7 @@ struct AssistantPanel: View {
             modelFooter
         }
         .background(Color.clear)
-        .tint(PlannerStyle.blueAccent)
+        .tint(PlannerStyle.assistantAccent)
         .sheet(item: $editing) { action in
             AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,
                 actions: service.current?.actions ?? [], save: {
@@ -119,7 +119,7 @@ struct AssistantPanel: View {
                 .help(strings["Новый разговор"]).disabled(service.generating || service.applying)
             }
             .buttonStyle(.borderless)
-            .foregroundStyle(PlannerStyle.blueAccent)
+            .foregroundStyle(PlannerStyle.assistantAccent)
             .padding(.horizontal, 16).padding(.vertical, 10)
             if showClear {
                 VStack(alignment: .leading, spacing: 8) {
@@ -237,7 +237,7 @@ struct AssistantPanel: View {
 
     private var examples: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.blueAccent)
+            Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.assistantAccent)
             if service.hasAvailableCloudModel || isCloud {
                 Text(strings["Начните общение с вашим ИИ-агентом"]).font(.title3.weight(.semibold))
             } else if service.cloud.busy || !service.gateways.busy.isEmpty {
