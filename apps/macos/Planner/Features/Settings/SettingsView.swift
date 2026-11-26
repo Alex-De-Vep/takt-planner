@@ -44,9 +44,18 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 List(selection: $selection) {
                     ForEach(Pane.allCases, id: \.self) { pane in
-                        Label(strings[pane.label.title], systemImage: pane.label.icon)
-                            .accessibilityIdentifier("settings-pane-\(pane.rawValue)")
-                            .tag(pane)
+                        Label {
+                            Text(strings[pane.label.title])
+                                .foregroundStyle(selection == pane ? PlannerStyle.settingsAccent : .primary)
+                        } icon: {
+                            Image(systemName: pane.label.icon).foregroundStyle(PlannerStyle.settingsAccent)
+                        }
+                        .accessibilityIdentifier("settings-pane-\(pane.rawValue)")
+                        .tag(pane)
+                        .listItemTint(.fixed(.clear))
+                        .listRowBackground(selection == pane
+                            ? RoundedRectangle(cornerRadius: 8).fill(PlannerStyle.settingsSelection).padding(.horizontal, 8)
+                            : nil)
                     }
                 }
                 .listStyle(.sidebar)
@@ -130,16 +139,18 @@ struct SettingsView: View {
                 Toggle(strings["Все календари"], isOn: Binding(get: { preferences.visibleCalendarIDs == nil }, set: {
                     preferences.visibleCalendarIDs = $0 ? nil : Set(calendar.calendars.map(\.id))
                 }))
+                .tint(PlannerStyle.settingsControlTint)
                 ForEach(calendar.calendars) { item in
                     Toggle(item.title, isOn: Binding(get: { preferences.visibleCalendarIDs?.contains(item.id) ?? true }, set: { enabled in
                         var ids = preferences.visibleCalendarIDs ?? Set(calendar.calendars.map(\.id))
                         if enabled { ids.insert(item.id) } else { ids.remove(item.id) }
                         preferences.visibleCalendarIDs = ids
                     }))
+                    .tint(PlannerStyle.settingsControlTint)
                 }
                 if calendar.calendars.isEmpty { Text(strings["Нет доступных календарей."]).foregroundStyle(.secondary) }
                 Button(strings["Открыть системные настройки"]) { calendar.openPrivacySettings() }
-            } else { CalendarAccessView(service: calendar) }
+            } else { CalendarAccessView(service: calendar, primaryTint: PlannerStyle.settingsControlTint) }
         } header: { Label(strings["Календарь"], systemImage: "calendar") }
     }
 }

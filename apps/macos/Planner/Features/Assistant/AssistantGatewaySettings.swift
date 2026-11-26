@@ -47,7 +47,7 @@ struct AssistantGatewaySettings: View {
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Button(strings["Войти через OpenRouter"]) {
                     connections.signInOpenRouter(russian: russian)
-                }.buttonStyle(.borderedProminent).disabled(locked)
+                }.buttonStyle(.borderedProminent).tint(PlannerStyle.settingsControlTint).disabled(locked)
             } else if gateway != .openRouter {
                 keyForm
             }
@@ -126,7 +126,7 @@ struct AssistantGatewaySettings: View {
                         savingConnection = busy
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(PlannerStyle.settingsControlTint)
                 .disabled(locked || selectedBase == nil || key.isEmpty || (gateway == .yandex ? folderID.isEmpty : gateway.configuredCatalog && modelIDs.isEmpty))
                 Spacer()
                 if let page = gateway.keyPage { Link(strings["Получить ключ"], destination: page) }

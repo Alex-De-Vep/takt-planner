@@ -36,7 +36,7 @@ struct CloudSettingsSection: View {
             Label(strings["Хранение и синхронизация"], systemImage: "icloud")
         }
         .sheet(item: $mode, onDismiss: { cloud.cancelSetup() }) { mode in
-            AccountForm(cloud: cloud, service: service, mode: mode)
+            AccountForm(cloud: cloud, service: service, mode: mode, primaryTint: PlannerStyle.settingsControlTint)
         }
         .confirmationDialog(strings["Выйти из аккаунта?"], isPresented: $confirmsSignOut) {
             Button(strings["Выйти из аккаунта"]) { Task { await cloud.signOut() } }
@@ -67,6 +67,7 @@ struct AccountForm: View {
     @Bindable var cloud: CloudWorkspace
     let service: TaskService?
     @State var mode: Mode
+    var primaryTint = PlannerStyle.accent
     @State private var email = ""
     @State private var password = ""
     @State private var code = ""
@@ -82,7 +83,7 @@ struct AccountForm: View {
                 Text(setup.profile.account.email).foregroundStyle(.secondary)
                 Text(strings["Перенести текущие задачи в этот аккаунт?"])
                 Button(strings["Войти без переноса"]) { connect(importLocal: false) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.borderedProminent).tint(primaryTint)
                 Button(strings["Перенести задачи и войти"]) { connect(importLocal: true) }
                 if let error = cloud.error { Text(strings[error]).foregroundStyle(.red) }
             } else {
@@ -122,7 +123,7 @@ struct AccountForm: View {
                         }
                         HStack {
                             Button(actionTitle) { submit() }
-                                .buttonStyle(.borderedProminent)
+                                .buttonStyle(.borderedProminent).tint(primaryTint)
                                 .keyboardShortcut(.defaultAction)
                                 .disabled(!valid || remaining > 0)
                                 .accessibilityIdentifier("sync-submit")

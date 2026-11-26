@@ -21,6 +21,7 @@ struct AssistantGatewayModelCapabilities: View {
                     Toggle(strings["Разрешить работу с задачами"], isOn: Binding(
                         get: { profile.toolModelIDs.contains(currentID) },
                         set: { service.gateways.setTools($0, gateway: gateway, modelID: currentID) }))
+                    .tint(PlannerStyle.settingsControlTint)
                 }
                 Text(strings["Включите для модели, которая поддерживает вызов функций. Остальные модели доступны для диалога."])
                     .font(.caption).foregroundStyle(.secondary)

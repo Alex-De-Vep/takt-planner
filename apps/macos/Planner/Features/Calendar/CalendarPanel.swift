@@ -67,7 +67,7 @@ struct CalendarPanel: View {
                 moveFeedback
                 creationActions
             } else {
-                CalendarAccessView(service: service).padding(20)
+                CalendarAccessView(service: service, primaryTint: PlannerStyle.calendarControlTint).padding(20)
                 Spacer()
             }
         }
@@ -290,6 +290,7 @@ struct CalendarPanel: View {
 struct CalendarAccessView: View {
     @Environment(\.translations) private var strings
     let service: CalendarService
+    let primaryTint: Color
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "calendar.badge.exclamationmark").font(.largeTitle).foregroundStyle(.secondary)
@@ -298,7 +299,7 @@ struct CalendarAccessView: View {
             if let error = service.connectionError { Text(strings[error]).font(.caption).foregroundStyle(.red) }
             if service.access == .notDetermined || service.access == .writeOnly {
                 Button(strings["Подключить календарь"]) { Task { await service.connect() } }
-                    .buttonStyle(.borderedProminent).tint(PlannerStyle.calendarControlTint).disabled(service.connecting)
+                    .buttonStyle(.borderedProminent).tint(primaryTint).disabled(service.connecting)
             } else {
                 Text(strings["Доступ к календарям отключён. Задачи продолжают работать."]).font(.caption).foregroundStyle(.secondary)
                 Button(strings["Открыть системные настройки"]) { service.openPrivacySettings() }

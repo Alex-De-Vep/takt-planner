@@ -23,7 +23,10 @@ struct AssistantSettingsSection: View {
                 providerSheet = .choose
             } label: {
                 Label(strings["Подключить ИИ-провайдер"], systemImage: "plus")
-            }.accessibilityIdentifier("assistant-connect-provider")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(PlannerStyle.settingsControlTint)
+            .accessibilityIdentifier("assistant-connect-provider")
             ForEach(connected) { provider in
                 Button {
                     providerSheet = .manage(provider)
@@ -96,6 +99,7 @@ struct AssistantSettingsSection: View {
 
         Section(strings["Помощник"]) {
             Toggle(strings["Добавлять в текущую папку"], isOn: $preferences.assistantUseCurrentFolder)
+                .tint(PlannerStyle.settingsControlTint)
             Picker(strings["Папка по умолчанию"], selection: $preferences.assistantDefaultFolder) {
                 ForEach(AssistantService.folders(folders, preferences: preferences)) { Text($0.name).tag($0.id) }
             }

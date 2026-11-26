@@ -224,7 +224,7 @@ struct PlannerApp: App {
                 .modifier(NotificationLifecycle(service: runtime.service, preferences: preferences, notifications: notifications))
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)
-                .tint(PlannerStyle.accent)
+                .tint(PlannerStyle.settingsAccent)
             } else {
                 Form {
                     Text(runtime.startupError ?? "")
@@ -234,6 +234,7 @@ struct PlannerApp: App {
                 .formStyle(.grouped)
                 .frame(width: 560, height: 320)
                 .environment(\.translations, preferences.translations)
+                .tint(PlannerStyle.settingsAccent)
             }
         }
     }
