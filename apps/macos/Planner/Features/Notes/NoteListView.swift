@@ -130,6 +130,7 @@ struct NoteListView: View {
                 }
             }
             .modifier(WorkspaceListAppearance())
+            .tint(PlannerStyle.noteAccent)
             .animation(rowAnimation, value: rowIDs)
             .focused($listFocused)
             .onDeleteCommand(perform: deleteSelection)

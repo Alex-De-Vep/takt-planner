@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum SidebarSelection: Hashable {
@@ -75,6 +76,7 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            .tint(showsNotes ? PlannerStyle.noteAccent : PlannerStyle.accent)
             // Стекло рисует полноразмерный NSSplitViewItem, а не отдельная область внутри списка.
             .scrollContentBackground(.hidden)
             .animation(PlannerMotion.animation(reduceMotion: reduceMotion), value: folders.map(\.id))
@@ -256,6 +258,7 @@ private struct SidebarFolderRow: View {
         .padding(.vertical, 3)
         .contentShape(Rectangle())
         // List сохраняет выбор и клавиатурную навигацию; видимый фон меняется вместе с цветом текста.
+        .background(SidebarSelectionAppearance())
         .listItemTint(.fixed(.clear))
         .listRowBackground(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -267,6 +270,37 @@ private struct SidebarFolderRow: View {
                 }
         )
         .transaction { $0.animation = nil }
+    }
+}
+
+/// AppKit сохраняет нативный выбор, но фон выбранной строки рисует SidebarFolderRow.
+private struct SidebarSelectionAppearance: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) {
+        view.hideNativeHighlight()
+    }
+
+    final class Probe: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            hideNativeHighlight()
+        }
+
+        func hideNativeHighlight() {
+            var ancestor = superview
+            while let view = ancestor {
+                if let table = view as? NSTableView {
+                    if table.selectionHighlightStyle != .none {
+                        table.selectionHighlightStyle = .none
+                    }
+                    return
+                }
+                ancestor = view.superview
+            }
+        }
     }
 }
 
