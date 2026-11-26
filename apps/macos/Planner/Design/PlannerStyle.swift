@@ -29,6 +29,7 @@ enum PlannerStyle {
     private static let noteLightAccent: UInt32 = 0x7BC8AB
     static let noteAccent = color(light: noteLightAccent, dark: 0x397E68)
     static let noteControlAccent = color(light: noteLightAccent, dark: 0x70BFA2)
+    static let noteActionForeground = color(light: 0x24483C, dark: 0xFFFFFF)
     // Подложка панели папок и список используют одну поверхность в обеих темах.
     static let workspaceBackground = nativeColor(light: 0xFAFAFA, dark: 0x242426)
     static let listBackground = Color(nsColor: workspaceBackground)

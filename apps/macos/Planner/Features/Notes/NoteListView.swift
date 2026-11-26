@@ -61,7 +61,15 @@ struct NoteListView: View {
                     ContentUnavailableView {
                         Label(strings[trash ? "Корзина пуста" : "Заметок пока нет"], systemImage: trash ? "trash" : "note.text")
                     } actions: {
-                        if !trash { Button(strings["Новая заметка"], action: create).disabled(store.unreadable) }
+                        if !trash {
+                            Button(action: create) {
+                                Text(strings["Новая заметка"])
+                                    .foregroundStyle(PlannerStyle.noteActionForeground)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(PlannerStyle.noteAccent)
+                            .disabled(store.unreadable)
+                        }
                     }
                     .transition(.opacity)
                 }
