@@ -87,6 +87,7 @@ struct CalendarPanel: View {
         .alert(strings["Календарь"], isPresented: Binding(get: { state.message != nil }, set: { if !$0 { state.message = nil } })) {
             Button(strings["Понятно"], role: .cancel) { state.message = nil }
         } message: { Text(strings[state.message ?? ""]) }
+        .tint(PlannerStyle.blueAccent)
     }
 
     private var monthGrid: some View {
@@ -113,11 +114,11 @@ struct CalendarPanel: View {
                         VStack(spacing: 2) {
                             Text(day, format: .dateTime.day()).font(.system(size: 12, weight: today ? .bold : .regular))
                                 .frame(width: 28, height: 25)
-                                .background(selected ? PlannerStyle.accent : .clear, in: RoundedRectangle(cornerRadius: 7))
-                                .overlay { if today { RoundedRectangle(cornerRadius: 7).stroke(PlannerStyle.accent, lineWidth: 1) } }
-                                .foregroundStyle(selected ? .white : .primary)
+                                .background(selected ? PlannerStyle.blueAccent : .clear, in: RoundedRectangle(cornerRadius: 7))
+                                .overlay { if today { RoundedRectangle(cornerRadius: 7).stroke(PlannerStyle.blueAccent, lineWidth: 1) } }
+                                .foregroundStyle(selected ? PlannerStyle.blueAccentForeground : .primary)
                                 .animation(PlannerMotion.animation(.feedback, reduceMotion: reduceMotion), value: selected)
-                            Circle().fill(events.contains { CalendarDates.occurs($0, on: day) } ? PlannerStyle.accent : .clear).frame(width: 3, height: 3)
+                            Circle().fill(events.contains { CalendarDates.occurs($0, on: day) } ? PlannerStyle.blueAccent : .clear).frame(width: 3, height: 3)
                         }
                         .opacity(Calendar.current.isDate(day, equalTo: state.month, toGranularity: .month) ? 1 : 0.4)
                         .frame(maxWidth: .infinity)

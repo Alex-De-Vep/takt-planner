@@ -59,6 +59,7 @@ struct AssistantPanel: View {
             modelFooter
         }
         .background(Color.clear)
+        .tint(PlannerStyle.blueAccent)
         .sheet(item: $editing) { action in
             AssistantActionEditor(action: action, folders: folderOptions, calendars: calendarOptions,
                 actions: service.current?.actions ?? [], save: {
@@ -117,7 +118,9 @@ struct AssistantPanel: View {
                 .accessibilityLabel(strings["Новый разговор"])
                 .help(strings["Новый разговор"]).disabled(service.generating || service.applying)
             }
-            .buttonStyle(.borderless).padding(.horizontal, 16).padding(.vertical, 10)
+            .buttonStyle(.borderless)
+            .foregroundStyle(PlannerStyle.blueAccent)
+            .padding(.horizontal, 16).padding(.vertical, 10)
             if showClear {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(strings["Очистить историю помощника?"]).fontWeight(.medium)
@@ -168,7 +171,10 @@ struct AssistantPanel: View {
                                 }
                                 if latest, message.calendarAccessRequired == true, calendar.access != .full { calendarAccessButton }
                             }
-                            .padding(12).background(message.role == .user ? PlannerStyle.accent.opacity(0.10) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                            .padding(12)
+                            .background(message.role == .user
+                                ? AnyShapeStyle(PlannerStyle.assistantUserMessageBackground)
+                                : PlannerStyle.assistantReplyBackground, in: RoundedRectangle(cornerRadius: 12))
                             if !showDrafts, let suggestion = service.current?.noteProposal,
                                message.resultNoteProposalID == suggestion.id {
                                 noteProposalCard(suggestion)
@@ -189,7 +195,7 @@ struct AssistantPanel: View {
                         if service.generating {
                             if !service.cloudPreview.isEmpty {
                                 Text(service.cloudPreview).frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(12).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                                    .padding(12).background(PlannerStyle.assistantReplyBackground, in: RoundedRectangle(cornerRadius: 12))
                             }
                             HStack {
                                 ProgressView().controlSize(.small)
@@ -231,7 +237,7 @@ struct AssistantPanel: View {
 
     private var examples: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.accent)
+            Image(systemName: "bubble.left.and.text.bubble.right").font(.system(size: 28)).foregroundStyle(PlannerStyle.blueAccent)
             if service.hasAvailableCloudModel || isCloud {
                 Text(strings["Начните общение с вашим ИИ-агентом"]).font(.title3.weight(.semibold))
             } else if service.cloud.busy || !service.gateways.busy.isEmpty {
@@ -322,8 +328,14 @@ struct AssistantPanel: View {
                 }
                 Button {
                     if service.generating { service.stop() } else { send(service.current?.draft ?? "") }
-                } label: { Image(systemName: service.generating ? "stop.fill" : "arrow.up").frame(width: 24, height: 24) }
-                .buttonStyle(.borderedProminent).clipShape(Circle())
+                } label: {
+                    Image(systemName: service.generating ? "stop.fill" : "arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 32, height: 32)
+                        .background(PlannerStyle.assistantGradient, in: Circle())
+                }
+                .buttonStyle(.plain)
                 .help(strings[service.generating ? "Остановить" : "Отправить"])
                 .disabled(service.applying || service.storageFailed || editing != nil || (!service.generating && (service.current?.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)))
             }
