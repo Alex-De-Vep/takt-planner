@@ -9,7 +9,7 @@
 1. `POST /v1/auth/register`: `{email,password}` → `{challengeId,message}`. Пароль содержит 12–128 Unicode-символов.
 2. Письмо содержит одноразовый 8-значный код. `POST /v1/auth/verify-email`: `{challengeId,code,password}`. Пароль передаётся повторно из формы регистрации и устанавливается только при подтверждении владения почтой; это защищает от предварительной регистрации чужого адреса.
 3. `POST /v1/auth/login`: `{email,password,deviceId,deviceName}` → `{accessToken,refreshToken,expiresIn,sessionId,user}`. `deviceId` — постоянный UUID установки, `deviceName` — 1–100 символов.
-4. `POST /v1/auth/refresh`: `{refreshToken}`. Старый refresh-токен становится недействительным; его повторное использование отзывает текущую сессию. Клиент выполняет refresh последовательно. Потеря ответа может потребовать повторного входа.
+4. `POST /v1/auth/refresh`: `{refreshToken}`. Если в конфигурации указан `limits.refreshOperationVersion: 1`, клиент сохраняет случайный UUID `operationId` вместе с текущим токеном до отправки и включает его в запрос. После потери ответа или перезапуска клиент повторяет ту же пару. Сервер возвращает тот же следующий refresh-токен и действующий access-токен, пока сеанс активен и следующий refresh-токен ещё не использован. Ответ на запоздалый повтор уже завершённой операции — 401. Повтор использованного токена с другим UUID или без него отзывает сеанс. Клиенты прежних версий по-прежнему выполняют одноразовый refresh без UUID.
 5. `POST /v1/auth/logout` отзывает текущую сессию; `GET /v1/devices` и `DELETE /v1/devices/{sessionId}` управляют устройствами.
 
 `POST /v1/auth/resend-verification` принимает `{email}`. Восстановление: `/v1/auth/password-reset/request` с `{email}`, затем `/confirm` с `{challengeId,code,newPassword}`. После сброса нужен обычный вход, старые сессии отозваны. Код действует 10 минут, максимум 5 попыток; письма одному адресу не запрашиваются чаще раза в минуту.
@@ -118,3 +118,23 @@ Clients should catch up on each `ready`. Use the note index after
 `tasks.changed`. Events are not replayed. On disconnect, resume periodic
 checks and reconnect with backoff. A stream closes on token expiry or
 session revocation. Only one connection per session is kept open.
+
+### Support requests
+
+`POST /v1/support/requests` requires a bearer token. Send a UUID `submissionId`,
+`message` (1–4000 characters), `platform` (`android`, `macos`, or `windows`),
+`appVersion`, `appBuild`, `osVersion`, and an ISO 8601 `deviceTime` with offset.
+Clients can include `subject` (1–120 characters) and `replyEmail` (one email
+address). The subject follows the request code in the email subject, and
+`replyEmail` sets its `Reply-To` header. The account email is the contact address
+when `replyEmail` is omitted.
+The response includes the shared `code` (for example, `TAKT-000184`) and
+`receivedAt` in UTC. This confirms that the server accepted the request and
+queued the email.
+
+Retry a lost response with the same UUID and fields. The server returns the
+same receipt for that account. Reusing the UUID with different fields returns
+409. New requests are limited to five per account per hour. Support mail is
+delivered to the mailbox configured in `MAIL_FROM`, which also sends verification
+emails. If `MAIL_FROM` does not identify a single mailbox, new requests return
+503 with `support_unavailable`.

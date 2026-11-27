@@ -5,6 +5,7 @@ export interface Config {
   databaseUrl: string; dataDir: string; publicBaseUrl: string; port: number; authSecret: string;
   allowedEmails: string[]; publicRegistration: boolean; quotaBytes: number; maxFileBytes: number;
   smtpHost: string; smtpPort: number; smtpSecure: boolean; smtpUser: string; smtpPassword: string; mailFrom: string;
+  supportEmail: string;
   test: boolean;
   trustedProxyCIDRs: string[]; userRequestsPerMinute: number; publicRequestsPerMinute: number;
 }
@@ -23,6 +24,13 @@ function integer(value: string | undefined, fallback: number, min: number, max: 
   const n = value === undefined || value === '' ? fallback : Number(value);
   if (!Number.isSafeInteger(n) || n < min || n > max) throw new Error('Invalid numeric configuration');
   return n;
+}
+function senderMailbox(mailFrom: string): string {
+  const sender = mailFrom.trim();
+  const namedAddress = /^(?:"(?:[^"\\\r\n]|\\.)*"|[^<>,;@"\r\n]*)\s*<([^<>\r\n]+)>$/.exec(sender);
+  const address = namedAddress ? namedAddress[1]!.trim() : sender;
+  return address.length <= 254 && /^[^\s@,;<>"\x00-\x1f\x7f]+@[^\s@,;<>"\x00-\x1f\x7f]+\.[^\s@,;<>"\x00-\x1f\x7f]+$/.test(address)
+    ? address : '';
 }
 export function loadConfig(env = process.env): Config {
   const test = env.NODE_ENV === 'test';
@@ -50,6 +58,6 @@ export function loadConfig(env = process.env): Config {
     quotaBytes: integer(env.ACCOUNT_QUOTA_BYTES, 1073741824, 1048576, Number.MAX_SAFE_INTEGER),
     maxFileBytes: integer(env.MAX_FILE_BYTES, 104857600, 1, 104857600),
     smtpHost, smtpPort: integer(env.SMTP_PORT, 465, 1, 65535), smtpSecure: env.SMTP_SECURE === 'true',
-    smtpUser: env.SMTP_USER || '', smtpPassword: env.SMTP_PASSWORD || '', mailFrom,
+    smtpUser: env.SMTP_USER || '', smtpPassword: env.SMTP_PASSWORD || '', mailFrom, supportEmail: senderMailbox(mailFrom),
   };
 }

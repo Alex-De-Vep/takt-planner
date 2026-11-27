@@ -51,6 +51,6 @@ export async function rateLimitMany(db: Database, limits: {key:string;max:number
   const wait = Math.max(0, ...usage.filter(limit => limit.remaining === 0).map(limit => limit.wait));
   return { attemptsRemaining, retryAfterSeconds: wait || undefined };
 }
-export async function queueMail(tx: Tx, secret: string, to: string, subject: string, text: string, expiresAt?: string, userId?: string) {
-  await tx.query('INSERT INTO jobs(id,kind,encrypted_payload,user_id) VALUES(gen_random_uuid(),$1,$2,$3)', ['mail',encrypt(secret,{to,subject,text,expiresAt}),userId??null]);
+export async function queueMail(tx: Tx, secret: string, to: string, subject: string, text: string, expiresAt?: string, userId?: string, replyTo?: string) {
+  await tx.query('INSERT INTO jobs(id,kind,encrypted_payload,user_id) VALUES(gen_random_uuid(),$1,$2,$3)', ['mail',encrypt(secret,{to,subject,text,expiresAt,replyTo}),userId??null]);
 }

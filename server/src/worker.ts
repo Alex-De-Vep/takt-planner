@@ -21,7 +21,13 @@ export async function deliverOne(db:Database,config:Config,send?: (mail:any)=>Pr
      if(send)await send(payload);
      else{
        const smtp=nodemailer.createTransport({host:config.smtpHost,port:config.smtpPort,secure:config.smtpSecure,auth:config.smtpUser?{user:config.smtpUser,pass:config.smtpPassword}:undefined,connectionTimeout:10000,greetingTimeout:10000,socketTimeout:20000});
-       try{await smtp.sendMail({from:config.mailFrom,to:payload.to,subject:payload.subject,text:payload.text,disableFileAccess:true,disableUrlAccess:true});}finally{smtp.close();}
+       try {
+         await smtp.sendMail({
+           from:config.mailFrom,to:payload.to,subject:payload.subject,text:payload.text,
+           replyTo:payload.replyTo ? { address:payload.replyTo, name:'' } : undefined,
+           disableFileAccess:true,disableUrlAccess:true,
+         });
+       } finally { smtp.close(); }
      }
      await recordMail(db,true);
    }

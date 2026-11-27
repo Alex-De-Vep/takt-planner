@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 umask 077
 
-version=0.1.7
-previous=0.1.6
+version=0.1.9
+previous=0.1.8
 root=/opt/takt-server
 install_dir="$root/app"
 env_file="$root/config/server.env"
@@ -23,7 +23,14 @@ ready_version() {
 
 check_config() {
     curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3030/v1/config |
-        python3 -c 'import json,sys;c=json.load(sys.stdin);assert c["protocolVersion"]==1 and c["serverVersion"]==sys.argv[1] and c["limits"]["maxNoteFormatVersion"]==1 and c["limits"]["noteEventsVersion"]==1 and c["limits"]["taskEventsVersion"]==1' "$version"
+        python3 -c 'import json,sys;c=json.load(sys.stdin);assert c["protocolVersion"]==1 and c["serverVersion"]==sys.argv[1] and c["limits"]["maxNoteFormatVersion"]==1 and c["limits"]["noteEventsVersion"]==1 and c["limits"]["taskEventsVersion"]==1 and c["limits"]["refreshOperationVersion"]==1' "$version"
+}
+
+check_support() {
+    compose exec -T api node --input-type=module -e 'import {loadConfig} from "./dist/config.js"; if (!loadConfig().supportEmail) throw new Error("MAIL_FROM must identify a single mailbox");'
+    [[ $(compose exec -T db psql -X -U planner -d planner -At -c "SELECT name FROM schema_migrations WHERE name='008_support_requests.sql'") == '008_support_requests.sql' ]]
+    curl --fail --silent --show-error --max-time 8 http://127.0.0.1:3030/v1/openapi.json |
+        python3 -c 'import json,sys; spec=json.load(sys.stdin); assert spec["paths"]["/v1/support/requests"]["post"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/SupportReceipt"'
 }
 
 if [[ $EUID != 0 ]]; then
@@ -36,6 +43,7 @@ flock -n 9
 running=$(ready_version)
 if [[ $running == "$version" ]]; then
     check_config
+    check_support
     exit
 fi
 if [[ $running != "$previous" || $candidate == "$install_dir" ]]; then
@@ -114,6 +122,7 @@ maintenance=0
 compose up -d --no-build --pull never --no-deps --wait --wait-timeout 90 api worker
 [[ $(ready_version) == "$version" ]]
 check_config
+check_support
 
 trap - EXIT INT TERM
 printf 'Takt Server %s is ready. Upgrade backup: %s\n' "$version" "$backup"

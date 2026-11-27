@@ -1,5 +1,5 @@
 x-app: &app
-  image: planner-server:${PLANNER_SERVER_VERSION:-0.1.7}
+  image: planner-server:${PLANNER_SERVER_VERSION:-0.1.9}
   build: .
   environment: &environment
     NODE_ENV: production

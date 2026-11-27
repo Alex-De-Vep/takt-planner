@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 import type { Database, Tx } from './db.js';
 import { ApiError, fail, requireValue } from './errors.js';
@@ -35,11 +35,36 @@ export async function installAuth(app: FastifyInstance, db: Database, config: Co
   async function sendLimits(address: string) {
     await rateLimitMany(db,[{key:`mail-minute:${digest(address)}`,max:1,seconds:60},{key:`mail-window:${digest(address)}`,max:10,seconds:600}]);
   }
+  async function saveRefreshToken(tx: Tx, sessionId: string, refreshToken: string) {
+    await tx.query(`INSERT INTO refresh_tokens(hash,session_id,expires_at) SELECT $1,id,LEAST(absolute_expires_at,now()+interval '30 days') FROM sessions WHERE id=$2`,[digest(refreshToken),sessionId]);
+  }
   async function issueTokens(tx: Tx, sessionId: string) {
     const accessToken = token(), refreshToken = token();
     await tx.query('INSERT INTO access_tokens(hash,session_id,expires_at) VALUES($1,$2,now()+interval \'15 minutes\')',[digest(accessToken),sessionId]);
-    await tx.query(`INSERT INTO refresh_tokens(hash,session_id,expires_at) SELECT $1,id,LEAST(absolute_expires_at,now()+interval '30 days') FROM sessions WHERE id=$2`,[digest(refreshToken),sessionId]);
+    await saveRefreshToken(tx,sessionId,refreshToken);
     return { accessToken, refreshToken, expiresIn:900, tokenType:'Bearer' };
+  }
+  // Derive the same successor for this credential and operation without storing bearer secrets.
+  async function recoverableGrant(tx: Tx, sessionId: string, previous: string, operationId: string, usedAt: Date | null, now: Date) {
+    const derive = (purpose: string) => createHmac('sha256',config.authSecret)
+      .update(JSON.stringify(['refresh-v1',sessionId,previous,operationId,purpose])).digest('base64url');
+    const refreshToken = derive('refresh');
+    if (usedAt) {
+      const current = await tx.query('SELECT 1 FROM refresh_tokens WHERE hash=$1 AND session_id=$2 AND used_at IS NULL AND expires_at>$3',
+        [digest(refreshToken),sessionId,now]);
+      if (!current.rowCount) return null;
+    } else {
+      await saveRefreshToken(tx,sessionId,refreshToken);
+    }
+    // After a long sleep a replay needs a valid access token, even if the first one expired.
+    const lifetime = 15 * 60 * 1000;
+    const start = (usedAt ?? now).getTime();
+    const generation = Math.floor(Math.max(0,now.getTime()-start)/lifetime);
+    const expiresAt = new Date(start+(generation+1)*lifetime);
+    const accessToken = derive('access:'+generation);
+    await tx.query('INSERT INTO access_tokens(hash,session_id,expires_at) VALUES($1,$2,$3) ON CONFLICT (hash) DO NOTHING',
+      [digest(accessToken),sessionId,expiresAt]);
+    return {accessToken,refreshToken,expiresIn:Math.floor((expiresAt.getTime()-now.getTime())/1000),tokenType:'Bearer'};
   }
   async function authenticate(request: FastifyRequest, revalidate = false): Promise<Identity> {
     const cached=identities.get(request);if(cached&&!revalidate)return cached;
@@ -130,7 +155,8 @@ export async function installAuth(app: FastifyInstance, db: Database, config: Co
     });
   });
   app.post('/v1/auth/refresh',async request=> {
-    const value=(request.body as any)?.refreshToken;
+    const {refreshToken:value,operationId} = (request.body ?? {}) as {refreshToken:string;operationId?:string};
+    requireValue(operationId === undefined || uuid(operationId));
     requireValue(typeof value==='string' && value.length>=32 && value.length<=128);
     const owner=await db.pool.query('SELECT session_id FROM refresh_tokens WHERE hash=$1',[digest(value)]);
     await rateLimit(db,owner.rows[0]?`refresh-session:${owner.rows[0].session_id}`:`refresh-invalid:${digest(request.ip)}`,120,600);
@@ -140,12 +166,16 @@ export async function installAuth(app: FastifyInstance, db: Database, config: Co
       if (!lookup.rowCount) return null;
       const sr=await tx.query('SELECT s.*,u.deleted_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=$1 FOR UPDATE OF s',[lookup.rows[0].session_id]);
       const s=sr.rows[0];
-      const tr=await tx.query('SELECT * FROM refresh_tokens WHERE hash=$1 FOR UPDATE',[digest(value)]),t=tr.rows[0];
-      if (!s || !t || s.revoked_at || s.deleted_at || s.absolute_expires_at<=new Date() || s.idle_expires_at<=new Date() || t.expires_at<=new Date()) return null;
+      const tr=await tx.query('SELECT *,clock_timestamp() AS checked_at FROM refresh_tokens WHERE hash=$1 FOR UPDATE',[digest(value)]),t=tr.rows[0];
+      if (!s || !t || s.revoked_at || s.deleted_at || s.absolute_expires_at<=t.checked_at || s.idle_expires_at<=t.checked_at) return null;
+      if (t.used_at && operationId && operationId===t.operation_id) {
+        return recoverableGrant(tx,s.id,value,operationId,t.used_at,t.checked_at);
+      }
+      if (t.expires_at<=t.checked_at) return null;
       if (t.used_at) { await tx.query('UPDATE sessions SET revoked_at=now() WHERE id=$1',[s.id]); return null; }
-      await tx.query('UPDATE refresh_tokens SET used_at=now() WHERE hash=$1',[digest(value)]);
+      await tx.query('UPDATE refresh_tokens SET used_at=$2,operation_id=$3 WHERE hash=$1',[digest(value),t.checked_at,operationId ?? null]);
       await tx.query("UPDATE sessions SET last_used_at=now(),idle_expires_at=LEAST(absolute_expires_at,now()+interval '30 days') WHERE id=$1",[s.id]);
-      return issueTokens(tx,s.id);
+      return operationId ? recoverableGrant(tx,s.id,value,operationId,null,t.checked_at) : issueTokens(tx,s.id);
     });
     if (!result) fail(401,'unauthorized','Требуется повторный вход'); return result;
   });

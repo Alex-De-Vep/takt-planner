@@ -30,6 +30,7 @@ export const contractSchemas=[stampSchema,mutationSchema,...entities,entity,erro
  named('ChallengeResponse',object({message:str,challengeId:id})),named('TokenResponse',tokens),
  named('LoginResponse',object({...tokens.properties,sessionId:id,user:object({id,email:str})})),
  named('MeResponse',object({id,email:str,libraryId:id})),
+ named('SupportReceipt',object({code:{type:'string',pattern:'^TAKT-[0-9]{6,19}$'},receivedAt:time})),
  named('DevicesResponse',object({devices:array(object({id,deviceId:id,name:str,createdAt:time,lastUsedAt:time})),currentSessionId:id})),
  named('LibraryResponse',object({id,initialized:bool,revision})),
  named('SnapshotResponse',object({protocolVersion:{const:1},libraryId:id,cursor:revision,initialized:bool,entities:array(ref('Entity'))})),
@@ -46,16 +47,23 @@ export const contractSchemas=[stampSchema,mutationSchema,...entities,entity,erro
   ...object({revision:noteRevision,data:noteData})
  }),
  named('NoteWriteResponse',object({revision:noteRevision})),
- named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer,maxNoteFormatVersion:integer,noteEventsVersion:integer,taskEventsVersion:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
+ named('ConfigResponse',object({protocolVersion:{const:1},serverVersion:str,serverTime:time,registrationMode:{enum:['open','allowlist']},limits:object({maxFileBytes:integer,accountQuotaBytes:integer,partBytes:integer,maxBatchOperations:integer,maxRequestBytes:integer,maxNoteBytes:integer,maxNoteFormatVersion:integer,noteEventsVersion:integer,taskEventsVersion:integer,refreshOperationVersion:integer},['maxFileBytes','accountQuotaBytes','partBytes','maxBatchOperations','maxRequestBytes'])}))
 ];
 const email={type:'string',minLength:3,maxLength:254},password={type:'string',minLength:12,maxLength:128};
 const mutations={type:'array',minItems:1,maxItems:100,items:ref('Mutation')};
+const supportVersion={type:'string',minLength:1,maxLength:80,pattern:'^[^\\u0000-\\u001f\\u007f]+$'};
+const supportReplyEmail={...email,pattern:'^[^\\s@,;<>"\\u0000-\\u001f\\u007f]+@[^\\s@,;<>"\\u0000-\\u001f\\u007f]+\\.[^\\s@,;<>"\\u0000-\\u001f\\u007f]+$'};
 export const requestSchemas:Record<string,any>={
  '/v1/auth/register':object({email,password}),'/v1/auth/verify-email':object({challengeId:id,code:{type:'string',pattern:'^\\d{8}$'},password}),
  '/v1/auth/resend-verification':object({email}),'/v1/auth/login':object({email,password,deviceId:id,deviceName:{type:'string',minLength:1,maxLength:100}}),
- '/v1/auth/refresh':object({refreshToken:{type:'string',minLength:32,maxLength:128}}),'/v1/auth/password-reset/request':object({email}),
+ '/v1/auth/refresh':object({refreshToken:{type:'string',minLength:32,maxLength:128},operationId:id},['refreshToken']),'/v1/auth/password-reset/request':object({email}),
  '/v1/auth/password-reset/confirm':object({challengeId:id,code:{type:'string',pattern:'^\\d{8}$'},newPassword:password}),
  '/v1/account':object({password}),'/v1/sync/mutations':object({mutations}),'/v1/library/imports':object({importId:id}),
+ '/v1/support/requests':object({
+   submissionId:id,subject:{...supportVersion,maxLength:120},message:{type:'string',minLength:1,maxLength:4000},
+   replyEmail:supportReplyEmail,platform:{enum:['android','macos','windows']},
+   appVersion:supportVersion,appBuild:supportVersion,osVersion:supportVersion,deviceTime:time,
+ },['submissionId','message','platform','appVersion','appBuild','osVersion','deviceTime']),
  '/v1/library/imports/:id/mutations':object({mutations}),'/v1/attachments/:id/uploads':object({uploadId:id}),
  '/v1/notes/:id':object({baseRevision:nullable(noteRevision),data:noteData})
 };
@@ -64,6 +72,7 @@ const responses:Record<string,string>={
  '/v1/auth/register':'ChallengeResponse','/v1/auth/resend-verification':'ChallengeResponse','/v1/auth/password-reset/request':'ChallengeResponse',
  '/v1/auth/verify-email':'Ok','/v1/auth/password-reset/confirm':'Ok','/v1/auth/login':'LoginResponse','/v1/auth/refresh':'TokenResponse','/v1/auth/logout':'Ok',
  '/v1/me':'MeResponse','/v1/devices':'DevicesResponse','/v1/devices/:id':'Ok','/v1/account':'Ok','/v1/library':'LibraryResponse',
+ '/v1/support/requests':'SupportReceipt',
  '/v1/sync/snapshot':'SnapshotResponse','/v1/sync/changes':'ChangesResponse','/v1/sync/mutations':'MutationsResponse',
  '/v1/library/imports':'ImportResponse','/v1/library/imports/:id/mutations':'ImportBatchResponse','/v1/library/imports/:id/commit':'Ok',
  '/v1/attachments/:id/uploads':'UploadResponse','/v1/uploads/:id':'UploadStateResponse','/v1/uploads/:id/parts/:part':'PartResponse',

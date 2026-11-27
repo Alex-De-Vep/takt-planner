@@ -20,6 +20,11 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
 assert.ok(databaseUrl && /^planner_delivery_test/.test(new URL(databaseUrl).pathname.slice(1)),'Use an isolated planner_delivery_test database');
 let db,app,store,dir,config;
 const pw='Длинный пароль теста 42',secret='f'.repeat(64);
+const verificationMailbox = 'sender@example.test';
+const testEnvironment = {
+  NODE_ENV: 'test', DATABASE_URL: databaseUrl, AUTH_SECRET: secret, PUBLIC_BASE_URL: 'http://localhost',
+  ALLOWED_REGISTRATION_EMAILS: 'alice@example.test,bob@example.test', MAIL_FROM: `Takt <${verificationMailbox}>`,
+};
 const hash=b=>createHash('sha256').update(b).digest('hex');
 async function api(method,url,body,identity){return app.inject({method,url,headers:{...(identity?{authorization:`Bearer ${identity.accessToken}`}:{})},payload:body});}
 async function challengeCode(id){const jobs=(await db.pool.query('SELECT encrypted_payload FROM jobs WHERE completed_at IS NULL ORDER BY created_at DESC')).rows;for(const j of jobs){const p=decrypt(secret,j.encrypted_payload);const m=p.text.match(/Код: (\d{8})/);if(m)return m[1];}throw new Error('No code');}
@@ -39,13 +44,44 @@ async function addFile(a,taskId,bytes,sha=hash(bytes)){
  assert.equal((await send(a,[m]))[0].status,'applied');const uploadId=randomUUID();const r=await api('POST',`/v1/attachments/${id}/uploads`,{uploadId},a);assert.equal(r.statusCode,200,r.body);return {id,uploadId,ready:r.json().ready};
 }
 async function part(a,u,index,bytes){return app.inject({method:'PUT',url:`/v1/uploads/${u}/parts/${index}`,headers:{authorization:`Bearer ${a.accessToken}`,'content-type':'application/octet-stream'},payload:bytes});}
-before(async()=>{dir=await mkdtemp(join(tmpdir(),'planner-server-test-'));config=loadConfig({NODE_ENV:'test',DATABASE_URL:databaseUrl,AUTH_SECRET:secret,PUBLIC_BASE_URL:'http://localhost',DATA_DIR:dir,ALLOWED_REGISTRATION_EMAILS:'alice@example.test,bob@example.test',MAIL_FROM:'sender@example.test'});db=new Database(databaseUrl);await db.migrate();({app,store}=await buildApp(config,db));await app.ready();});
+before(async()=>{dir=await mkdtemp(join(tmpdir(),'planner-server-test-'));config=loadConfig({...testEnvironment,DATA_DIR:dir});db=new Database(databaseUrl);await db.migrate();({app,store}=await buildApp(config,db));await app.ready();});
 beforeEach(async()=>{await db.pool.query('TRUNCATE users,limits,jobs CASCADE');await db.pool.query("UPDATE settings SET value='false' WHERE key='maintenance'");config.quotaBytes=1073741824;config.userRequestsPerMinute=300;config.publicRequestsPerMinute=300;await db.pool.query("DELETE FROM settings WHERE key LIKE 'ops.%' OR key='proxy-probe'");});
 after(async()=>{await app?.close();await db?.close();if(dir)await rm(dir,{recursive:true,force:true});});
 
 test('health, migration repeatability and closed registration',async()=>{assert.equal((await api('GET','/health/ready')).statusCode,200);await db.migrate();const r=await api('POST','/v1/auth/register',{email:'outsider@example.test',password:pw});assert.equal(r.statusCode,403);assert.equal((await db.pool.query('SELECT * FROM users')).rowCount,0);assert.equal((await api('GET','/v1/config')).json().protocolVersion,1);});
 test('password confirmation prevents pre-registration password takeover',async()=>{const r=await api('POST','/v1/auth/register',{email:'alice@example.test',password:'attacker password 123'});const id=r.json().challengeId;const c=await challengeCode(id);assert.equal((await api('POST','/v1/auth/verify-email',{challengeId:id,code:c,password:pw})).statusCode,200);await login();const bad=await api('POST','/v1/auth/login',{email:'alice@example.test',password:'attacker password 123',deviceId:randomUUID(),deviceName:'x'});assert.equal(bad.statusCode,401);const row=(await db.pool.query('SELECT password_hash FROM users')).rows[0];assert.ok(row.password_hash.startsWith('$argon2id$'));});
 test('one-time verification code locks after five incorrect attempts',async()=>{const r=await api('POST','/v1/auth/register',{email:'alice@example.test',password:pw});const id=r.json().challengeId,c=await challengeCode(id);for(let i=0;i<5;i++)assert.equal((await api('POST','/v1/auth/verify-email',{challengeId:id,code:c==='00000000'?'11111111':'00000000',password:pw})).statusCode,400);assert.equal((await api('POST','/v1/auth/verify-email',{challengeId:id,code:c,password:pw})).statusCode,400);assert.equal((await db.pool.query('SELECT attempts FROM challenges WHERE id=$1',[id])).rows[0].attempts,5);});
+test('a lost refresh reply can be recovered concurrently and after access expiry',async()=>{
+ const a=await account();
+ assert.equal((await api('GET','/v1/config')).json().limits.refreshOperationVersion,1);
+ const original={refreshToken:a.refreshToken,operationId:randomUUID()};
+ const rotate=body=>api('POST','/v1/auth/refresh',body);
+ const [first,retry]=await Promise.all([rotate(original),rotate(original)]);
+ assert.equal(first.statusCode,200);assert.equal(retry.statusCode,200);
+ const grant=first.json();
+ assert.equal(retry.json().refreshToken,grant.refreshToken);
+ assert.equal(retry.json().accessToken,grant.accessToken);
+ await db.pool.query("UPDATE refresh_tokens SET used_at=used_at-interval '17 minutes' WHERE hash=$1",[hash(a.refreshToken)]);
+ await db.pool.query("DELETE FROM access_tokens WHERE hash=$1",[hash(grant.accessToken)]);
+ const resumed=await rotate(original);assert.equal(resumed.statusCode,200);
+ assert.equal(resumed.json().refreshToken,grant.refreshToken);assert.notEqual(resumed.json().accessToken,grant.accessToken);
+ assert.equal((await api('GET','/v1/me',undefined,resumed.json())).statusCode,200);
+ const child={refreshToken:grant.refreshToken,operationId:randomUUID()};
+ const next=await rotate(child);assert.equal(next.statusCode,200);
+ assert.equal((await rotate(original)).statusCode,401);
+ assert.equal((await api('GET','/v1/me',undefined,next.json())).statusCode,200);
+ await api('POST','/v1/auth/logout',{},next.json());
+ assert.equal((await rotate(child)).statusCode,401);
+});
+test('an unrelated operation cannot reuse a rotated refresh token',async()=>{
+ const a=await account();
+ const rotate=operationId=>api('POST','/v1/auth/refresh',{refreshToken:a.refreshToken,operationId});
+ const original=randomUUID();
+ const first=await rotate(original);assert.equal(first.statusCode,200);
+ assert.equal((await rotate(randomUUID())).statusCode,401);
+ assert.equal((await rotate(original)).statusCode,401);
+ assert.equal((await api('GET','/v1/me',undefined,first.json())).statusCode,401);
+});
 test('refresh rotation, reuse revokes the device, logout isolation',async()=>{const a=await account();const b=await login();const r=await api('POST','/v1/auth/refresh',{refreshToken:a.refreshToken});assert.equal(r.statusCode,200);assert.equal((await api('POST','/v1/auth/refresh',{refreshToken:a.refreshToken})).statusCode,401);assert.equal((await api('GET','/v1/me',undefined,{accessToken:r.json().accessToken})).statusCode,401);assert.equal((await api('GET','/v1/me',undefined,b)).statusCode,200);await api('POST','/v1/auth/logout',{},b);assert.equal((await api('GET','/v1/me',undefined,b)).statusCode,401);});
 test('reset has a generic response and revokes previous sessions',async()=>{const a=await account();await db.pool.query("UPDATE limits SET expires_at=now()-interval '1 second' WHERE key LIKE 'mail-minute:%'");const r=await api('POST','/v1/auth/password-reset/request',{email:'alice@example.test'});assert.equal(r.statusCode,200,r.body);const u=await api('POST','/v1/auth/password-reset/request',{email:'absent@example.test'});assert.equal(r.json().message,u.json().message);const id=r.json().challengeId;const newPassword='Новый пароль теста 456';const c=await challengeCode(id);const done=await api('POST','/v1/auth/password-reset/confirm',{challengeId:id,code:c,newPassword});assert.equal(done.statusCode,200,done.body);assert.equal((await api('GET','/v1/me',undefined,a)).statusCode,401);await login('alice@example.test',randomUUID(),newPassword);assert.equal((await api('POST','/v1/auth/password-reset/confirm',{challengeId:id,code:c,newPassword})).statusCode,400);});
 test('import is invisible until commit, ordered by parents and idempotent',async()=>{const a=await account(),id=randomUUID(),folderId=randomUUID(),taskId=randomUUID();const f=operation(a,'folder',folderId,{name:'Работа',sortOrder:0});const t=task(a,taskId);t.changes.placement.value={kind:'folder',folderId};await api('POST','/v1/library/imports',{importId:id},a);assert.equal((await api('POST',`/v1/library/imports/${id}/mutations`,{mutations:[t,f]},a)).statusCode,200);assert.equal((await snapshot(a)).entities.length,0);const done=await api('POST',`/v1/library/imports/${id}/commit`,{},a);assert.equal(done.statusCode,200,done.body);assert.equal((await snapshot(a)).entities.length,2);assert.equal((await api('POST',`/v1/library/imports/${id}/commit`,{},a)).statusCode,200);assert.equal((await snapshot(a)).cursor,'2');});
@@ -165,6 +201,137 @@ test('OpenAPI describes every success/error response, binary upload and retry he
  }
  assert.equal(doc.paths['/v1/uploads/{id}/parts/{part}'].put.requestBody.content['application/octet-stream'].schema.format,'binary');
  assert.ok(doc.paths['/v1/attachments/{id}/content'].get.responses['200'].headers['X-Content-SHA256']);
+});
+
+const supportPath = '/v1/support/requests';
+function supportSubmission(platform = 'android') {
+  return {
+    submissionId: randomUUID(),
+    message: 'Синхронизация остановилась\nПерезапуск не помог.',
+    platform, appVersion: '0.1.3', appBuild: '4', osVersion: '16',
+    deviceTime: '2026-11-25T15:10:00+03:00',
+  };
+}
+
+test('support derives one recipient from the verification sender address', () => {
+  for (const sender of [verificationMailbox, `Takt <${verificationMailbox}>`, `"Takt, Support" <${verificationMailbox}>`]) {
+    const mail = loadConfig({ ...testEnvironment, MAIL_FROM: sender, SMTP_USER: 'smtp-user@example.test' });
+    assert.equal(mail.supportEmail, verificationMailbox);
+    assert.equal(mail.mailFrom, sender);
+  }
+  assert.equal(loadConfig({ ...testEnvironment, MAIL_FROM: 'other@example.test, Takt <sender@example.test>' }).supportEmail, '');
+});
+
+test('support shares codes across platforms, deduplicates concurrent retries and queues one private email per request', async () => {
+  const android = await account();
+  const mac = await login();
+  const other = await account('bob@example.test');
+  const submission = supportSubmission();
+  const testConfig = { ...config };
+  const supportApp = (await buildApp(testConfig, db)).app;
+  try {
+    const submit = (body, identity) => supportApp.inject({
+      method: 'POST', url: supportPath, payload: body,
+      headers: { authorization: `Bearer ${identity.accessToken}` },
+    });
+    const responses = await Promise.all([
+      submit(submission, android), submit(submission, android),
+      submit(supportSubmission('macos'), mac), submit(submission, other),
+    ]);
+    for (const response of responses) {
+      assert.equal(response.statusCode, 200, response.body);
+      assert.match(response.json().code, /^TAKT-\d{6,}$/);
+      assert.ok(Number.isFinite(Date.parse(response.json().receivedAt)));
+    }
+    const [first, retry, second, third] = responses.map(response => response.json());
+    assert.deepEqual(retry, first);
+    const legacyDigest = hash(JSON.stringify([submission.message, submission.platform, submission.appVersion,
+      submission.appBuild, submission.osVersion, submission.deviceTime]));
+    const saved = (await db.pool.query('SELECT content_digest FROM support_requests WHERE number=$1',
+      [first.code.slice(5)])).rows[0];
+    assert.equal(saved.content_digest, legacyDigest);
+    assert.equal(new Set([first.code, second.code, third.code]).size, 3);
+    assert.equal((await submit({ ...submission, message: 'Другой текст' }, android)).json().error.code, 'submission_reused');
+    testConfig.supportEmail = '';
+    assert.deepEqual((await submit(submission, android)).json(), first);
+    const envelopes = (await db.pool.query('SELECT encrypted_payload FROM jobs')).rows.map(row => {
+      assert.ok(!row.encrypted_payload.includes(submission.message));
+      return decrypt(secret, row.encrypted_payload);
+    }).filter(mail => mail.subject.includes('Обращение в поддержку Takt'));
+    assert.equal(envelopes.length, 3);
+    assert.ok(envelopes.every(mail => mail.to === verificationMailbox));
+    const sent = envelopes.find(mail => mail.subject.includes(first.code));
+    for (const value of [first.code, submission.message, 'alice@example.test', submission.deviceTime, '0.1.3 (сборка 4)', 'android 16']) {
+      assert.ok(sent.text.includes(value), value);
+    }
+  } finally {
+    await supportApp.close();
+  }
+});
+
+test('support sends the chosen subject and reply address to the support mailbox', async () => {
+  const user = await account();
+  const submission = { ...supportSubmission(), subject: '  Сбой синхронизации  ', replyEmail: 'replies+support@example.test' };
+  const first = await api('POST', supportPath, submission, user);
+  assert.equal(first.statusCode, 200, first.body);
+  const receipt = first.json();
+  assert.deepEqual((await api('POST', supportPath, submission, user)).json(), receipt);
+  for (const edit of [{ subject: 'Новая тема' }, { replyEmail: 'different@example.test' }]) {
+    const conflict = await api('POST', supportPath, { ...submission, ...edit }, user);
+    assert.equal(conflict.statusCode, 409, conflict.body);
+  }
+  const sent = [];
+  while (await deliverOne(db, config, async mail => { sent.push(mail); })) {}
+  const support = sent.filter(mail => mail.to === verificationMailbox);
+  assert.equal(support.length, 1);
+  assert.equal(support[0].subject, `[${receipt.code}] Сбой синхронизации`);
+  assert.equal(support[0].replyTo, submission.replyEmail);
+  assert.ok(support[0].text.includes(`Адрес для ответа: ${submission.replyEmail}`));
+  assert.ok(support[0].text.includes(submission.deviceTime));
+  assert.ok(!support[0].text.includes(user.user.email));
+});
+
+test('support validates the form and can be disabled without creating a receipt', async () => {
+  const user = await account();
+  assert.equal((await api('POST', supportPath, supportSubmission())).statusCode, 401);
+  const noSender = loadConfig({ ...testEnvironment, DATA_DIR: dir, MAIL_FROM: '' });
+  const other = (await buildApp(noSender, db)).app;
+  let unavailable;
+  try {
+    unavailable = await other.inject({
+      method: 'POST', url: supportPath, payload: supportSubmission(),
+      headers: { authorization: `Bearer ${user.accessToken}` },
+    });
+  } finally {
+    await other.close();
+  }
+  assert.equal(unavailable.statusCode, 503);
+  assert.equal(unavailable.json().error.code, 'support_unavailable');
+  const blank = await api('POST', supportPath, { ...supportSubmission(), message: ' \n ' }, user);
+  assert.equal(blank.statusCode, 400);
+  const unrelated = await api('POST', supportPath, { ...supportSubmission(), token: 'not-part-of-the-form' }, user);
+  assert.equal(unrelated.statusCode, 400);
+  for (const edit of [
+    { subject: '  ' }, { subject: 'Тема\r\nBcc: other@example.test' }, { subject: 'x'.repeat(121) },
+    { replyEmail: 'missing-domain' }, { replyEmail: 'one@example.test,two@example.test' },
+    { replyEmail: 'one@example.test\r\nBcc: other@example.test' },
+  ]) {
+    const rejected = await api('POST', supportPath, { ...supportSubmission(), ...edit }, user);
+    assert.equal(rejected.statusCode, 400, rejected.body);
+  }
+  assert.equal((await db.pool.query('SELECT number FROM support_requests')).rowCount, 0);
+});
+
+test('support rate limit applies to new requests and preserves the receipt on retry', async () => {
+  const user = await account();
+  const submit = payload => api('POST', supportPath, payload, user);
+  const submissions = Array.from({ length: 6 }, () => supportSubmission());
+  const results = await Promise.all(submissions.map(submit));
+  assert.equal(results.filter(result => result.statusCode === 200).length, 5);
+  const blocked = results.find(result => result.statusCode === 429);
+  assert.ok(Number(blocked?.headers['retry-after']) > 0);
+  const accepted = results.findIndex(result => result.statusCode === 200);
+  assert.deepEqual((await submit(submissions[accepted])).json(), results[accepted].json());
 });
 test('typed serialization retains complete entity fields, versions, nulls, IDs and token data',async()=>{
  const a=await account();await initialize(a);const m=task(a),instant=new Date().toISOString();
