@@ -9,7 +9,7 @@ extension AssistantService {
 
     var cloudModel: ChatGPTModel? {
         guard current?.usesCloudModel == true, let settings = current?.cloud, settings.gateway == nil else { return nil }
-        return cloud.models.first { $0.id == settings.modelID } ?? cloud.models.first
+        return cloud.models.first { $0.id == settings.modelID }
     }
 
     var chatGPTAccountID: String? {
@@ -50,10 +50,10 @@ extension AssistantService {
         return effort
     }
 
-    var canSendCloud: Bool {
-        guard current?.usesCloudModel == true, let settings = current?.cloud else { return false }
+    func canSendCloud(using visibility: AssistantModelVisibility) -> Bool {
+        guard selectedChatModelID(in: visibility) != nil, let settings = current?.cloud else { return false }
         if let gateway = settings.gateway {
-            return gatewayModel != nil && !gateways.busy.contains(gateway)
+            return !gateways.busy.contains(gateway)
         }
         return cloud.canSend(to: settings.accountID)
     }
@@ -113,7 +113,7 @@ extension AssistantService {
             message = english ? (hasItems ? "Here are the tasks in this chat." : "There are no task cards in this chat yet.")
                 : (hasItems ? "Вот задачи этого чата." : "В этом чате пока нет карточек задач.")
         } else if bulk {
-            let destination = AssistantIntentPolicy.destination(in: text, choices: context.folders.map { ($0.id, $0.name) }, calendar: false)
+            let destination = AssistantIntentPolicy.destination(in: text, choices: context.folders.map { ($0.id, $0.name) })
             if let folderID = destination.id, let name = destination.name {
                 for taskIndex in taskIndexes {
                     thread.actions[taskIndex].proposal.folderID = folderID
@@ -143,15 +143,19 @@ extension AssistantService {
         if !persist() { archive.threads[index] = previous }
     }
 
-    func sendCloud(_ input: String, context: AssistantContext, tasks: TaskService?,
+    func sendCloud(_ input: String, context: AssistantContext, visibility: AssistantModelVisibility, tasks: TaskService?,
                    calendar: CalendarService? = nil, visibleCalendarIDs: Set<String>? = nil,
                    notes: NoteStore? = nil) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !generating, !applying, !storageFailed,
               let i = currentIndex, current?.usesCloudModel == true, let settings = current?.cloud else { return }
         guard text.count <= 8000 else { error = "Сообщение слишком длинное. Сократите его до 8000 символов."; return }
+        guard selectedChatModelID(in: visibility) != nil else {
+            error = "Выберите модель чата перед отправкой сообщения."
+            return
+        }
         if let calendar, handleCalendarChoice(text, calendar: calendar) { return }
-        guard canSendCloud else {
+        guard canSendCloud(using: visibility) else {
             error = settings.gateway == nil ? "Подключите аккаунт ChatGPT для этого диалога."
                 : "Подключите сервис и выберите доступную модель."
             return
@@ -250,16 +254,16 @@ extension AssistantService {
             guard persist() else { archive = previous; return }
 
             let threadID = archive.threads[i].id
-            let token = UUID(); requestID = token; generating = true; cloudPreview = ""
+            let token = UUID(); requestID = token; generating = true; replyPreview.reset()
             generation = Task { [weak self] in
                 guard let self else { return }
                 defer {
-                    if requestID == token { generating = false; generation = nil; cloudPreview = "" }
+                    if requestID == token { generating = false; generation = nil; replyPreview.reset() }
                 }
                 do {
                     let preview: @MainActor @Sendable (String) -> Void = { [weak self] delta in
-                        guard let self, requestID == token else { return }
-                        cloudPreview += delta
+                        guard let self, requestID == token, !Task.isCancelled else { return }
+                        replyPreview.append(delta)
                     }
                     let completion: AssistantCloudCompletion
                     if let profile {
@@ -303,7 +307,7 @@ extension AssistantService {
         var questions = reply.questions ?? []
         if questions.isEmpty {
             let destination = AssistantIntentPolicy.destination(in: text,
-                choices: context.folders.map { ($0.id, $0.name) }, calendar: false,
+                choices: context.folders.map { ($0.id, $0.name) },
                 replyingToQuestion: thread.messages.dropFirst(thread.cloud?.historyStart ?? 0).dropLast().last?.questions.isEmpty == false)
             if destination.specified && destination.id == nil, reply.actions?.isEmpty == false {
                 questions = [.init(text: context.language == "en" ? "Which folder should I use?" : "В какую папку добавить задачи?",

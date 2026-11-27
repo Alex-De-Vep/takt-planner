@@ -187,6 +187,8 @@ final class NoteTextView: NSTextView {
 }
 
 private final class NoteScrollView: NSScrollView {
+    var transcriptStart: Int? { didSet { if transcriptStart != nil { needsLayout = true } } }
+
     override func tile() {
         super.tile()
         resizeDocument()
@@ -195,6 +197,19 @@ private final class NoteScrollView: NSScrollView {
     override func layout() {
         super.layout()
         resizeDocument()
+        guard let start = transcriptStart, let window, contentSize.width > 0, contentSize.height > 0,
+              let text = documentView as? NSTextView, let storage = text.textStorage else { return }
+        transcriptStart = nil
+        let insertion = NSRange(location: min(start, storage.length), length: 0)
+        text.setSelectedRange(insertion)
+        text.scrollRangeToVisible(insertion)
+        let rect = text.firstRect(forCharacterRange: insertion, actualRange: nil)
+        guard rect.height > 0 else { return }
+        let line = text.convert(window.convertFromScreen(rect), from: nil)
+        var visible = contentView.bounds
+        visible.origin.y = line.minY - text.textContainerInset.height
+        contentView.scroll(to: contentView.constrainBoundsRect(visible).origin)
+        reflectScrolledClipView(contentView)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -258,6 +273,9 @@ struct NoteRichTextEditor: NSViewRepresentable {
             context.coordinator.appliedRemoteEdit = edit
         }
         view.isEditable = note.deletedAt == nil && !store.unreadable
+        if let start = store.takeTranscriptStart(for: note.id), let scroll = scroll as? NoteScrollView {
+            scroll.transcriptStart = start
+        }
         control.view = view
     }
 
@@ -296,7 +314,11 @@ private struct NoteTitleEditor: NSViewRepresentable {
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
-        field.usesSingleLineMode = true
+        field.usesSingleLineMode = false
+        field.maximumNumberOfLines = 0
+        field.lineBreakMode = .byWordWrapping
+        field.cell?.wraps = true
+        field.cell?.isScrollable = false
         field.font = .systemFont(ofSize: 28, weight: .bold)
         field.textColor = .labelColor
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -320,7 +342,10 @@ private struct NoteTitleEditor: NSViewRepresentable {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView field: Field, context: Context) -> CGSize? {
-        CGSize(width: proposal.width ?? 300, height: field.intrinsicContentSize.height)
+        let width = max(1, proposal.width ?? 300)
+        let bounds = NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)
+        let height = field.cell?.cellSize(forBounds: bounds).height ?? 0
+        return CGSize(width: width, height: max(36, ceil(height)))
     }
 
     static func dismantleNSView(_ field: Field, coordinator: Coordinator) {
@@ -333,7 +358,9 @@ private struct NoteTitleEditor: NSViewRepresentable {
         var changed: ((String) -> Void)?
 
         func controlTextDidChange(_ notification: Notification) {
-            if let field = notification.object as? NSTextField { changed?(field.stringValue) }
+            guard let field = notification.object as? NSTextField else { return }
+            field.invalidateIntrinsicContentSize()
+            changed?(field.stringValue)
         }
     }
 
@@ -394,6 +421,7 @@ struct NoteDetailView: View {
                 NoteTitleEditor(text: Binding(get: { note.title }, set: { title in store.update(note.id) { $0.title = title } }),
                                 placeholder: strings["Название"], editable: note.deletedAt == nil && !store.unreadable,
                                 focusOnCreation: focusTitle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, 32).padding(.top, 28)
             HStack(spacing: 14) {

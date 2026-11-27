@@ -155,6 +155,13 @@ import XCTest
         let create = app.buttons["new-task-button"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         let title = app.textFields["note-title"]
         let list = app.descendants(matching: .any)["note-list"].firstMatch
+        let sidebar = app.descendants(matching: .any)["sidebar-list"].firstMatch
+
+        func assertTotalNotes(_ count: Int) {
+            XCTAssertTrue(sidebar.staticTexts["Заметок: \(count)"].waitForExistence(timeout: 5))
+        }
+
+        assertTotalNotes(0)
 
         func makeNote(_ name: String) -> XCUIElement {
             create.click()
@@ -170,6 +177,7 @@ import XCTest
 
         let neighbour = makeNote("Соседняя заметка")
         _ = makeNote("Целевая заметкаа")
+        assertTotalNotes(2)
         app.typeText(XCUIKeyboardKey.delete.rawValue)
         XCTAssertEqual(title.value as? String, "Целевая заметка")
 
@@ -179,6 +187,7 @@ import XCTest
         XCTAssertTrue(removed.waitForNonExistence(timeout: 5))
         XCTAssertTrue(title.waitForNonExistence(timeout: 5))
         XCTAssertTrue(neighbour.exists)
+        assertTotalNotes(1)
 
         let second = makeNote("Вторая заметка")
         second.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
@@ -195,6 +204,7 @@ import XCTest
         XCTAssertTrue(restore.waitForExistence(timeout: 5))
         restore.click()
         XCTAssertTrue(removed.waitForNonExistence(timeout: 5))
+        assertTotalNotes(2)
     }
 
     func testRecordingCardClicksAndRestoresAudioAfterRestart() {
@@ -223,66 +233,108 @@ import XCTest
         click(app.buttons["save-folder-button"])
         click(mode)
         click(app.buttons["new-task-button"])
+        let title = app.textFields["note-title"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        let singleLineHeight = title.frame.height
+        let longTitle = "широкий широкий широкий широкий широкий широкий широкий заголовок"
+        click(title)
+        app.typeText(longTitle)
+        XCTAssertEqual(title.value as? String, longTitle)
+        XCTAssertGreaterThan(title.frame.height, singleLineHeight + 10)
+
         let voice = app.buttons["note-record-voice"]
         let call = app.buttons["note-record-call"]
         let toggle = app.buttons["note-toggle-recording"]
+        let toolbarToggle = app.buttons["toolbar-toggle-recording"]
         let finish = app.buttons["note-finish-recording"]
-        let transcribe = app.buttons["note-transcribe"]
-        let discard = app.buttons["note-discard-recording"]
-        let reveal = app.buttons["note-show-recording"]
-        XCTAssertTrue(voice.waitForExistence(timeout: 5))
+        let toolbarFinish = app.buttons["toolbar-finish-recording"]
+        let timer = app.staticTexts["note-recording-timer"]
+        let toolbarTimer = app.staticTexts["toolbar-recording-timer"]
+        let durations = app.staticTexts.matching(identifier: "note-recording-duration")
+        let discard = app.buttons.matching(identifier: "note-discard-recording")
+        let transcribe = app.buttons.matching(identifier: "note-transcribe")
         let create = app.buttons["new-task-button"]
+        XCTAssertTrue(voice.waitForExistence(timeout: 5))
         XCTAssertEqual(voice.frame.midY, create.frame.midY, accuracy: 3)
         XCTAssertEqual(call.frame.midY, create.frame.midY, accuracy: 3)
 
-        func pauseResumeAndFinish(_ start: XCUIElement) {
-            click(start)
-            XCTAssertTrue(toggle.waitForExistence(timeout: 5))
-            XCTAssertEqual(toggle.label, "Пауза")
-            XCTAssertGreaterThan(finish.frame.minX, toggle.frame.maxX)
-            click(toggle)
-            XCTAssertEqual(toggle.label, "Продолжить")
-            click(toggle)
-            XCTAssertEqual(toggle.label, "Пауза")
-            click(toggle)
-            XCTAssertEqual(toggle.label, "Продолжить")
-            click(finish)
-            XCTAssertTrue(transcribe.waitForExistence(timeout: 5))
-            XCTAssertFalse(finish.exists)
-            XCTAssertFalse(start.isEnabled)
-        }
+        click(voice)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertTrue(toolbarToggle.waitForExistence(timeout: 5))
+        XCTAssertFalse(voice.isEnabled)
+        XCTAssertFalse(call.isEnabled)
+        XCTAssertGreaterThan(finish.frame.minX, toggle.frame.maxX)
+        XCTAssertGreaterThan(timer.frame.minX, finish.frame.maxX)
+        XCTAssertGreaterThan(toolbarFinish.frame.minX, toolbarToggle.frame.maxX)
+        XCTAssertGreaterThan(toolbarTimer.frame.minX, toolbarFinish.frame.maxX)
+        click(toolbarToggle)
+        XCTAssertEqual(toggle.label, "Продолжить")
+        XCTAssertEqual(timer.label, toolbarTimer.label)
+        click(toggle)
+        XCTAssertEqual(toolbarToggle.label, "Пауза")
+        click(toolbarFinish)
+        XCTAssertTrue(transcribe.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(toolbarFinish.exists)
+        XCTAssertTrue(voice.isEnabled)
+        XCTAssertEqual(durations.count, 1)
 
-        pauseResumeAndFinish(voice)
+        click(app.buttons["note-recording-edit-title"])
+        let titleInput = app.textFields["note-recording-title-input"]
+        XCTAssertTrue(titleInput.waitForExistence(timeout: 5))
+        click(titleInput)
+        app.typeKey(.end, modifierFlags: [])
+        app.typeText(" 1")
+        click(app.buttons["note-recording-save-title"])
+        XCTAssertTrue(app.staticTexts["Голосовая запись 1"].waitForExistence(timeout: 5))
+
+        click(call)
+        XCTAssertTrue(toolbarToggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(durations.count, 1)
+        let microphoneMeter = app.progressIndicators["Микрофон"]
+        let tabMeter = app.progressIndicators["Вкладка"]
+        XCTAssertTrue(microphoneMeter.exists && tabMeter.exists)
+        XCTAssertEqual(microphoneMeter.frame.midY, tabMeter.frame.midY, accuracy: 2)
+        XCTAssertGreaterThan(tabMeter.frame.minX, microphoneMeter.frame.maxX)
+        click(finish)
+        let twoDurations = NSPredicate(format: "count == 2")
+        expectation(for: twoDurations, evaluatedWith: durations)
+        waitForExpectations(timeout: 5)
+
+        click(create)
+        let secondTitle = app.textFields["note-title"]
+        XCTAssertTrue(secondTitle.waitForExistence(timeout: 5))
+        click(voice)
+        XCTAssertTrue(toolbarToggle.waitForExistence(timeout: 5))
+        click(app.staticTexts[longTitle].firstMatch)
+        XCTAssertTrue(toolbarFinish.exists)
+        XCTAssertFalse(finish.exists)
+        XCTAssertEqual(durations.count, 2)
+        XCTAssertFalse(voice.isEnabled)
+        XCTAssertFalse(call.isEnabled)
+        click(toolbarFinish)
+
         app.terminate()
         app.launch()
         click(app.descendants(matching: .any).matching(identifier: "folder-row-Аудиопроверка").firstMatch)
         click(mode)
-        click(app.staticTexts["Новая заметка"].firstMatch)
-        XCTAssertTrue(transcribe.waitForExistence(timeout: 5))
-        XCTAssertTrue(reveal.isEnabled)
-        XCTAssertFalse(voice.isEnabled)
+        click(app.staticTexts[longTitle].firstMatch)
+        XCTAssertEqual(durations.count, 2)
+        XCTAssertTrue(app.staticTexts["Голосовая запись 1"].exists)
+        XCTAssertTrue(voice.isEnabled)
+        XCTAssertTrue(app.buttons.matching(identifier: "note-show-recording").firstMatch.isEnabled)
 
-        click(transcribe)
-        let closeModelPicker = app.buttons["Готово"].firstMatch
-        click(closeModelPicker)
-        click(reveal)
-        XCTAssertTrue(XCUIApplication(bundleIdentifier: "com.apple.finder").wait(for: .runningForeground, timeout: 5))
-        app.activate()
-        click(discard)
-        let warning = app.staticTexts["Удалить временную запись?"].firstMatch
-        let dialog = app.windows.containing(.staticText, identifier: "Удалить временную запись?").firstMatch
+        click(discard.firstMatch)
+        let warning = app.staticTexts["Удалить запись?"].firstMatch
+        let dialog = app.windows.containing(.staticText, identifier: "Удалить запись?").firstMatch
         XCTAssertTrue(warning.waitForExistence(timeout: 5))
         click(dialog.buttons["Отмена"].firstMatch)
-        XCTAssertTrue(transcribe.exists)
-        click(discard)
+        XCTAssertEqual(durations.count, 2)
+        click(discard.firstMatch)
         XCTAssertTrue(warning.waitForExistence(timeout: 5))
         let confirm = dialog.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@",
                                                         "Удалить запись", "note-discard-recording")).firstMatch
         click(confirm)
-        XCTAssertFalse(transcribe.exists)
+        XCTAssertEqual(durations.count, 1)
 
-        pauseResumeAndFinish(call)
-        XCTAssertTrue(app.staticTexts["Запись звонка"].exists)
-        XCTAssertTrue(reveal.isEnabled)
     }
 }

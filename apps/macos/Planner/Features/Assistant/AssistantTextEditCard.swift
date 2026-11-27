@@ -3,6 +3,7 @@ import SwiftUI
 /// Показывает итоговый снимок. Применение проверяет исходную версию задачи отдельно.
 struct AssistantTextEditCard: View {
     @Environment(\.translations) private var strings
+    @Environment(\.colorScheme) private var colorScheme
     let edit: AssistantTextEdit
     let busy: Bool
     let apply: () -> Void
@@ -36,7 +37,9 @@ struct AssistantTextEditCard: View {
         .font(.callout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(PlannerStyle.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        .background(PlannerStyle.assistantCardBackground(PlannerStyle.accent, in: colorScheme),
+                    in: RoundedRectangle(cornerRadius: 12))
+        .tint(PlannerStyle.accent)
         .accessibilityIdentifier("assistant-text-review")
     }
 }

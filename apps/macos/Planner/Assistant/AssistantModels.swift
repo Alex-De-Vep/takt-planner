@@ -12,7 +12,6 @@ enum AssistantPaths {
             .appending(path: "Planner/Assistant", directoryHint: .isDirectory)
         #endif
     }
-    static var model: URL { root.appending(path: "Models/" + ((try? ModelManifest.bundled().id.components(separatedBy: "/").last) ?? "Qwen3.5-2B-4bit"), directoryHint: .isDirectory) }
 }
 struct AssistantFolder: Codable, Sendable, Identifiable { let id: String; let name: String }
 struct AssistantCalendar: Codable, Sendable, Identifiable { let id: String; let name: String }
@@ -121,9 +120,6 @@ struct AssistantThread: Codable, Identifiable {
     var focusedDraftID: UUID? = nil
     var focusedEventID: UUID? = nil
     var cloud: AssistantCloudThread? = nil
-    var localModelSelected: Bool? = nil
-    // При возврате на Mac новые предложения не заменяют карточки, уже показанные в диалоге.
-    var protectedLocalActionIDs: Set<UUID>? = nil
 
     var visibleActions: [AssistantAction] { actions.filter { $0.status != .created } }
     var numberedTaskDrafts: [AssistantAction] { actions.filter { $0.proposal.kind == .task } }
@@ -140,49 +136,55 @@ struct AssistantThread: Codable, Identifiable {
         numberedTaskDrafts.firstIndex { $0.id == id }.map { $0 + 1 }
     }
 
-    var usesCloudModel: Bool { cloud != nil && localModelSelected != true }
+    var usesCloudModel: Bool { cloud != nil }
 
-    mutating func chooseModel(_ model: ChatGPTModel?) {
-        chooseModel(id: model?.id, efforts: model?.efforts ?? [])
-    }
-
-    mutating func chooseModel(id: String?, efforts: [String] = [], accountID: String? = nil,
+    mutating func chooseModel(id: String, efforts: [String] = [], accountID: String? = nil,
                               gateway: AssistantGateway? = nil, profileID: UUID? = nil) {
-        let switchingProvider = usesCloudModel != (id != nil)
-            || (id != nil && (cloud?.gateway != gateway || cloud?.gatewayProfileID != profileID
-                || (gateway == nil && accountID != nil && cloud?.accountID != nil && cloud?.accountID != accountID)))
+        let switchingProvider = cloud == nil || cloud?.gateway != gateway || cloud?.gatewayProfileID != profileID
+            || (gateway == nil && accountID != nil && cloud?.accountID != nil && cloud?.accountID != accountID)
+        var settings = cloud ?? AssistantCloudThread()
         if switchingProvider {
-            if usesCloudModel { attachedNoteID = nil }
+            if cloud != nil { attachedNoteID = nil }
             activeTextEditID = nil
             focusedDraftID = nil
             focusedEventID = nil
             clarificationContext = nil
+            settings.historyStart = messages.count
+            settings.draftIDs = []
+            settings.effort = nil
         }
-        if let id {
-            var settings = cloud ?? AssistantCloudThread()
-            if switchingProvider {
-                // Сохраняем видимый чат, но начинаем новый сетевой контекст для выбранного подключения.
-                settings.historyStart = messages.count
-                settings.draftIDs = []
-                settings.effort = nil
-            }
-            settings.modelID = id
-            settings.accountID = gateway == nil ? (accountID ?? (settings.gateway == nil ? settings.accountID : nil)) : nil
-            settings.gateway = gateway
-            settings.gatewayProfileID = profileID
-            if let effort = settings.effort, !efforts.contains(effort) { settings.effort = nil }
-            cloud = settings
-            localModelSelected = nil
-        } else if switchingProvider {
-            localModelSelected = true
-            protectedLocalActionIDs = Set(actions.map(\.id))
-        }
+        settings.modelID = id
+        settings.accountID = gateway == nil ? (accountID ?? (settings.gateway == nil ? settings.accountID : nil)) : nil
+        settings.gateway = gateway
+        settings.gatewayProfileID = profileID
+        if let effort = settings.effort, !efforts.contains(effort) { settings.effort = nil }
+        cloud = settings
     }
 }
 struct AssistantArchive: Codable {
     var version = 2
     var currentID: UUID?
     var threads: [AssistantThread] = []
+}
+extension AssistantArchive {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        currentID = try values.decodeIfPresent(UUID.self, forKey: .currentID)
+        var records = try values.nestedUnkeyedContainer(forKey: .threads)
+        // Older archives kept the previous provider even after switching to on-device inference.
+        // A new provider choice must start its own history segment.
+        enum LegacyKey: String, CodingKey { case localModelSelected }
+        while !records.isAtEnd {
+            let record = try records.superDecoder()
+            var thread = try AssistantThread(from: record)
+            let legacy = try record.container(keyedBy: LegacyKey.self)
+            if try legacy.decodeIfPresent(Bool.self, forKey: .localModelSelected) == true {
+                thread.cloud = nil
+            }
+            threads.append(thread)
+        }
+    }
 }
 struct AssistantFailure: LocalizedError {
     let message: String

@@ -9,17 +9,20 @@ struct NotificationSettingsSection: View {
     var body: some View {
         Section {
             Toggle(strings["Уведомлять о сроках задач"], isOn: $preferences.deadlineNotificationsEnabled)
+                .tint(PlannerStyle.settingsControlTint)
                 .accessibilityIdentifier("deadline-notifications-toggle")
             if preferences.deadlineNotificationsEnabled {
                 DatePicker(strings["Для сроков без времени"], selection: time($preferences.dateOnlyNotificationMinutes), displayedComponents: .hourAndMinute)
                     .accessibilityIdentifier("date-only-notification-time")
             }
             Toggle(strings["Напоминать проверить задачи"], isOn: $preferences.reviewNotificationsEnabled)
+                .tint(PlannerStyle.settingsControlTint)
                 .accessibilityIdentifier("review-notifications-toggle")
             if preferences.reviewNotificationsEnabled {
                 DatePicker(strings["Время напоминания"], selection: time($preferences.reviewNotificationMinutes), displayedComponents: .hourAndMinute)
                     .accessibilityIdentifier("review-notification-time")
                 Toggle(strings["Только по будням"], isOn: $preferences.reviewWeekdaysOnly)
+                    .tint(PlannerStyle.settingsControlTint)
                     .accessibilityIdentifier("review-weekdays-toggle")
             }
             if notifications.permission == .denied {

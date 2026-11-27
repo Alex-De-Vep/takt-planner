@@ -214,7 +214,7 @@
 "%d мин. от начала" = "%d min from start";
 "Напоминание на конкретную дату не меняется при переносе события." = "An alert set to a specific date does not change when you move the event.";
 
-// Локальный помощник и управление моделью.
+// ИИ-помощник.
 "Помощник" = "Assistant";
 "Открыть помощника" = "Open assistant";
 "Закрыть помощника" = "Close assistant";
@@ -238,7 +238,6 @@
 "Сообщение помощнику" = "Message the assistant";
 "Остановить" = "Stop";
 "Отправить" = "Send";
-"Локально на этом Mac · Shift+Enter — новая строка" = "On this Mac · Shift+Enter for a new line";
 "Не выбрана" = "Not selected";
 "Не выбран" = "Not selected";
 "Календарь не выбран" = "No calendar selected";
@@ -251,26 +250,12 @@
 "Сохранить предложение" = "Save proposal";
 "Проверьте календарь: результат предыдущего сохранения неизвестен. Автоматическое повторение отключено." = "Check Calendar: the previous save result is unknown. Automatic retry is disabled.";
 "Создавайте задачи и события обычными сообщениями. Перед сохранением помощник предложит проверить результат." = "Create tasks and events with natural language. Review the proposal before anything is saved.";
-"Требуется Mac с чипом Apple M1 или новее." = "Requires a Mac with Apple M1 or newer.";
-"Ваши сообщения обрабатываются на этом Mac. Содержимое чата не отправляется разработчикам модели." = "Your messages are processed on this Mac. Chat content is not sent to the model developers.";
-"Лицензионное соглашение" = "License agreement";
-"Проверка файлов…" = "Verifying files…";
-"Подготовка модели…" = "Preparing model…";
-"Загрузка модели…" = "Downloading model…";
-"Отменить загрузку" = "Cancel download";
-"Включить помощника" = "Enable assistant";
-"Скачать и включить" = "Download and enable";
-"Нажимая кнопку, вы включаете помощника и подтверждаете ознакомление с лицензионным соглашением." = "By continuing, you enable the assistant and acknowledge the license agreement.";
 "Без связи" = "No linked task";
 "Подзадачи — каждая с новой строки" = "Subtasks — one per line";
 "Срок" = "Due date";
 "Уведомления о сроке зависят от общих настроек приложения." = "Deadline notifications follow the app notification settings.";
 "За %d мин" = "%d min before";
 "%d мин" = "%d min";
-"Выключить помощника" = "Disable assistant";
-"Удалить модель…" = "Delete model…";
-"Удалить модель?" = "Delete model?";
-"Задачи, события и история чата сохранятся." = "Tasks, events and chat history will be kept.";
 "Добавлять в текущую папку" = "Use the current folder";
 "Папка по умолчанию" = "Default folder";
 "Длительность события" = "Event duration";
@@ -289,18 +274,10 @@
 "Проверьте напоминание." = "Check the reminder.";
 "Напомнить за (мин)" = "Minutes before event";
 "Не удалось проверить ответ модели. Упростите запрос и повторите." = "Could not validate the model response. Simplify your request and try again.";
-"Сначала загрузите модель." = "Download the model first.";
-"Не найден список файлов модели." = "The model manifest is missing.";
-"Недостаточно места для модели." = "Not enough disk space for the model.";
-"Проверка модели не пройдена. Повторите загрузку." = "Model verification failed. Download it again.";
-"Не удалось скачать модель. Проверьте соединение и повторите." = "Could not download the model. Check your connection and try again.";
-"Модель повторила уже выполненное действие. Создайте новый разговор." = "The model repeated an action that was already applied. Start a new conversation.";
 "Связанная задача недоступна. Создайте её или исправьте предложение." = "The linked task is unavailable. Create it or edit the proposal.";
 "Созданное событие недоступно. Повторное событие не создаётся." = "The created event is unavailable. A duplicate will not be created.";
 "Событие создано, но связь не сохранена. Повторите сохранение связи." = "The event was created, but its task link was not saved. Retry saving the link.";
 "Не удалось сохранить задачу." = "Could not save the task.";
-
-"Разговор слишком большой. Начните новый разговор или сократите запрос." = "The conversation is too large. Start a new conversation or shorten your request.";
 
 "Для задач доступны уведомления о сроке из общих настроек." = "Tasks use the deadline notifications configured in general settings.";
 
@@ -311,8 +288,6 @@
 "Описание" = "Description";
 
 "Открыть" = "Open";
-
-"Модель выгружена из-за нехватки памяти. Закройте лишние приложения и включите помощника снова." = "The model was unloaded due to memory pressure. Close other apps and enable the assistant again.";
 
 "Использовать папку" = "Use folder";
 "Использовать задачу" = "Use task";
@@ -334,26 +309,9 @@
 
 "Готово" = "Done";
 
-"Сначала завершите сохранение связи или проверьте результат предыдущей операции." = "Finish saving the link or verify the previous operation first.";
-
-/* Память локального помощника. */
-"Загружаю модель в память…" = "Loading model into memory…";
-"Освобождаю память…" = "Freeing memory…";
-"Модель выгружена: системе нужна память. Следующее сообщение загрузит её снова." = "Model unloaded because the system needs memory. Your next message will load it again.";
-"Модель в памяти · готова к сообщению" = "Model in memory · ready for a message";
-"Модель выгружена · загрузится при отправке" = "Model unloaded · loads when you send";
-"Модель загружается в память только при отправке сообщения. Открытие чата не загружает модель." = "The model loads into memory only when you send a message. Opening chat does not load it.";
-"Выгружать после простоя" = "Unload after inactivity";
-"Сразу после ответа" = "Immediately after each response";
-"До выхода из приложения" = "Keep until app quits";
-"Своё время" = "Custom time";
-"Простой отсчитывается от последнего ответа. При нехватке памяти модель выгружается независимо от настройки." = "Inactivity starts after the last response. Memory pressure unloads the model regardless of this setting.";
-"Освободить память сейчас" = "Free memory now";
-"Не удалось проверить файлы модели. Повторите загрузку." = "Could not verify model files. Download again.";
-
 "Другие варианты" = "More options";
 
-/* Кнопка локального ИИ в правой части шапки. */
+/* Кнопка ИИ-чата в правой части шапки. */
 "Открыть ИИ-чат" = "Open AI chat";
 "Закрыть ИИ-чат" = "Close AI chat";
 
@@ -388,18 +346,12 @@
 "Задача больше не существует." = "The task no longer exists.";
 "Сначала повторите сохранение черновика задачи." = "Retry saving the task draft first.";
 "Предложение задачи больше недоступно." = "The task proposal is no longer available.";
-"Выберите «Доработать» у нужного предложения задачи." = "Choose Refine on the task proposal you want to change.";
-"Откройте задачу и включите её контекст или выберите предложение в чате." = "Open a task and enable its context, or choose a proposal in the chat.";
-"Ответ редактора должен содержать только текстовые правки." = "The editor response must contain only text changes.";
-"Модель не предложила текстовых изменений. Уточните запрос." = "The model did not propose any text changes. Clarify your request.";
-"Текст задачи слишком большой для доработки. Сократите запрос или текст задачи." = "The task text is too large to refine. Shorten the request or task text.";
 
 "Введите название подзадачи." = "Enter a subtask title.";
 
 "Распиши новую задачу: подготовить презентацию" = "Expand a new task: prepare a presentation";
 
 /* Вход через ChatGPT и облачные диалоги */
-"Локальный диалог" = "Local chat";
 "Облачный диалог" = "Cloud chat";
 "Готовлю ответ…" = "Preparing an answer…";
 "Задайте вопрос, подготовьте задачи с подзадачами или приложите задачу для правки." = "Ask a question, draft tasks with subtasks, or attach a task to revise it.";
@@ -449,7 +401,6 @@
 "Для аккаунта ChatGPT нет доступных моделей." = "No models are available for this ChatGPT account.";
 "Разрешите использовать подписку ChatGPT при входе." = "Allow the app to use your ChatGPT plan when signing in.";
 "Вход выполнен в другой аккаунт ChatGPT." = "You signed in to a different ChatGPT account.";
-"На этом Mac" = "On this Mac";
 "Подключения моделей" = "Model connections";
 "Подключения моделей…" = "Model connections…";
 "Подключить ChatGPT…" = "Connect ChatGPT…";
@@ -469,8 +420,6 @@
 "Собирайте дела в списки, задавайте сроки и получайте напоминания о просмотре задач." = "Organize your tasks, set deadlines, and get reminders to review your list.";
 "События календаря" = "Calendar events";
 "Создавайте события в системном календаре и выделяйте время на задачи." = "Create events in your system calendar and set aside time for tasks.";
-"Локальный ИИ · Preview" = "On-device AI · Preview";
-"Экспериментальный помощник предлагает задачи и подзадачи на устройстве. Доступен в отдельной сборке Preview." = "The experimental on-device assistant suggests tasks and subtasks. Available in a separate Preview build.";
 "Задачи на всех устройствах" = "Tasks across your devices";
 "Войдите в один аккаунт на своих устройствах. Правки сохраняются на Mac и отправляются, когда появляется связь." = "Use the same account on your devices. Edits are saved on your Mac and synced when you’re back online.";
 "Добро пожаловать в Takt" = "Welcome to Takt";
@@ -531,8 +480,6 @@
 "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30." = "Add “Meet with the team” tomorrow from 11:00 to 11:30 AM.";
 "Попросите помощника сократить описание задачи и проверьте правку перед сохранением." = "Ask the assistant to shorten a task description, then review the edit before saving it.";
 "Откройте свою папку и выберите «Заметки», чтобы сохранить идеи и списки." = "Open one of your folders and choose Notes to save ideas and lists.";
-"В сборке Preview попросите помощника сократить описание задачи и проверьте правку перед сохранением." = "In the Preview build, ask the assistant to shorten a task description and review the edit before saving it.";
-"Локальный ИИ" = "On-device AI";
 "Где хранить задачи" = "Where to store your tasks";
 "Подключить синхронизацию" = "Set Up Sync";
 "Синхронизация подключена" = "Sync is connected";
@@ -564,6 +511,7 @@
 "Данные запроса отправляются через %@" = "Requests are sent through %@";
 "Только диалог" = "Chat only";
 "Выберите доступную модель в меню" = "Choose an available model in the menu";
+"Выберите модель чата перед отправкой сообщения." = "Choose a chat model before sending a message.";
 "Подключено" = "Connected";
 "В каталоге нет текстовых моделей." = "There are no text models in this catalog.";
 "Доступные модели: %d" = "Available models: %d";
@@ -610,6 +558,9 @@
 "Остаток квоты M Plan" = "Remaining M Plan Quota";
 
 "Начните общение с вашим ИИ-агентом" = "Start a conversation with your AI assistant";
+"Ваш ИИ-помощник в Takt" = "Your AI assistant in Takt";
+"Подключите любимый ИИ-сервис, чтобы обсуждать идеи, редактировать заметки и планировать задачи и события прямо в чате." = "Connect your favorite AI service to discuss ideas, edit notes, and plan tasks and events right in the chat.";
+"Подключить" = "Connect";
 "Подключить модель" = "Connect a model";
 "Задачи чата · %d" = "Chat tasks · %d";
 "ИИ-помощник" = "AI assistant";
@@ -695,7 +646,6 @@
 
 "Заметка в корзине" = "This note is in Trash";
 
-
 "Добавить изображение" = "Add image";
 
 "Обычный текст" = "Body";
@@ -715,7 +665,6 @@
 "Восстановить" = "Restore";
 
 "Заметки сохраняются на этом Mac" = "Notes are saved on this Mac";
-"Заметки синхронизируются с аккаунтом" = "Notes sync with your account";
 "Заметки удаляются навсегда через 30 дней." = "Notes are permanently deleted after 30 days.";
 
 "Нумерованный список" = "Numbered list";
@@ -736,15 +685,13 @@
 "Расшифровать" = "Transcribe";
 "Показать в Finder" = "Show in Finder";
 "Запись" = "Recording";
-"Удалить временную запись?" = "Delete temporary recording?";
 "Расшифровать запись?" = "Transcribe recording?";
-"Аудио будет отправлено в %@ для расшифровки. Когда текст сохранится в заметке, Takt удалит временную запись с Mac." = "Audio will be sent to %@ for transcription. Takt will delete the temporary recording from this Mac once the text is saved in the note.";
 "Копия сохранена" = "Copy Saved";
 "Сохранить копию…" = "Save a Copy…";
 "Разрешите доступ к микрофону в системных настройках." = "Allow microphone access in System Settings.";
 "Не удалось начать запись." = "Could not start recording.";
 "Не удалось сохранить копию записи." = "Could not save a copy of the recording.";
-"Не удалось удалить временную запись." = "Could not delete the temporary recording.";
+"Не удалось удалить запись." = "Could not delete the recording.";
 "Не удалось расшифровать запись." = "Could not transcribe the recording.";
 "Не удалось сохранить текст заметки." = "Could not save the note text.";
 "Заметка недоступна." = "This note is unavailable.";
@@ -764,6 +711,12 @@
 "Не удалось загрузить модели для расшифровки." = "Could not load transcription models.";
 
 "Записать звонок" = "Record Call";
+"Вкладка" = "Tab";
+"Выберите вкладку встречи в Chrome и подтвердите доступ." = "Select the meeting tab in Chrome and confirm sharing.";
+"Выберите вкладку встречи и включите передачу звука вкладки." = "Select the meeting tab and turn on tab audio sharing.";
+"Chrome не смог подготовить звук. Повторите выбор вкладки." = "Chrome could not prepare the audio. Select the tab again.";
+"Ожидаем разрешения на микрофон в Chrome." = "Waiting for microphone permission in Chrome.";
+"Микрофон недоступен. Его можно включить на странице записи в Chrome." = "The microphone is unavailable. You can enable it on the recording page in Chrome.";
 "Микрофон" = "Microphone";
 "Выберите вкладку звонка в Chrome." = "Choose the call tab in Chrome.";
 "Сохранение записи…" = "Saving Recording…";
@@ -807,7 +760,6 @@
 "Показать найденные" = "Show matching models";
 "Скрыть найденные" = "Hide matching models";
 "Показано: %d из %d" = "Shown: %d of %d";
-"Скрытие модели не меняет текущий выбор." = "Hiding a model does not change the current selection.";
 "Настроить список моделей…" = "Customize model list…";
 "Нет отображаемых моделей" = "No models selected for display";
 "Выбор модели чата здесь и в чате синхронизирован. Список моделей можно настроить отдельно для чата и расшифровки." = "The chat model selection is shared with the chat. Customize model lists separately for chat and transcription.";
@@ -831,3 +783,53 @@
 "В корзину…" = "Move to Trash…";
 "Переместить заметку в корзину?" = "Move note to Trash?";
 "Заметку можно восстановить в разделе «Недавно удалённые»." = "You can restore the note from Recently Deleted.";
+"Загрузка записи" = "Uploading recording";
+"Распознавание речи" = "Recognizing speech";
+"Подготовка записи" = "Preparing recording";
+"Сервис отклонил запрос на расшифровку." = "The service rejected the transcription request.";
+"Сервис не ответил вовремя." = "The service did not respond in time.";
+"Не удалось подключиться к сервису расшифровки." = "Could not connect to the transcription service.";
+"Сервис вернул ответ в неизвестном формате." = "The service returned an unrecognized response.";
+"Сервис прервал распознавание." = "The service stopped recognizing speech.";
+"Сервис достиг предельной длины ответа." = "The service reached its response length limit.";
+"Не удалось сохранить прогресс расшифровки." = "Could not save transcription progress.";
+"Фрагмент пропущен" = "Skipped segment";
+"Пустая расшифровка" = "Empty transcription";
+"В расшифровке есть пропущенные фрагменты. Запись сохранена." = "The transcription has skipped segments. The recording is kept.";
+"%@ · часть %d из %d · %@" = "%@ · part %d of %d · %@";
+"Сохранить неполную расшифровку" = "Save partial transcription";
+"Продолжить расшифровку" = "Resume transcription";
+"Пропустить фрагмент" = "Skip segment";
+"Удалить запись?" = "Delete recording?";
+"Аудио будет отправлено в %@ для расшифровки. Запись останется в заметке на этом Mac." = "Audio will be sent to %@ for transcription. The recording will stay in this note on this Mac.";
+"Расшифровка сохранена" = "Transcript saved";
+"Текущая запись" = "Current recording";
+"Название записи" = "Recording title";
+"Сохранить название" = "Save title";
+"Редактировать название записи" = "Edit recording title";
+"Не удалось сохранить название записи." = "Could not save the recording title.";
+"Копировать сообщение" = "Copy message";
+"Сообщение скопировано" = "Message copied";
+"Chrome не смог начать захват выбранной вкладки. Откройте вкладку встречи и выберите её ещё раз." = "Chrome could not start capturing the selected tab. Open the meeting tab and select it again.";
+"Расшифровка записи" = "Recording transcript";
+"Вставить в заметку" = "Insert into note";
+"Закрыть" = "Close";
+"Открыть расшифровку" = "Open transcript";
+"Запись недоступна." = "The recording is unavailable.";
+"Без названия" = "Untitled";
+"Написать нам" = "Contact us";
+"Опишите проблему" = "Describe the issue";
+"Описание должно содержать от 1 до 4000 символов." = "Enter a description of 1 to 4,000 characters.";
+"В обращение войдут" = "Included with your request";
+"Версия Takt" = "Takt version";
+"%@ (сборка %@)" = "%@ (build %@)";
+"Время на устройстве" = "Device time";
+"Почта для ответа" = "Reply email";
+"Обращение принято" = "Request received";
+"Код обращения" = "Request code";
+"Скопировать код" = "Copy code";
+"Код скопирован" = "Code copied";
+"Канал поддержки пока недоступен. Попробуйте позже." = "Support is currently unavailable. Try again later.";
+"Слишком много обращений. Попробуйте позже." = "Too many requests. Try again later.";
+"Войдите в аккаунт, чтобы написать в поддержку." = "Sign in to contact support.";
+"Не удалось отправить обращение. Повторите попытку." = "Could not send your request. Try again.";

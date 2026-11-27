@@ -6,6 +6,98 @@ import Testing
 
 /// Снимки создаются нативным рендером вымышленной карточки; окна и данные пользователя не захватываются.
 @MainActor struct AssistantTextViewTests {
+    @Test func messageSelectionSurvivesChangingThePanelWidth() async throws {
+        let message = "Meeting notes and a longer sentence that wraps over several lines.\nAnother paragraph."
+        let host = NSHostingView(rootView: AssistantSelectableText(text: message).frame(width: 130))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 360, height: 200),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        let native = try #require(textView(in: host))
+        #expect(native.string == message)
+        #expect(native.isSelectable)
+        #expect(!native.isEditable)
+        let narrowHeight = host.fittingSize.height
+        let selection = NSRange(location: 0, length: 7)
+        native.setSelectedRange(selection)
+
+        host.rootView = AssistantSelectableText(text: message).frame(width: 320)
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        #expect(textView(in: host) === native)
+        #expect(native.selectedRange() == selection)
+        #expect(host.fittingSize.height < narrowHeight)
+    }
+
+    @Test func changingMessageTextInvalidatesTheMeasuredHeight() async throws {
+        let short = "Short"
+        let long = String(repeating: "Длинное сообщение 👩🏽‍💻 e\u{301} ", count: 180) + "\n"
+        let host = NSHostingView(rootView: AssistantSelectableText(text: short).frame(width: 180))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 180, height: 200),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        let shortHeight = host.fittingSize.height
+
+        host.rootView = AssistantSelectableText(text: long).frame(width: 180)
+        host.layoutSubtreeIfNeeded()
+        let native = try #require(textView(in: host))
+        #expect(native.string == long)
+        #expect(host.fittingSize.height > shortHeight * 10)
+
+        host.rootView = AssistantSelectableText(text: short).frame(width: 180)
+        host.layoutSubtreeIfNeeded()
+        #expect(host.fittingSize.height == shortHeight)
+    }
+
+    @Test func appendingStreamedTextPreservesSelectionAndWrapsTheNewTail() throws {
+        let beginning = "Résumé 👨🏽‍💻\nPlan"
+        let host = NSHostingView(rootView: AssistantSelectableText(text: beginning).frame(width: 150))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 150, height: 250),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        let initialHeight = host.fittingSize.height
+        let native = try #require(textView(in: host))
+        let selected = (beginning as NSString).range(of: "👨🏽‍💻")
+        native.setSelectedRange(selected)
+        let streamed = beginning + String(repeating: " — следующий пункт", count: 80)
+        host.rootView = AssistantSelectableText(text: streamed).frame(width: 150)
+        host.layoutSubtreeIfNeeded()
+        #expect(native.string == streamed)
+        #expect(native.selectedRange() == selected)
+        #expect(host.fittingSize.height > initialHeight)
+    }
+
+    @Test func streamingPreviewBatchesDeltasAndCancelsPendingUpdatesOnReset() async throws {
+        let preview = AssistantReplyPreview()
+        preview.append("First")
+        #expect(preview.text == "First")
+        preview.append(" 👨🏽‍💻")
+        preview.append("\nSecond")
+        #expect(preview.text == "First")
+        try await Task.sleep(for: .milliseconds(160))
+        #expect(preview.text == "First 👨🏽‍💻\nSecond")
+
+        preview.reset()
+        preview.append("Old")
+        preview.append(" pending")
+        preview.reset()
+        preview.append("New")
+        try await Task.sleep(for: .milliseconds(160))
+        #expect(preview.text == "New")
+    }
+
+    private func textView(in view: NSView) -> NSTextView? {
+        (view as? NSTextView) ?? view.subviews.lazy.compactMap { textView(in: $0) }.first
+    }
+
     @Test(arguments: [false, true])
     func reviewFitsNarrowPanelInBothThemes(dark: Bool) async throws {
         let before = AssistantTextSnapshot(id: UUID(), title: "Подготовить презентацию", description: "Рассказать о проекте.",

@@ -158,6 +158,19 @@ final class PlannerTerminationDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private struct WidgetQuickActionHost<Content: View>: View {
+    @State private var pending: WidgetQuickAction?
+    let content: (Binding<WidgetQuickAction?>) -> Content
+
+    var body: some View {
+        content($pending)
+            .onOpenURL { url in
+                if let action = WidgetQuickAction(url: url) { pending = action }
+            }
+            .handlesExternalEvents(preferring: WidgetQuickAction.routes, allowing: WidgetQuickAction.routes)
+    }
+}
+
 @main
 struct PlannerApp: App {
     @NSApplicationDelegateAdaptor(PlannerTerminationDelegate.self) private var terminationDelegate
@@ -169,18 +182,20 @@ struct PlannerApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
-        WindowGroup("Takt", id: "workspace") {
-            launchContent
-                .onAppear { terminationDelegate.runtime = runtime }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active {
-                        runtime.cloud.engine?.wake()
-                        TodayWidgetPublisher.publish(from: runtime.service?.context)
-                    }
+        Window("Takt", id: "workspace") {
+            WidgetQuickActionHost { action in
+                launchContent(widgetAction: action)
+            }
+            .onAppear { terminationDelegate.runtime = runtime }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    runtime.cloud.engine?.wake()
+                    TodayWidgetPublisher.publish(from: runtime.service?.context)
                 }
-                .environment(\.translations, preferences.translations)
-                .environment(\.locale, preferences.language.locale)
-                .tint(PlannerStyle.accent)
+            }
+            .environment(\.translations, preferences.translations)
+            .environment(\.locale, preferences.language.locale)
+            .tint(PlannerStyle.accent)
         }
         // SwiftUI тоже скрывает заголовок: смена фона шапки не должна возвращать название окна и сдвигать кнопки.
         .windowToolbarStyle(.unified(showsTitle: false))
@@ -224,7 +239,7 @@ struct PlannerApp: App {
                 .modifier(NotificationLifecycle(service: runtime.service, preferences: preferences, notifications: notifications))
                 .environment(\.translations, preferences.translations)
                 .environment(\.locale, preferences.language.locale)
-                .tint(PlannerStyle.accent)
+                .tint(PlannerStyle.settingsAccent)
             } else {
                 Form {
                     Text(runtime.startupError ?? "")
@@ -234,28 +249,30 @@ struct PlannerApp: App {
                 .formStyle(.grouped)
                 .frame(width: 560, height: 320)
                 .environment(\.translations, preferences.translations)
+                .tint(PlannerStyle.settingsAccent)
             }
         }
     }
 
-    @ViewBuilder private var launchContent: some View {
+    @ViewBuilder private func launchContent(widgetAction: Binding<WidgetQuickAction?>) -> some View {
         #if SHOWCASE
-        workspace
+        workspace(widgetAction: widgetAction)
         #else
         let forceWelcome = ProcessInfo.processInfo.environment["PLANNER_SHOW_WELCOME"] == "1"
         if runtime.service != nil && !runtime.cloud.welcomeCompleted &&
            (PlannerPersistence.testID == nil || forceWelcome) {
             WelcomeView(cloud: runtime.cloud, service: runtime.service)
         } else {
-            workspace
+            workspace(widgetAction: widgetAction)
         }
         #endif
     }
 
-    @ViewBuilder private var workspace: some View {
+    @ViewBuilder private func workspace(widgetAction: Binding<WidgetQuickAction?>) -> some View {
             if let container = runtime.container, let service = runtime.service, let assistant = runtime.assistant {
                 WorkspaceView(service: service, calendar: calendar, preferences: preferences, notifications: notifications,
-                              folderDrag: folderDrag, assistant: assistant, syncEngine: runtime.cloud.engine)
+                              folderDrag: folderDrag, assistant: assistant, syncEngine: runtime.cloud.engine,
+                              widgetAction: widgetAction)
                     .modifier(NotificationLifecycle(service: service, preferences: preferences, notifications: notifications))
                     .modelContainer(container)
                     .id(ObjectIdentifier(container))

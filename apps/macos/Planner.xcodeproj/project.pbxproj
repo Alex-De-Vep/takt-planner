@@ -75,32 +75,6 @@
 			"isa" = "PBXBuildFile";
 			"productRef" = "F00A3114FECE325544C8D53F";
 		};
-		"63C4D4D9E8E574BA8ACBA742" = {
-			"isa" = "XCRemoteSwiftPackageReference";
-			"repositoryURL" = "https://github.com/ml-explore/mlx-swift-lm.git";
-			"requirement" = {
-				"kind" = "exactVersion";
-				"version" = "2.31.3";
-			};
-		};
-		"95CB4AE20E729691802A43DA" = {
-			"isa" = "XCSwiftPackageProductDependency";
-			"productName" = "MLXLLM";
-			"package" = "63C4D4D9E8E574BA8ACBA742";
-		};
-		"37C7DCE0D0BB66CE2EF181D1" = {
-			"isa" = "XCSwiftPackageProductDependency";
-			"productName" = "MLXLMCommon";
-			"package" = "63C4D4D9E8E574BA8ACBA742";
-		};
-		"2C596C91D9FA1C343AC9DF07" = {
-			"isa" = "PBXBuildFile";
-			"productRef" = "95CB4AE20E729691802A43DA";
-		};
-		"111CCDE12266B69AAFCCD783" = {
-			"isa" = "PBXBuildFile";
-			"productRef" = "37C7DCE0D0BB66CE2EF181D1";
-		};
 		"03606639F781D8794E00AF03" = {
 			"isa" = "PBXFileSystemSynchronizedRootGroup";
 			"path" = "TodayWidgetShared";
@@ -127,7 +101,7 @@
 		"93B25A81274F5B8C2554DD82" = {
 			"isa" = "PBXFrameworksBuildPhase";
 			"buildActionMask" = 2147483647;
-			"files" = ("523878C5451958612E594FC3", "2C596C91D9FA1C343AC9DF07", "111CCDE12266B69AAFCCD783");
+			"files" = ("523878C5451958612E594FC3");
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
 		"2C40C91FAFFECD50053791E1" = {
@@ -136,32 +110,51 @@
 			"files" = ();
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
-		"92D9682C79E9512A2FC9C2FB" = {
+		"66CF64612E6C79C62579B6FF" = {
 			"isa" = "PBXContainerItemProxy";
 			"containerPortal" = "244210E48437B6556980A702";
 			"proxyType" = 1;
 			"remoteGlobalIDString" = "4D1FE96A850B301D0187C20D";
 			"remoteInfo" = "TodayWidget";
 		};
-		"ACBB239BAB6F8FBC62D1226A" = {
+		"7DAFCDE1F6B99123FE7F68A0" = {
 			"isa" = "PBXTargetDependency";
 			"target" = "4D1FE96A850B301D0187C20D";
-			"targetProxy" = "92D9682C79E9512A2FC9C2FB";
+			"targetProxy" = "66CF64612E6C79C62579B6FF";
 		};
-		"AD7CA997EDA84AC42CD63FD4" = {
+		"8683250C22E3FD79CABAC9A9" = {
+			"isa" = "PBXContainerItemProxy";
+			"containerPortal" = "244210E48437B6556980A702";
+			"proxyType" = 1;
+			"remoteGlobalIDString" = "C441AADEDC5D8AF6D1A6AD13";
+			"remoteInfo" = "QuickActionsWidget";
+		};
+		"26C887671A7575A3B1F8EFAF" = {
+			"isa" = "PBXTargetDependency";
+			"target" = "C441AADEDC5D8AF6D1A6AD13";
+			"targetProxy" = "8683250C22E3FD79CABAC9A9";
+		};
+		"E6BBBF170054B93F464EE5D2" = {
 			"isa" = "PBXBuildFile";
 			"fileRef" = "F4FEF887F4FBF9471C61FC5B";
 			"settings" = {
 				"ATTRIBUTES" = ("CodeSignOnCopy", "RemoveHeadersOnCopy");
 			};
 		};
+		"0303828541699527A01C19C0" = {
+			"isa" = "PBXBuildFile";
+			"fileRef" = "5C76D5DC52EEAD3AF1B84521";
+			"settings" = {
+				"ATTRIBUTES" = ("CodeSignOnCopy", "RemoveHeadersOnCopy");
+			};
+		};
 		"D01B6655FA0C346D45AAD2BD" = {
 			"isa" = "PBXCopyFilesBuildPhase";
-			"name" = "Embed Widget Extension";
+			"name" = "Embed Widget Extensions";
 			"buildActionMask" = 2147483647;
 			"dstPath" = "";
 			"dstSubfolderSpec" = 13;
-			"files" = ("AD7CA997EDA84AC42CD63FD4");
+			"files" = ("E6BBBF170054B93F464EE5D2", "0303828541699527A01C19C0");
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
 		"03A2B159487E8E32AB03F94A" = {
@@ -171,8 +164,8 @@
 				"PRODUCT_NAME" = "Takt";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "$(PLANNER_APP_BUNDLE_IDENTIFIER)";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"PRODUCT_MODULE_NAME" = "Planner";
@@ -198,8 +191,8 @@
 				"PRODUCT_NAME" = "Takt";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "$(PLANNER_APP_BUNDLE_IDENTIFIER)";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"PRODUCT_MODULE_NAME" = "Planner";
@@ -229,9 +222,9 @@
 			"buildConfigurationList" = "5600B1999670AF5D8B86299B";
 			"buildPhases" = ("E95622D03D4488C5502B5907", "93B25A81274F5B8C2554DD82", "2C40C91FAFFECD50053791E1", "D01B6655FA0C346D45AAD2BD");
 			"buildRules" = ();
-			"dependencies" = ("ACBB239BAB6F8FBC62D1226A");
+			"dependencies" = ("7DAFCDE1F6B99123FE7F68A0", "26C887671A7575A3B1F8EFAF");
 			"fileSystemSynchronizedGroups" = ("66332D41A4DCEC022D9AEE99", "03606639F781D8794E00AF03");
-			"packageProductDependencies" = ("F00A3114FECE325544C8D53F", "95CB4AE20E729691802A43DA", "37C7DCE0D0BB66CE2EF181D1");
+			"packageProductDependencies" = ("F00A3114FECE325544C8D53F");
 			"name" = "Planner";
 			"productName" = "Takt";
 			"productReference" = "0422B35A368B797F6AC12F60";
@@ -267,17 +260,17 @@
 			"files" = ();
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
-		"55281B1DEE7F37E87FB2ABA7" = {
+		"A9B987C22F5494B40DCB51D0" = {
 			"isa" = "PBXContainerItemProxy";
 			"containerPortal" = "244210E48437B6556980A702";
 			"proxyType" = 1;
 			"remoteGlobalIDString" = "16FA1AFAA6E8E1ACA30CAE5C";
 			"remoteInfo" = "Planner";
 		};
-		"22703207B728B9134E840E58" = {
+		"629FD5F30C03DADBD3CA027D" = {
 			"isa" = "PBXTargetDependency";
 			"target" = "16FA1AFAA6E8E1ACA30CAE5C";
-			"targetProxy" = "55281B1DEE7F37E87FB2ABA7";
+			"targetProxy" = "A9B987C22F5494B40DCB51D0";
 		};
 		"14873239D9B2CE42DEFDB7FC" = {
 			"isa" = "XCBuildConfiguration";
@@ -286,8 +279,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt";
@@ -301,8 +294,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerTests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/Takt.app/Contents/MacOS/Takt";
@@ -320,7 +313,7 @@
 			"buildConfigurationList" = "D94C893420A147808C19EF71";
 			"buildPhases" = ("82729FC7A049CB135B0207BA", "F92E270CE1A006F86FD53FC1", "148D4C60D18B0EE6D3B907B6");
 			"buildRules" = ();
-			"dependencies" = ("22703207B728B9134E840E58");
+			"dependencies" = ("629FD5F30C03DADBD3CA027D");
 			"fileSystemSynchronizedGroups" = ("D3E604AC4E0B2087BD49132C");
 			"packageProductDependencies" = ();
 			"name" = "PlannerTests";
@@ -358,17 +351,17 @@
 			"files" = ();
 			"runOnlyForDeploymentPostprocessing" = 0;
 		};
-		"3EE58AF7F88A9081923DAD50" = {
+		"4E58ABDB0F042DCFC994DF37" = {
 			"isa" = "PBXContainerItemProxy";
 			"containerPortal" = "244210E48437B6556980A702";
 			"proxyType" = 1;
 			"remoteGlobalIDString" = "16FA1AFAA6E8E1ACA30CAE5C";
 			"remoteInfo" = "Planner";
 		};
-		"CD47D75FEDEA27A5A1B7DD22" = {
+		"309D9EAF3FCAABEF3EECF842" = {
 			"isa" = "PBXTargetDependency";
 			"target" = "16FA1AFAA6E8E1ACA30CAE5C";
-			"targetProxy" = "3EE58AF7F88A9081923DAD50";
+			"targetProxy" = "4E58ABDB0F042DCFC994DF37";
 		};
 		"1F35F035A7CD00A9980270C3" = {
 			"isa" = "XCBuildConfiguration";
@@ -377,8 +370,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
@@ -391,8 +384,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "local.planner.PlannerUITests";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"TEST_TARGET_NAME" = "Planner";
@@ -409,7 +402,7 @@
 			"buildConfigurationList" = "5A25B93E9426EFE2E60EF1E1";
 			"buildPhases" = ("1A97AAC04E5FBB82CDE70F94", "EE5D5962F710EDC740AC8B1B", "12EF56C38612E42ED8434B64");
 			"buildRules" = ();
-			"dependencies" = ("CD47D75FEDEA27A5A1B7DD22");
+			"dependencies" = ("309D9EAF3FCAABEF3EECF842");
 			"fileSystemSynchronizedGroups" = ("6E9A270DC0D4A8A5B77D7ED8");
 			"packageProductDependencies" = ();
 			"name" = "PlannerUITests";
@@ -454,8 +447,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "$(PLANNER_APP_BUNDLE_IDENTIFIER).TodayWidget";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"INFOPLIST_FILE" = "Configuration/TodayWidget-Info.plist";
@@ -474,8 +467,8 @@
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "$(PLANNER_APP_BUNDLE_IDENTIFIER).TodayWidget";
 				"GENERATE_INFOPLIST_FILE" = "YES";
-				"MARKETING_VERSION" = "0.3.37";
-				"CURRENT_PROJECT_VERSION" = "121";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
 				"ARCHS" = "arm64";
 				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
 				"INFOPLIST_FILE" = "Configuration/TodayWidget-Info.plist";
@@ -506,15 +499,104 @@
 			"productReference" = "F4FEF887F4FBF9471C61FC5B";
 			"productType" = "com.apple.product-type.app-extension";
 		};
+		"59E57DF08883FC8D5C406C97" = {
+			"isa" = "PBXFileSystemSynchronizedRootGroup";
+			"path" = "QuickActionsWidget";
+			"sourceTree" = "<group>";
+		};
+		"5C76D5DC52EEAD3AF1B84521" = {
+			"isa" = "PBXFileReference";
+			"explicitFileType" = "wrapper.app-extension";
+			"includeInIndex" = 0;
+			"path" = "QuickActionsWidget.appex";
+			"sourceTree" = "BUILT_PRODUCTS_DIR";
+		};
+		"EB139BF9443FE3ADF18E82D0" = {
+			"isa" = "PBXSourcesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"1EA17D47A846CF287814D755" = {
+			"isa" = "PBXFrameworksBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"3F318849DFCCE189A86D68A6" = {
+			"isa" = "PBXResourcesBuildPhase";
+			"buildActionMask" = 2147483647;
+			"files" = ();
+			"runOnlyForDeploymentPostprocessing" = 0;
+		};
+		"908592AF6951B4DC52A06167" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Debug";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "$(TARGET_NAME)";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "$(PLANNER_APP_BUNDLE_IDENTIFIER).QuickActionsWidget";
+				"GENERATE_INFOPLIST_FILE" = "YES";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
+				"ARCHS" = "arm64";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				"INFOPLIST_FILE" = "Configuration/QuickActionsWidget-Info.plist";
+				"INFOPLIST_KEY_CFBundleDisplayName" = "Takt";
+				"CODE_SIGN_ENTITLEMENTS" = "Configuration/QuickActionsWidget.entitlements";
+				"APPLICATION_EXTENSION_API_ONLY" = "YES";
+				"ENABLE_APP_SANDBOX" = "YES";
+				"ENABLE_HARDENED_RUNTIME" = "YES";
+				"SKIP_INSTALL" = "YES";
+			};
+		};
+		"8EB185CEC87D605C672F1B70" = {
+			"isa" = "XCBuildConfiguration";
+			"name" = "Release";
+			"buildSettings" = {
+				"PRODUCT_NAME" = "$(TARGET_NAME)";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "$(PLANNER_APP_BUNDLE_IDENTIFIER).QuickActionsWidget";
+				"GENERATE_INFOPLIST_FILE" = "YES";
+				"MARKETING_VERSION" = "0.3.49";
+				"CURRENT_PROJECT_VERSION" = "133";
+				"ARCHS" = "arm64";
+				"LD_RUNPATH_SEARCH_PATHS" = ("$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks");
+				"INFOPLIST_FILE" = "Configuration/QuickActionsWidget-Info.plist";
+				"INFOPLIST_KEY_CFBundleDisplayName" = "Takt";
+				"CODE_SIGN_ENTITLEMENTS" = "Configuration/QuickActionsWidget.entitlements";
+				"APPLICATION_EXTENSION_API_ONLY" = "YES";
+				"ENABLE_APP_SANDBOX" = "YES";
+				"ENABLE_HARDENED_RUNTIME" = "YES";
+				"SKIP_INSTALL" = "YES";
+			};
+		};
+		"D6CFB4130A14D4441D9B99D8" = {
+			"isa" = "XCConfigurationList";
+			"buildConfigurations" = ("908592AF6951B4DC52A06167", "8EB185CEC87D605C672F1B70");
+			"defaultConfigurationIsVisible" = 0;
+			"defaultConfigurationName" = "Release";
+		};
+		"C441AADEDC5D8AF6D1A6AD13" = {
+			"isa" = "PBXNativeTarget";
+			"buildConfigurationList" = "D6CFB4130A14D4441D9B99D8";
+			"buildPhases" = ("EB139BF9443FE3ADF18E82D0", "1EA17D47A846CF287814D755", "3F318849DFCCE189A86D68A6");
+			"buildRules" = ();
+			"dependencies" = ();
+			"fileSystemSynchronizedGroups" = ("59E57DF08883FC8D5C406C97", "03606639F781D8794E00AF03");
+			"packageProductDependencies" = ();
+			"name" = "QuickActionsWidget";
+			"productName" = "QuickActionsWidget";
+			"productReference" = "5C76D5DC52EEAD3AF1B84521";
+			"productType" = "com.apple.product-type.app-extension";
+		};
 		"0A3E27B8CA818264D75C8D81" = {
 			"isa" = "PBXGroup";
-			"children" = ("0422B35A368B797F6AC12F60", "91972F7AECAF4C518326D9F1", "C63AB516D857CE3DB2F90E29", "F4FEF887F4FBF9471C61FC5B");
+			"children" = ("0422B35A368B797F6AC12F60", "91972F7AECAF4C518326D9F1", "C63AB516D857CE3DB2F90E29", "F4FEF887F4FBF9471C61FC5B", "5C76D5DC52EEAD3AF1B84521");
 			"name" = "Products";
 			"sourceTree" = "<group>";
 		};
 		"0D6E4079E36703EBD37C0072" = {
 			"isa" = "PBXGroup";
-			"children" = ("03606639F781D8794E00AF03", "66332D41A4DCEC022D9AEE99", "D3E604AC4E0B2087BD49132C", "6E9A270DC0D4A8A5B77D7ED8", "726C68B4C06A914A902D6187", "0A3E27B8CA818264D75C8D81");
+			"children" = ("03606639F781D8794E00AF03", "66332D41A4DCEC022D9AEE99", "D3E604AC4E0B2087BD49132C", "6E9A270DC0D4A8A5B77D7ED8", "726C68B4C06A914A902D6187", "59E57DF08883FC8D5C406C97", "0A3E27B8CA818264D75C8D81");
 			"sourceTree" = "<group>";
 		};
 		"244210E48437B6556980A702" = {
@@ -542,9 +624,9 @@
 			"productRefGroup" = "0A3E27B8CA818264D75C8D81";
 			"projectDirPath" = "";
 			"projectRoot" = "";
-			"targets" = ("16FA1AFAA6E8E1ACA30CAE5C", "465EDED657905185CD258528", "17340B50EFC12776113E06D2", "4D1FE96A850B301D0187C20D");
+			"targets" = ("16FA1AFAA6E8E1ACA30CAE5C", "465EDED657905185CD258528", "17340B50EFC12776113E06D2", "4D1FE96A850B301D0187C20D", "C441AADEDC5D8AF6D1A6AD13");
 			"preferredProjectObjectVersion" = 77;
-			"packageReferences" = ("543CB531DCD3C74E84110B0A", "63C4D4D9E8E574BA8ACBA742");
+			"packageReferences" = ("543CB531DCD3C74E84110B0A");
 		};
 	};
 	"rootObject" = "244210E48437B6556980A702";

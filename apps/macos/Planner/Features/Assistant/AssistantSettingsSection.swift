@@ -23,7 +23,10 @@ struct AssistantSettingsSection: View {
                 providerSheet = .choose
             } label: {
                 Label(strings["Подключить ИИ-провайдер"], systemImage: "plus")
-            }.accessibilityIdentifier("assistant-connect-provider")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(PlannerStyle.settingsControlTint)
+            .accessibilityIdentifier("assistant-connect-provider")
             ForEach(connected) { provider in
                 Button {
                     providerSheet = .manage(provider)
@@ -43,16 +46,10 @@ struct AssistantSettingsSection: View {
         .onAppear {
             assistant.cloud.activate()
             assistant.gateways.activate()
-            rememberConnections()
+            assistant.gateways.loadSpeechCatalogs()
         }
         .onChange(of: assistant.gateways.profiles.values.map { $0.id.uuidString }.sorted()) {
             assistant.gateways.loadSpeechCatalogs()
-        }
-        .onChange(of: connected.map(\.id)) {
-            if providerSheet == nil { rememberConnections() }
-        }
-        .onChange(of: providerSheet?.id) {
-            if providerSheet == nil { rememberConnections() }
         }
 
         Section(strings["Выбранные модели"]) {
@@ -96,6 +93,7 @@ struct AssistantSettingsSection: View {
 
         Section(strings["Помощник"]) {
             Toggle(strings["Добавлять в текущую папку"], isOn: $preferences.assistantUseCurrentFolder)
+                .tint(PlannerStyle.settingsControlTint)
             Picker(strings["Папка по умолчанию"], selection: $preferences.assistantDefaultFolder) {
                 ForEach(AssistantService.folders(folders, preferences: preferences)) { Text($0.name).tag($0.id) }
             }
@@ -106,12 +104,5 @@ struct AssistantSettingsSection: View {
             Button(strings["Очистить"], role: .destructive) { assistant.clearHistory() }
             Button(strings["Отмена"], role: .cancel) {}
         } message: { Text(strings["Созданные задачи и события сохранятся."]) }
-    }
-
-    private func rememberConnections() {
-        var visibility = preferences.assistantModelVisibility
-        for provider in connected { visibility.rememberConnection(gateway: provider.gateway) }
-        if visibility != preferences.assistantModelVisibility { preferences.assistantModelVisibility = visibility }
-        assistant.gateways.loadSpeechCatalogs()
     }
 }

@@ -19,8 +19,13 @@ struct PlannerNote: Codable, Identifiable, Sendable {
     var deletedAt: Date?
     var syncVersion: NoteSyncVersion?
     var lastVoiceTranscriptID: UUID?
+    var appliedVoiceTranscriptIDs: Set<UUID>?
     var richText: SharedNoteText?
     var purged: Bool?
+
+    func hasVoiceTranscript(_ id: UUID) -> Bool {
+        lastVoiceTranscriptID == id || appliedVoiceTranscriptIDs?.contains(id) == true
+    }
 
     var isPurged: Bool { purged == true }
 
@@ -84,6 +89,7 @@ final class NoteStore {
     var awaitingCloudNoteFormat = false
     var sharedFormatLimit: Int?
     private var remoteEdits: [UUID: UUID] = [:]
+    @ObservationIgnored private var transcriptStarts: [UUID: Int] = [:]
     @ObservationIgnored let voice: NoteVoiceRecording
     @ObservationIgnored private let url: URL?
     @ObservationIgnored private var pending: [UUID: NSAttributedString] = [:]
@@ -118,7 +124,12 @@ final class NoteStore {
         }
     }
 
-    func content(_ note: PlannerNote) -> NSAttributedString { pending[note.id] ?? note.attributedText() }
+    func content(_ note: PlannerNote) -> NSAttributedString {
+        pending[note.id] ?? (notes.first { $0.id == note.id } ?? note).attributedText()
+    }
+
+    func takeTranscriptStart(for id: UUID) -> Int? { transcriptStarts.removeValue(forKey: id) }
+
     func remoteEdit(_ id: UUID) -> UUID? { remoteEdits[id] }
 
     @discardableResult func create(folder: String) -> UUID? {
@@ -204,7 +215,7 @@ final class NoteStore {
                 failure = SaveFailure(message: error.localizedDescription)
             }
         }
-        for note in notes where note.isPurged { voice.discard(note.id) }
+        for note in notes where note.isPurged { voice.discardAll(for: note.id) }
     }
 
     private func scheduleSave() {
@@ -248,7 +259,7 @@ final class NoteStore {
             throw AssistantFailure(message: "Заметка недоступна.")
         }
         let note = notes[index]
-        if let voiceTranscriptID, note.lastVoiceTranscriptID == voiceTranscriptID { return }
+        if let voiceTranscriptID, note.hasVoiceTranscript(voiceTranscriptID) { return }
         if let expectedVersion, expectedVersion != note.assistantContentVersion {
             throw AssistantFailure(message: "Заметка изменилась. Попросите помощника обновить предложение.")
         }
@@ -270,8 +281,15 @@ final class NoteStore {
         var next = notes
         try setBody(value, in: &next[index])
         next[index].updatedAt = .now
-        if let voiceTranscriptID { next[index].lastVoiceTranscriptID = voiceTranscriptID }
+        if let voiceTranscriptID {
+            var applied = note.appliedVoiceTranscriptIDs ?? []
+            if let previousID = note.lastVoiceTranscriptID { applied.insert(previousID) }
+            applied.insert(voiceTranscriptID)
+            next[index].appliedVoiceTranscriptIDs = applied
+            next[index].lastVoiceTranscriptID = voiceTranscriptID
+        }
         try save(next)
+        transcriptStarts[id] = voiceTranscriptID.map { _ in value.length - (text as NSString).length }
         remoteEdits[id] = UUID()
         syncQueued?()
     }
@@ -302,6 +320,7 @@ final class NoteStore {
             var copy = note
             copy.syncVersion = nil
             copy.lastVoiceTranscriptID = nil
+            copy.appliedVoiceTranscriptIDs = nil
             return copy
         }
         if !additions.isEmpty { try save(notes + additions) }
@@ -314,6 +333,7 @@ final class NoteStore {
         var incoming = note
         let previous = notes.first(where: { $0.id == note.id })
         incoming.lastVoiceTranscriptID = previous?.lastVoiceTranscriptID
+        incoming.appliedVoiceTranscriptIDs = previous?.appliedVoiceTranscriptIDs
         let digest = try Self.digest(Self.wireData(note))
         incoming.syncVersion = NoteSyncVersion(revision: revision, localDigest: digest)
         if incoming.isPurged || incoming.trashHasExpired(at: .now) { incoming = incoming.withoutContent() }
@@ -324,6 +344,7 @@ final class NoteStore {
                 local.id = UUID()
                 local.syncVersion = nil
                 local.lastVoiceTranscriptID = nil
+                local.appliedVoiceTranscriptIDs = nil
                 next.append(local)
             }
             next[index] = incoming
@@ -331,9 +352,10 @@ final class NoteStore {
             next.append(incoming)
         }
         try save(next)
-        if incoming.isPurged { voice.discard(incoming.id) }
+        if incoming.isPurged { voice.discardAll(for: incoming.id) }
         if let previous, previous.document != incoming.document || previous.text != incoming.text ||
             previous.richText != incoming.richText {
+            transcriptStarts[note.id] = nil
             remoteEdits[note.id] = UUID()
         }
     }
@@ -350,6 +372,7 @@ final class NoteStore {
         var copy = note
         copy.syncVersion = nil
         copy.lastVoiceTranscriptID = nil
+        copy.appliedVoiceTranscriptIDs = nil
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return try encoder.encode(copy)

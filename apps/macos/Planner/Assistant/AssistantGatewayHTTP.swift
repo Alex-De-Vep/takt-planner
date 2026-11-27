@@ -187,6 +187,84 @@ struct AssistantGatewayHTTP: Sendable {
         If there is no intelligible speech, return exactly [NO_SPEECH].
         """
 
+    struct AudioFailure: Error, Sendable {
+        enum Stage: String, Sendable {
+            case upload = "Загрузка записи"
+            case recognition = "Распознавание речи"
+        }
+
+        enum Cause: Sendable {
+            case http(Int), network(URLError.Code), invalid, stopped(String), length
+        }
+
+        let stage: Stage
+        let cause: Cause
+        var retryAfter: TimeInterval?
+        var remoteCleanupFailed = false
+
+        var canRetry: Bool {
+            switch cause {
+            case .http(408), .http(429), .http(500), .http(502), .http(503), .http(504): true
+            case .network(let code):
+                [.timedOut, .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed,
+                 .networkConnectionLost, .notConnectedToInternet].contains(code)
+            default: false
+            }
+        }
+
+        var canSplit: Bool {
+            switch cause {
+            case .length, .http(413): true
+            default: false
+            }
+        }
+
+        var canSkip: Bool {
+            switch cause {
+            case .invalid, .length, .stopped, .http(413), .http(422): true
+            default: canRetry
+            }
+        }
+
+        var message: String {
+            switch cause {
+            case .http(401): "Сервис отклонил ключ. Подключите его заново."
+            case .http(402): "Недостаточно средств или исчерпан бюджет подключения."
+            case .http(403): "У ключа нет доступа к этому ресурсу."
+            case .http(429): "Сервис ограничил число запросов. Повторите позже."
+            case .http: "Сервис отклонил запрос на расшифровку."
+            case .network(.timedOut): "Сервис не ответил вовремя."
+            case .network: "Не удалось подключиться к сервису расшифровки."
+            case .invalid: "Сервис вернул ответ в неизвестном формате."
+            case .stopped: "Сервис прервал распознавание."
+            case .length: "Сервис достиг предельной длины ответа."
+            }
+        }
+
+        var code: String {
+            switch cause {
+            case .http(let status): "HTTP \(status)"
+            case .network(let code): "URL \(code.rawValue)"
+            case .invalid: "invalid_response"
+            case .stopped(let reason): reason
+            case .length: "length"
+            }
+        }
+
+        static func finishReason(_ reason: String?, success: String) throws {
+            guard let reason, reason != success else { return }
+            let code = reason.lowercased()
+            let cause: Cause
+            switch code {
+            case "length", "max_tokens": cause = .length
+            case "blacklist", "safety", "recitation", "content_filter", "error", "function_call", "tool_calls":
+                cause = .stopped(code)
+            default: cause = .stopped("unknown_finish_reason")
+            }
+            throw Self(stage: .recognition, cause: cause)
+        }
+    }
+
     struct AudioTranscript: Sendable {
         let text: String
         var remoteCleanupFailed = false
@@ -221,7 +299,7 @@ struct AssistantGatewayHTTP: Sendable {
             } else {
                 request = try Self.audioUpload(request, file: file, fields: fields)
             }
-            let response = try await get(TranscriptionResult.self, request: request)
+            let response = try await get(TranscriptionResult.self, request: request, audioStage: .recognition)
             result = .init(text: response.text)
         }
         let trimmed = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -237,8 +315,10 @@ struct AssistantGatewayHTTP: Sendable {
     private func transcribeWithGigaChat(_ file: URL, profile: AssistantGatewayProfile, modelID: String) async throws -> AudioTranscript {
         let upload = try await authorizedRequest(profile, "files")
         let request = try Self.audioUpload(upload, file: file, fields: [("purpose", "general")], mimeType: "audio/x-m4a")
-        let uploaded = try await get(GigaUploadedFile.self, request: request, gigaChat: true)
-        guard uploaded.id.range(of: #"^[A-Za-z0-9_-]{1,160}$"#, options: .regularExpression) != nil else { throw Self.invalid }
+        let uploaded = try await get(GigaUploadedFile.self, request: request, gigaChat: true, audioStage: .upload)
+        guard uploaded.id.range(of: #"^[A-Za-z0-9_-]{1,160}$"#, options: .regularExpression) != nil else {
+            throw AudioFailure(stage: .upload, cause: .invalid)
+        }
 
         // Удаляем только файл, созданный этим запросом. Отмена расшифровки не отменяет очистку.
         let response: Result<String, Error>
@@ -248,10 +328,13 @@ struct AssistantGatewayHTTP: Sendable {
                 "model": modelID, "stream": false,
                 "messages": [["role": "user", "content": Self.transcriptPrompt, "attachments": [uploaded.id]]]
             ])
-            let reply = try await get(GigaTranscript.self, request: request, gigaChat: true)
-            guard let choice = reply.choices.first, let text = choice.message.content,
-                  choice.finish_reason == nil || choice.finish_reason == "stop" else { throw Self.invalid }
-            response = .success(text)
+            let reply = try await get(GigaTranscript.self, request: request, gigaChat: true, audioStage: .recognition)
+            guard let choice = reply.choices.first else { throw AudioFailure(stage: .recognition, cause: .invalid) }
+            try AudioFailure.finishReason(choice.finish_reason, success: "stop")
+            guard let message = choice.message, message.hasContent else {
+                throw AudioFailure(stage: .recognition, cause: .invalid)
+            }
+            response = .success(message.content ?? "")
         } catch { response = .failure(error) }
 
         let deleted = await Task.detached(priority: .utility) {
@@ -267,7 +350,10 @@ struct AssistantGatewayHTTP: Sendable {
         switch response {
         case .success(let text): return .init(text: text, remoteCleanupFailed: !deleted)
         case .failure(let error):
-            if !deleted { throw AssistantFailure(message: "Не удалось удалить загруженный файл из GigaChat.") }
+            if var failure = error as? AudioFailure {
+                failure.remoteCleanupFailed = !deleted
+                throw failure
+            }
             throw error
         }
     }
@@ -282,10 +368,13 @@ struct AssistantGatewayHTTP: Sendable {
         let parts: [[String: Any]] = modelID == "gemini-3.5-transcribe"
             ? [audioPart] : [["text": Self.transcriptPrompt], audioPart]
         try Self.setJSON(&request, ["contents": [["parts": parts]]])
-        let response = try await get(GeminiTranscript.self, request: request)
-        guard let candidate = response.candidates?.first, let content = candidate.content,
-              candidate.finishReason == nil || candidate.finishReason == "STOP" else { throw Self.invalid }
-        return content.parts.filter { $0.thought != true }.compactMap(\.text).joined(separator: "\n")
+        let response = try await get(GeminiTranscript.self, request: request, audioStage: .recognition)
+        guard let candidate = response.candidates?.first else { throw AudioFailure(stage: .recognition, cause: .invalid) }
+        try AudioFailure.finishReason(candidate.finishReason, success: "STOP")
+        guard let parts = candidate.content?.parts else { throw AudioFailure(stage: .recognition, cause: .invalid) }
+        let text = parts.filter { $0.thought != true }.compactMap(\.text)
+        guard !text.isEmpty || parts.isEmpty else { throw AudioFailure(stage: .recognition, cause: .invalid) }
+        return text.joined(separator: "\n")
     }
 
     private static func audioUpload(_ request: URLRequest, file: URL, fields: [(String, String)],
@@ -318,8 +407,18 @@ struct AssistantGatewayHTTP: Sendable {
     private struct GigaUploadedFile: Decodable, Sendable { let id: String }
     private struct GigaTranscript: Decodable {
         struct Choice: Decodable {
-            struct Message: Decodable { let content: String? }
-            let message: Message
+            struct Message: Decodable {
+                let content: String?
+                let hasContent: Bool
+
+                private enum CodingKeys: String, CodingKey { case content }
+                init(from decoder: Decoder) throws {
+                    let fields = try decoder.container(keyedBy: CodingKeys.self)
+                    hasContent = fields.contains(.content)
+                    content = try fields.decodeIfPresent(String.self, forKey: .content)
+                }
+            }
+            let message: Message?
             let finish_reason: String?
         }
         let choices: [Choice]
@@ -485,16 +584,42 @@ struct AssistantGatewayHTTP: Sendable {
         }
     }
 
-    private func get<Value: Decodable>(_ type: Value.Type, request: URLRequest, gigaChat: Bool = false) async throws -> Value {
-        let (bytes, response) = try await responseBytes(for: request, gigaChat: gigaChat)
-        try Self.check(response)
-        var data = Data()
-        for try await byte in bytes {
-            guard data.count < 12_000_000 else { throw Self.invalid }
-            data.append(byte)
+    private func get<Value: Decodable>(_ type: Value.Type, request: URLRequest, gigaChat: Bool = false,
+                                       audioStage: AudioFailure.Stage? = nil) async throws -> Value {
+        let invalid: Error = audioStage.map { AudioFailure(stage: $0, cause: .invalid) as Error } ?? Self.invalid
+        do {
+            let (bytes, response) = try await responseBytes(for: request, gigaChat: gigaChat)
+            if let stage = audioStage {
+                guard let response = response as? HTTPURLResponse else { throw invalid }
+                if !(200...299).contains(response.statusCode) {
+                    throw AudioFailure(stage: stage, cause: .http(response.statusCode),
+                                       retryAfter: Self.retryAfter(response))
+                }
+            } else {
+                try Self.check(response)
+            }
+            var data = Data()
+            for try await byte in bytes {
+                guard data.count < 12_000_000 else { throw invalid }
+                data.append(byte)
+            }
+            guard let value = try? JSONDecoder().decode(type, from: data) else { throw invalid }
+            return value
+        } catch let error as URLError {
+            if error.code == .cancelled { throw CancellationError() }
+            if let stage = audioStage { throw AudioFailure(stage: stage, cause: .network(error.code)) }
+            throw error
         }
-        guard let value = try? JSONDecoder().decode(type, from: data) else { throw Self.invalid }
-        return value
+    }
+
+    private static func retryAfter(_ response: HTTPURLResponse) -> TimeInterval? {
+        guard let value = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+        if let seconds = TimeInterval(value), seconds.isFinite, seconds >= 0 { return seconds }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value).map { max(0, $0.timeIntervalSinceNow) }
     }
 
     static func validKey(_ key: String) -> Bool {

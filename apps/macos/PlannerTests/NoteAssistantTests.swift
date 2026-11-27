@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import SwiftUI
 import Synchronization
 import Testing
 @testable import Planner
@@ -90,7 +91,8 @@ import Testing
 
         let store = NoteStore()
         let note = try #require(store.create(folder: "inbox"))
-        let source = directory.appending(path: "\(note).voice.\(UUID()).m4a")
+        let recordingID = UUID()
+        let source = directory.appending(path: "\(note).voice.\(recordingID).m4a")
         let writer = try NoteCallAudio(url: source)
         let second = Data(repeating: 0, count: NoteCallAudio.sampleRate * 4)
         for _ in 0...300 { _ = try writer.append(second) }
@@ -104,17 +106,147 @@ import Testing
         let profile = AssistantGatewayProfile(id: UUID(), gateway: .openAI,
             base: try #require(AssistantGateway.openAI.bases.first), key: "long-recording-fixture")
 
-        await voice.transcribe(note, store: store, profile: profile, modelID: "whisper-1", transport: http)
-        #expect(voice.errors[note] != nil)
+        await voice.transcribe(recordingID, store: store, profile: profile, modelID: "whisper-1", transport: http)
         #expect(FileManager.default.fileExists(atPath: source.path))
-        #expect(voice.drafts[note]?.pieceTranscripts == ["First part", nil])
+        #expect(voice.transcriptionIssues[recordingID]?.part == 2)
+        #expect(voice.transcriptionIssues[recordingID]?.interval.hasPrefix("05:00–") == true)
+        #expect(voice.transcriptionIssues[recordingID]?.code == "HTTP 400")
+        #expect(voice.drafts[recordingID]?.checkpoint?.parts.map(\.text) == ["First part", nil])
         #expect(store.notes.first?.text.isEmpty == true)
 
-        await voice.transcribe(note, store: store, profile: profile, modelID: "whisper-1", transport: http)
-        #expect(voice.errors[note] == nil)
-        #expect(store.notes.first?.text == "First part\n\nLast part")
+        let restored = NoteVoiceRecording(directory: directory)
+        restored.restoreDrafts(for: store.notes)
+        await restored.transcribe(recordingID, store: store, profile: profile, modelID: "whisper-1", transport: http)
+        #expect(restored.errors[recordingID] == nil)
+        #expect(restored.transcriptPreviews.first?.text == "First part\n\nLast part")
+        #expect(store.notes.first?.text.isEmpty == true)
+        restored.dismissTranscript(recordingID)
+        let reopened = NoteVoiceRecording(directory: directory)
+        reopened.restoreDrafts(for: store.notes)
+        #expect(reopened.transcriptPreviews.isEmpty)
+        reopened.presentTranscript(recordingID, strings: .init(language: .russian))
+        reopened.presentTranscript(recordingID, strings: .init(language: .russian))
+        #expect(reopened.transcriptPreviews.count == 1)
+        store.edit(note, content: NSAttributedString(string: "Edited while reviewing"))
+        try reopened.insertTranscript(recordingID, store: store)
+        reopened.presentTranscript(recordingID, strings: .init(language: .russian))
+        #expect(reopened.transcriptPreviews.isEmpty)
+        #expect(reopened.drafts[recordingID]?.saved == true)
+        #expect(store.notes.first?.text == "Edited while reviewing\n\nFirst part\n\nLast part")
         #expect(NoteSpeechFixture.longRecordingRequests.withLock { $0 } == 3)
-        #expect(!FileManager.default.fileExists(atPath: source.path))
+        #expect(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    @Test func gigaChatRetriesSplitsAndKeepsAnExplicitEmptyResult() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore()
+        let note = try #require(store.create(folder: "inbox"))
+        let recordingID = UUID()
+        let source = directory.appending(path: "\(note).call.\(recordingID).m4a")
+        let writer = try NoteCallAudio(url: source)
+        let second = Data(repeating: 0, count: NoteCallAudio.sampleRate * 4)
+        for _ in 0..<12 { _ = try writer.append(second) }
+        writer.close()
+
+        let voice = NoteVoiceRecording(directory: directory)
+        voice.restoreDrafts(for: store.notes)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NoteSpeechFixture.self]
+        let http = AssistantGatewayHTTP(configuration: configuration)
+        let profile = AssistantGatewayProfile(id: UUID(), gateway: .gigaChat,
+            base: try #require(AssistantGateway.gigaChat.bases.first), key: "split-fixture")
+
+        await voice.transcribe(recordingID, store: store, profile: profile, modelID: "GigaChat-2-Max", transport: http)
+
+        #expect(voice.transcriptionIssues[recordingID] == nil)
+        #expect(voice.errors[recordingID] == "Не удалось удалить загруженный файл из GigaChat.")
+        #expect(store.notes.first?.text.isEmpty == true)
+        #expect(voice.transcriptPreviews.first?.noteID == note)
+        try voice.insertTranscript(recordingID, store: store)
+        #expect(store.notes.first?.text == "Short first part\n\n[Пустая расшифровка · 00:06–00:12]")
+        #expect(NoteSpeechFixture.splitRequests.withLock { $0 } == 4)
+        #expect(NoteSpeechFixture.splitCleanupRequests.withLock { $0 } == 4)
+        #expect(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    @Test func failedSegmentCanBeSkippedBeforeExplicitPartialSave() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = NoteStore()
+        let note = try #require(store.create(folder: "inbox"))
+        let recordingID = UUID()
+        let source = directory.appending(path: "\(note).voice.\(recordingID).m4a")
+        let writer = try NoteCallAudio(url: source)
+        _ = try writer.append(Data(repeating: 0, count: NoteCallAudio.sampleRate * 4))
+        writer.close()
+
+        let voice = NoteVoiceRecording(directory: directory)
+        voice.restoreDrafts(for: store.notes)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NoteSpeechFixture.self]
+        let http = AssistantGatewayHTTP(configuration: configuration)
+        let profile = AssistantGatewayProfile(id: UUID(), gateway: .openAI,
+            base: try #require(AssistantGateway.openAI.bases.first), key: "malformed-fixture")
+
+        await voice.transcribe(recordingID, store: store, profile: profile, modelID: "whisper-1", transport: http)
+        #expect(voice.transcriptionIssues[recordingID]?.code == "invalid_response")
+        #expect(voice.skipFailedPart(recordingID))
+        await voice.transcribe(recordingID, store: store, profile: profile, modelID: "whisper-1", transport: http)
+        #expect(voice.transcriptPreviews.first?.isPartial == true)
+        #expect(store.notes.first?.text.isEmpty == true)
+
+        #expect(store.moveToTrash(note))
+        #expect(throws: AssistantFailure.self) { try voice.insertTranscript(recordingID, store: store) }
+        #expect(voice.transcriptPreviews.first?.id == recordingID)
+        store.restoreFromTrash(note)
+        try voice.insertTranscript(recordingID, store: store)
+        #expect(store.notes.first?.text == "[Фрагмент пропущен · 00:00–00:01]")
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        let restored = NoteVoiceRecording(directory: directory)
+        restored.restoreDrafts(for: store.notes)
+        #expect(restored.drafts[recordingID]?.saved == true)
+    }
+
+    @Test(arguments: [false, true])
+    func insertedTranscriptIsVisibleInAnExistingOrNewEditor(openAfterInsertion: Bool) async throws {
+        let store = NoteStore()
+        let id = try #require(store.create(folder: "inbox"))
+        let original = String(repeating: "Long note 👩🏽‍💻\n", count: 180)
+        try store.applyText(original, to: id, append: false)
+        let note = try #require(store.notes.first)
+        let control = NoteEditorControl()
+        let transcript = String(repeating: "Recognized speech\n", count: 70)
+        func insert() throws { try store.applyText(transcript, to: id, append: true, voiceTranscriptID: UUID()) }
+        if openAfterInsertion { try insert() }
+        let host = NSHostingView(rootView: NoteRichTextEditor(note: note, store: store, control: control))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 450, height: 230),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.close() }
+        if !openAfterInsertion {
+            try await Task.sleep(for: .milliseconds(60))
+            try insert()
+        }
+        let start = (original as NSString).length + 2
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if control.view?.selectedRange().location == start { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let view = try #require(control.view)
+        #expect(view.string == original + "\n\n" + transcript)
+        let caret = NSRange(location: start, length: 0)
+        #expect(view.selectedRange() == caret)
+        let line = view.convert(window.convertFromScreen(view.firstRect(forCharacterRange: caret, actualRange: nil)), from: nil)
+        #expect(view.visibleRect.intersects(line.insetBy(dx: -1, dy: 0)))
+        let nextParagraph = NSRange(location: start + ("Recognized speech\n" as NSString).length, length: 0)
+        let secondLine = view.convert(window.convertFromScreen(view.firstRect(forCharacterRange: nextParagraph, actualRange: nil)), from: nil)
+        #expect(view.visibleRect.intersects(secondLine.insetBy(dx: -1, dy: 0)))
     }
 
     @Test func transcriptionSelectionSurvivesNewPreferencesInstance() throws {
@@ -132,6 +264,8 @@ import Testing
 
 private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
     static let longRecordingRequests = Mutex(0)
+    static let splitRequests = Mutex(0)
+    static let splitCleanupRequests = Mutex(0)
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -139,6 +273,8 @@ private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
         guard let url = request.url else { return }
         let authorization = request.value(forHTTPHeaderField: "Authorization")
         let payload: String?
+        var status: Int?
+        var headers = ["Content-Type": "application/json"]
         switch (url.host(), url.path, request.httpMethod, authorization) {
         case ("ngw.devices.sberbank.ru", "/api/v2/oauth", "POST", "Basic fixture"):
             payload = #"{"access_token":"test-token","expires_at":4102444800}"#
@@ -150,6 +286,30 @@ private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
             payload = #"{"choices":[{"message":{"content":"Текст GigaChat"},"finish_reason":"stop"}]}"#
         case ("api.giga.chat", "/v1/files/uploaded-fixture/delete", "POST", "Bearer test-token"):
             payload = ""
+        case ("ngw.devices.sberbank.ru", "/api/v2/oauth", "POST", "Basic split-fixture"):
+            payload = #"{"access_token":"split-token","expires_at":4102444800}"#
+        case ("api.giga.chat", "/v1/files", "POST", "Bearer split-token"):
+            payload = #"{"id":"split-file"}"#
+        case ("api.giga.chat", "/v1/chat/completions", "POST", "Bearer split-token"):
+            let requestNumber = Self.splitRequests.withLock { count in
+                count += 1
+                return count
+            }
+            switch requestNumber {
+            case 1:
+                status = 429
+                headers["Retry-After"] = "0"
+                payload = nil
+            case 2: payload = #"{"choices":[{"finish_reason":"length"}]}"#
+            case 3: payload = #"{"choices":[{"message":{"content":"Short first part"},"finish_reason":"stop"}]}"#
+            default: payload = #"{"choices":[{"message":{"content":null},"finish_reason":"stop"}]}"#
+            }
+        case ("api.giga.chat", "/v1/files/split-file/delete", "POST", "Bearer split-token"):
+            Self.splitCleanupRequests.withLock { $0 += 1 }
+            if Self.splitRequests.withLock({ $0 }) == 2 { status = 500 }
+            payload = ""
+        case ("api.openai.com", "/v1/audio/transcriptions", "POST", "Bearer malformed-fixture"):
+            payload = #"{"unexpected":"This is not a transcription"}"#
         case ("api.openai.com", "/v1/models", "GET", "Bearer fixture"):
             payload = #"{"data":[{"id":"gpt-transcribe"},{"id":"gpt-4o"}]}"#
         case ("api.openai.com", "/v1/audio/transcriptions", "POST", "Bearer long-recording-fixture"):
@@ -166,8 +326,8 @@ private final class NoteSpeechFixture: URLProtocol, @unchecked Sendable {
             payload = #"{"text":"OpenAI transcript"}"#
         default: payload = nil
         }
-        let response = HTTPURLResponse(url: url, statusCode: payload == nil ? 400 : 200,
-                                      httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        let response = HTTPURLResponse(url: url, statusCode: status ?? (payload == nil ? 400 : 200),
+                                      httpVersion: nil, headerFields: headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         if let payload, !payload.isEmpty { client?.urlProtocol(self, didLoad: Data(payload.utf8)) }
         client?.urlProtocolDidFinishLoading(self)

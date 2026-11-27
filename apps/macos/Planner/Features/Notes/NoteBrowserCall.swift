@@ -7,6 +7,11 @@ final class NoteBrowserCall {
         case waiting, recording, paused, stopping
     }
 
+    enum MicrophoneState: String { case pending, available, unavailable }
+
+    private(set) var waitingMessage = "Выберите вкладку звонка в Chrome."
+    private(set) var microphoneState = MicrophoneState.pending
+    private(set) var tabLevel: Float = 0
     let noteID: UUID
     let file: URL
     private(set) var phase = Phase.waiting
@@ -63,6 +68,7 @@ final class NoteBrowserCall {
         case .recording:
             phase = .paused
             microphone = 0
+            tabLevel = 0
         case .paused: phase = .recording
         default: break
         }
@@ -103,6 +109,7 @@ final class NoteBrowserCall {
             case "processor.js": return resource("note-call-processor", ext: "js", type: "text/javascript; charset=utf-8")
             case "state" where request.headers["x-takt-call"] == "1":
                 lastContact = .now
+                if phase == .waiting { deadline = .now + .seconds(180) }
                 return stateResponse()
             default: return .init(status: "404 Not Found")
             }
@@ -110,6 +117,15 @@ final class NoteBrowserCall {
         lastContact = .now
         do {
             switch route {
+            case "setup" where phase == .waiting:
+                switch String(decoding: request.body, as: UTF8.self) {
+                case "chooseTab": waitingMessage = "Выберите вкладку встречи в Chrome и подтвердите доступ."
+                case "sourceUnavailable": waitingMessage = "Chrome не смог начать захват выбранной вкладки. Откройте вкладку встречи и выберите её ещё раз."
+                case "tabAudio": waitingMessage = "Выберите вкладку встречи и включите передачу звука вкладки."
+                case "audioSetup": waitingMessage = "Chrome не смог подготовить звук. Повторите выбор вкладки."
+                default: return .init(status: "400 Bad Request")
+                }
+                deadline = .now + .seconds(180)
             case "begin" where phase == .waiting && request.body.isEmpty:
                 try beginAudio()
             case "chunk" where phase != .waiting:
@@ -120,6 +136,9 @@ final class NoteBrowserCall {
                 if sequence < nextChunk { return stateResponse() }
                 guard sequence == nextChunk else { return .init(status: "409 Conflict") }
                 nextChunk += 1
+                if let state = request.headers["x-takt-microphone"].flatMap(MicrophoneState.init(rawValue:)) {
+                    microphoneState = state
+                }
                 try appendAudio(request.body)
             case "finish" where phase != .waiting && request.body.isEmpty:
                 finish()
@@ -145,15 +164,17 @@ final class NoteBrowserCall {
         guard phase == .recording || (phase == .stopping && keepTail), let audio else { return }
         let result = try audio.append(data)
         microphone = result.microphone
+        tabLevel = result.tab
         writtenFrames += result.frames
         duration = Double(writtenFrames) / Double(NoteCallAudio.sampleRate)
     }
 
     #if DEBUG
     /// UI-тест использует тот же файл и состояния, что и Chrome, с сигналом вместо вкладки.
-    func startTestCapture() throws {
+    func startTestCapture(packet: Data = NoteRecordingTestAudio.tone()) throws {
         try beginAudio()
-        try appendAudio(NoteRecordingTestAudio.tone())
+        microphoneState = .available
+        try appendAudio(packet)
     }
     #endif
 

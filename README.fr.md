@@ -111,7 +111,7 @@ Vos tâches restent accessibles sur votre appareil. Si vous activez la synchroni
 
 [macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (prévu)](apps/windows/README.md)
 
-Prérequis pour macOS : macOS 26+, Xcode 26 avec Swift 6.2 et les Command Line Tools. Les scripts nécessitent Python 3. Le paquet de traduction est inclus. La compilation utilise des versions fixes des paquets Swift MLX.
+Prérequis pour macOS : macOS 26+, Xcode 26 avec Swift 6.2 et les Command Line Tools. Les scripts nécessitent Python 3. Le paquet de traduction est inclus.
 
 Ouvrez `apps/macos/Planner.xcodeproj`, sélectionnez **Planner → My Mac** et lancez l’application avec **⌘R**.
 
@@ -126,8 +126,6 @@ xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
 Créer un DMG de distribution pour Apple Silicon :
 
 ```sh
-xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
-  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
 python3 apps/macos/scripts/build_release.py
 ```
 

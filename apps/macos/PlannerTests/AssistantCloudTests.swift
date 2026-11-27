@@ -19,7 +19,7 @@ import Testing
               checklist: ["Find figures", "Make slides"])
     }
 
-    @Test func olderHistoryDefaultsToLocal() throws {
+    @Test func olderHistoryHasNoProviderSelected() throws {
         let data = Data("""
             {"id":"\(UUID())","title":"Old chat","draft":"","messages":[],"actions":[],"createdAt":0}
             """.utf8)
@@ -117,7 +117,7 @@ import Testing
         thread.actions = [.init(proposal: proposal(), context: context)]
         thread.activeTextEditID = UUID()
 
-        thread.chooseModel(selected)
+        thread.chooseModel(id: selected.id, efforts: selected.efforts)
         #expect(thread.usesCloudModel)
         #expect(thread.id == originalID)
         #expect(thread.draft == "Unsent draft")
@@ -135,12 +135,26 @@ import Testing
         #expect(continued.drafts.values.contains(thread.actions[1].id))
         #expect(String(decoding: continued.body, as: UTF8.self).contains("Cloud answer"))
 
-        thread.chooseModel(nil)
-        #expect(!thread.usesCloudModel)
-        #expect(thread.protectedLocalActionIDs == Set(thread.actions.map(\.id)))
+        // Simulate reopening an archive written after the user switched away from a provider.
         thread.messages.append(.init(role: .user, text: "Another local message"))
-        thread.chooseModel(selected)
-        let restored = try JSONDecoder().decode(AssistantThread.self, from: JSONEncoder().encode(thread))
+        let store = AssistantStore(url: FileManager.default.temporaryDirectory
+            .appending(path: "LegacyProvider-\(UUID())/chat.json"))
+        defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
+        var saved = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(thread)) as? [String: Any])
+        saved["localModelSelected"] = true
+        saved["protectedLocalActionIDs"] = thread.actions.map { $0.id.uuidString }
+        let legacy: [String: Any] = ["version": 2, "currentID": originalID.uuidString, "threads": [saved]]
+        try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: legacy).write(to: store.url)
+        let service = AssistantService(store: store)
+        var restored = try #require(service.current)
+        #expect(restored.cloud == nil && restored.draft == "Unsent draft")
+        #expect(restored.messages.map(\.text) == thread.messages.map(\.text))
+        #expect(restored.actions.map(\.id) == thread.actions.map(\.id))
+        try store.save(service.archive)
+        #expect(try store.load().threads.first?.cloud == nil)
+        #expect(try !String(contentsOf: store.url, encoding: .utf8).contains("localModelSelected"))
+        restored.chooseModel(id: selected.id, efforts: selected.efforts)
         let next = try AssistantCloudRequest(thread: restored, text: "Hello again", context: context,
             edit: nil, model: selected, effort: nil)
         #expect(restored.usesCloudModel && restored.id == originalID)

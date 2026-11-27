@@ -290,6 +290,32 @@ final class CloudWorkspace {
         }
     }
 
+    private func supportSubmissionKey(for profile: SyncProfile) -> String {
+        "planner.support.pending." + profile.account.id
+    }
+
+    func pendingSupportSubmission(for profile: SyncProfile) -> SupportSubmission? {
+        guard profile == self.profile, let data = defaults.data(forKey: supportSubmissionKey(for: profile)) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(SupportSubmission.self, from: data)
+    }
+
+    func sendSupport(_ submission: SupportSubmission, for profile: SyncProfile) async throws -> String {
+        guard profile == self.profile, let api = activeAPI else { throw SyncProblem.signInRequired }
+        guard SupportSubmission.isValid(submission.message) else { throw SyncProblem.invalidResponse }
+        try Task.checkCancellation()
+        let key = supportSubmissionKey(for: profile)
+        defaults.set(try JSONEncoder().encode(submission), forKey: key)
+        let code = try await api.sendSupport(submission)
+        try Task.checkCancellation()
+        guard profile == self.profile, activeAPI === api else { throw CancellationError() }
+        if pendingSupportSubmission(for: profile)?.submissionId == submission.submissionId {
+            defaults.removeObject(forKey: key)
+        }
+        return code
+    }
+
     func signOut() async {
         guard !busy, profile != nil else { return }
         busy = true

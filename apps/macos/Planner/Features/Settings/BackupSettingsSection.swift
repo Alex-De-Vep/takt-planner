@@ -48,6 +48,7 @@ struct BackupSettingsSection: View {
                         Button(strings["Отмена"]) { showsPreview = false }.keyboardShortcut(.cancelAction)
                         Button(strings["Восстановить на Mac"]) { restoreBackup(preview) }
                             .keyboardShortcut(.defaultAction)
+                            .tint(PlannerStyle.settingsControlTint)
                             .accessibilityIdentifier("confirm-restore-backup")
                     }
                 }

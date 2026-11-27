@@ -121,7 +121,7 @@ Tasks and notes are available on your device. When you enable cloud sync, the ap
 
 [macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (planned)](apps/windows/README.md)
 
-Requires macOS 26+, Xcode 26 with Swift 6.2 support, Command Line Tools and Python 3 for helper scripts. The localization package is included. The build uses pinned MLX Swift packages.
+Requires macOS 26+, Xcode 26 with Swift 6.2 support, Command Line Tools and Python 3 for helper scripts. The localization package is included.
 
 Open `apps/macos/Planner.xcodeproj`, select **Planner → My Mac**, and run with **⌘R**.
 
@@ -136,8 +136,6 @@ xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
 Build a release DMG for Apple Silicon:
 
 ```sh
-xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
-  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
 python3 apps/macos/scripts/build_release.py
 ```
 

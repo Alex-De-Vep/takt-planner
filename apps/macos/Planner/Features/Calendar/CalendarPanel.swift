@@ -67,7 +67,7 @@ struct CalendarPanel: View {
                 moveFeedback
                 creationActions
             } else {
-                CalendarAccessView(service: service).padding(20)
+                CalendarAccessView(service: service, primaryTint: PlannerStyle.calendarControlTint).padding(20)
                 Spacer()
             }
         }
@@ -87,6 +87,7 @@ struct CalendarPanel: View {
         .alert(strings["Календарь"], isPresented: Binding(get: { state.message != nil }, set: { if !$0 { state.message = nil } })) {
             Button(strings["Понятно"], role: .cancel) { state.message = nil }
         } message: { Text(strings[state.message ?? ""]) }
+        .tint(PlannerStyle.calendarAccent)
     }
 
     private var monthGrid: some View {
@@ -113,11 +114,11 @@ struct CalendarPanel: View {
                         VStack(spacing: 2) {
                             Text(day, format: .dateTime.day()).font(.system(size: 12, weight: today ? .bold : .regular))
                                 .frame(width: 28, height: 25)
-                                .background(selected ? PlannerStyle.accent : .clear, in: RoundedRectangle(cornerRadius: 7))
-                                .overlay { if today { RoundedRectangle(cornerRadius: 7).stroke(PlannerStyle.accent, lineWidth: 1) } }
-                                .foregroundStyle(selected ? .white : .primary)
+                                .background(selected ? PlannerStyle.calendarAccent : .clear, in: RoundedRectangle(cornerRadius: 7))
+                                .overlay { if today { RoundedRectangle(cornerRadius: 7).stroke(PlannerStyle.calendarAccent, lineWidth: 1) } }
+                                .foregroundStyle(selected ? PlannerStyle.calendarAccentForeground : .primary)
                                 .animation(PlannerMotion.animation(.feedback, reduceMotion: reduceMotion), value: selected)
-                            Circle().fill(events.contains { CalendarDates.occurs($0, on: day) } ? PlannerStyle.accent : .clear).frame(width: 3, height: 3)
+                            Circle().fill(events.contains { CalendarDates.occurs($0, on: day) } ? PlannerStyle.calendarAccent : .clear).frame(width: 3, height: 3)
                         }
                         .opacity(Calendar.current.isDate(day, equalTo: state.month, toGranularity: .month) ? 1 : 0.4)
                         .frame(maxWidth: .infinity)
@@ -150,7 +151,7 @@ struct CalendarPanel: View {
             HStack(spacing: 10) {
                 Picker(strings["Период событий"], selection: $preferences.calendarAgendaMode) {
                     ForEach(CalendarAgendaMode.allCases, id: \.self) { mode in Text(strings[mode.title]).tag(mode) }
-                }.pickerStyle(.segmented).labelsHidden()
+                }.pickerStyle(.segmented).labelsHidden().tint(PlannerStyle.calendarControlTint)
                     .accessibilityIdentifier("calendar-agenda-mode")
                 Button { preferences.calendarAgendaLayout = preferences.calendarAgendaLayout.toggled } label: {
                     Image(systemName: preferences.calendarAgendaLayout.switchSymbol)
@@ -248,7 +249,7 @@ struct CalendarPanel: View {
                 Button { state.presentation = EventPresentation(day: state.selectedDate) } label: {
                     Label(strings["Событие"], systemImage: "plus")
                         .frame(maxWidth: .infinity, minHeight: 20)
-                }.buttonStyle(.borderedProminent)
+                }.buttonStyle(.borderedProminent).tint(PlannerStyle.calendarControlTint)
                 if let selectedTask {
                     Button {
                         state.presentation = EventPresentation(day: state.selectedDate, taskID: selectedTask.id, title: selectedTask.displayTitle(using: strings))
@@ -289,6 +290,7 @@ struct CalendarPanel: View {
 struct CalendarAccessView: View {
     @Environment(\.translations) private var strings
     let service: CalendarService
+    let primaryTint: Color
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "calendar.badge.exclamationmark").font(.largeTitle).foregroundStyle(.secondary)
@@ -297,7 +299,7 @@ struct CalendarAccessView: View {
             if let error = service.connectionError { Text(strings[error]).font(.caption).foregroundStyle(.red) }
             if service.access == .notDetermined || service.access == .writeOnly {
                 Button(strings["Подключить календарь"]) { Task { await service.connect() } }
-                    .buttonStyle(.borderedProminent).disabled(service.connecting)
+                    .buttonStyle(.borderedProminent).tint(primaryTint).disabled(service.connecting)
             } else {
                 Text(strings["Доступ к календарям отключён. Задачи продолжают работать."]).font(.caption).foregroundStyle(.secondary)
                 Button(strings["Открыть системные настройки"]) { service.openPrivacySettings() }

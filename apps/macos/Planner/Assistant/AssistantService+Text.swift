@@ -11,28 +11,6 @@ extension AssistantService {
         guard !generating, !applying, let t = currentIndex else { return }
         archive.threads[t].activeTextEditID = id; persist()
     }
-    @discardableResult func beginTextEdit(task: PlannerTask, tasks: TaskService) -> Bool {
-        do { return beginTextEdit(target: .savedTask, snapshot: try tasks.assistantTextSnapshot(task)) }
-        catch { self.error = error.localizedDescription; return false }
-    }
-    @discardableResult func beginTextEdit(proposal: AssistantAction) -> Bool {
-        guard proposal.proposal.kind == .task, [.pending, .failed].contains(proposal.status) else { return false }
-        return beginTextEdit(target: .proposal, snapshot: Self.textSnapshot(proposal))
-    }
-    private func beginTextEdit(target: AssistantTextEdit.Target, snapshot: AssistantTextSnapshot) -> Bool {
-        guard !generating, !applying, !storageFailed, let t = currentIndex else { return false }
-        let previous = archive
-        var edits = archive.threads[t].textEdits ?? []
-        if let existing = edits.first(where: { $0.target == target && $0.before.id == snapshot.id && $0.status == .pending }) {
-            archive.threads[t].activeTextEditID = existing.id
-        } else {
-            let edit = AssistantTextEdit(target: target, before: snapshot)
-            edits.append(edit); archive.threads[t].textEdits = edits
-            archive.threads[t].activeTextEditID = edit.id
-        }
-        guard persist() else { archive = previous; return false }
-        error = nil; return true
-    }
     static func textSnapshot(_ action: AssistantAction) -> AssistantTextSnapshot {
         .init(id: action.id, title: action.proposal.title, description: action.proposal.description ?? "",
             checklist: (action.proposal.checklist ?? []).map { .init(id: UUID(), title: $0, isCompleted: false) })
@@ -74,68 +52,6 @@ extension AssistantService {
             archive.threads[t].activeTextEditID = replacement.id
             if !persist() { archive = previous }
         } catch { self.error = error.localizedDescription }
-    }
-    /// Явная карточка назначения важнее текущего выделения в соседней колонке.
-    func routeTextRequest(_ text: String, context: AssistantContext, tasks: TaskService) -> Bool {
-        if activeTextEdit != nil { sendText(text, language: context.language); return true }
-        guard AssistantTextPrompt.isTextRequest(text) else { return false }
-        let pending = current?.actions.filter { $0.proposal.kind == .task && [.pending, .failed].contains($0.status) } ?? []
-        let explicitTask = AssistantIntentPolicy.matches(text, "открыт|выбран|(?:open|selected|current) task")
-        if !explicitTask, pending.count == 1 {
-            if beginTextEdit(proposal: pending[0]) { sendText(text, language: context.language) }
-        } else if !explicitTask, pending.count > 1 {
-            error = "Выберите «Доработать» у нужного предложения задачи."
-        } else if let id = context.taskID.flatMap(UUID.init(uuidString:)), let task = try? tasks.assistantTask(id: id) {
-            if beginTextEdit(task: task, tasks: tasks) { sendText(text, language: context.language) }
-        } else { error = "Откройте задачу и включите её контекст или выберите предложение в чате." }
-        return true
-    }
-    func sendText(_ text: String, language: String) {
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text.count <= 8000 else { error = "Сообщение слишком длинное. Сократите его до 8000 символов."; return }
-        guard current?.usesCloudModel != true, !generating, !applying, !storageFailed, let model = localModel, model.canChat, let t = currentIndex, let edit = activeTextEdit, edit.committed == nil else { return }
-        error = nil
-        let previous = archive
-        if let e = archive.threads[t].textEdits?.firstIndex(where: { $0.id == edit.id }) {
-            archive.threads[t].textEdits?[e].lastRequest = text
-        }
-        archive.threads[t].draft = ""
-        archive.threads[t].messages.append(.init(role: .user, text: text))
-        if archive.threads[t].messages.count == 1 { archive.threads[t].title = String(text.prefix(60)) }
-        guard persist() else { archive = previous; return }
-        let snapshot = archive.threads[t]
-        let token = UUID(); requestID = token; generating = true
-        generation = Task { [weak self] in
-            guard let self else { return }
-            var acquired = false
-            do {
-                // Проверяем размер до загрузки весов: слишком большой запрос не занимает RAM модели.
-                let prompt = try AssistantTextPrompt.request(edit: edit, thread: snapshot, language: language)
-                try await model.beginUse(); acquired = true
-                let output = try await model.backend.respond(instructions: AssistantTextPrompt.instructions, prompt: prompt)
-                try Task.checkCancellation()
-                let response = try ActionPlanValidator.decode(output)
-                guard (response.actions ?? []).isEmpty else { throw AssistantFailure(message: "Ответ редактора должен содержать только текстовые правки.") }
-                guard token == requestID, let t = archive.threads.firstIndex(where: { $0.id == snapshot.id }),
-                      let e = archive.threads[t].textEdits?.firstIndex(where: { $0.id == edit.id }) else { throw CancellationError() }
-                let questions = response.questions ?? []
-                if questions.isEmpty {
-                    guard let change = response.textEdit else { throw AssistantFailure(message: "Модель не предложила текстовых изменений. Уточните запрос.") }
-                    var updated = archive.threads[t].textEdits![e]
-                    try updated.propose(change)
-                    archive.threads[t].textEdits?[e] = updated
-                }
-                let message = language == "en" ? (questions.isEmpty ? "Review Before → After. Nothing has been saved to the task." : "Please clarify the task details.") : (questions.isEmpty ? "Проверьте «Было → Стало». Изменения задачи ещё не сохранены." : "Уточните детали задачи.")
-                archive.threads[t].messages.append(.init(role: .assistant, text: message, questions: questions))
-                persist()
-            } catch {
-                if token == requestID, !Task.isCancelled, !(error is CancellationError) {
-                    self.error = error is DecodingError ? "Не удалось проверить ответ модели. Упростите запрос и повторите." : error.localizedDescription
-                }
-            }
-            if acquired { await model.endUse() }
-            if token == requestID { generating = false; generation = nil }
-        }
     }
     func applyTextEdit(_ id: UUID, tasks: TaskService) {
         guard !generating, !applying, !storageFailed, let t = currentIndex,

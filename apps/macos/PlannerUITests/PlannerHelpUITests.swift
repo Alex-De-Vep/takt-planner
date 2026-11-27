@@ -48,7 +48,11 @@ final class PlannerHelpUITests: XCTestCase {
         XCTAssertTrue(guide.waitForExistence(timeout: 5))
         let heading = guide.staticTexts["help-chapter-title"]
         XCTAssertEqual(heading.label, first)
-        guide.staticTexts["help-topic-4"].click()
+        let topic = guide.staticTexts.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label == %@", "help-topic-", today
+        )).firstMatch
+        XCTAssertTrue(topic.exists)
+        topic.click()
         XCTAssertEqual(heading.label, today)
         let attachment = XCTAttachment(screenshot: guide.screenshot())
         attachment.name = title

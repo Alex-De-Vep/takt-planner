@@ -17,8 +17,10 @@ struct WorkspaceView: View {
     let folderDrag: FolderDragState
     let assistant: AssistantService
     let syncEngine: SyncEngine?
+    @Binding var widgetAction: WidgetQuickAction?
     @Query private var eventLinks: [TaskEventLink]
     @State private var calendarState = CalendarPanelState()
+    @State private var pendingWidgetEvent = false
     @State private var editorStore = TaskEditorStore()
     @State private var state = WorkspaceState()
     @State private var isSidebarVisible = true
@@ -95,7 +97,7 @@ struct WorkspaceView: View {
         guard let note = editableNote else { return nil }
         let voice = service.notes.voice
         return WorkspaceNoteRecordingActions(
-            canStart: !voice.isBusy && voice.drafts[note.id] == nil,
+            canStart: !voice.isBusy,
             startVoice: { Task { await voice.start(note.id) } },
             startCall: { voice.startCall(note.id, russian: preferences.language.resolvedCode == "ru") }
         )
@@ -127,10 +129,14 @@ struct WorkspaceView: View {
             showNoteFolderPicker = true
             return
         }
+        createNote(in: filter)
+    }
+
+    private func createNote(in folder: TaskFilter) {
         let window = NSApp.keyWindow
         let previousList = WorkspaceListNativeFocus.prepareForCreation(in: window)
         let id = withAnimation(PlannerMotion.animation(.listChange, reduceMotion: reduceMotion)) {
-            service.notes.create(folder: filter.id)
+            service.notes.create(folder: folder.id)
         }
         if let id {
             withImmediateNavigationUpdate {
@@ -180,6 +186,15 @@ struct WorkspaceView: View {
     }
 
     var body: some View {
+        workspaceLifecycle
+            .onChange(of: widgetAction, initial: true) { handleWidgetAction() }
+            .onChange(of: calendar.access) { showWidgetEventWhenReady() }
+            .onChange(of: preferences.calendarOpen) {
+                if !preferences.calendarOpen { pendingWidgetEvent = false }
+            }
+    }
+
+    private var workspaceLifecycle: some View {
         workspaceWithDialogs
             .transaction { transaction in
                 if reduceMotion {
@@ -260,6 +275,8 @@ struct WorkspaceView: View {
             deadlineTitle: strings["Срок задачи"],
             hasSelectedTask: selectedTask != nil,
             noteRecording: noteRecordingActions,
+            voice: service.notes.voice,
+            showsActiveRecording: service.notes.voice.isBusy,
             noteActions: noteToolbarActions,
             listAnimationKey: listAnimationKey,
             newFolder: newFolder,
@@ -381,6 +398,7 @@ struct WorkspaceView: View {
     /// Диалоги вынесены отдельно: основной экран остаётся читаемым и быстро компилируется.
     private var workspaceWithDialogs: some View {
         splitView
+        .sheet(isPresented: transcriptSheetPresented) { transcriptSheet }
         .sheet(isPresented: $showFolderEditor) {
             FolderEditor(folder: editingFolder, service: service) { folder in
                 selectFilter(.folder(folder.id))
@@ -439,6 +457,33 @@ struct WorkspaceView: View {
         } message: { Text(strings["Заметку можно восстановить в разделе «Недавно удалённые»."]) }
     }
 
+    private var transcriptSheetPresented: Binding<Bool> {
+        let voice = service.notes.voice
+        return Binding(get: { !voice.transcriptPreviews.isEmpty }, set: { presented in
+            if !presented, let preview = voice.transcriptPreviews.first { voice.dismissTranscript(preview.id) }
+        })
+    }
+
+    @ViewBuilder private var transcriptSheet: some View {
+        let store = service.notes
+        let voice = store.voice
+        if let preview = voice.transcriptPreviews.first {
+            let note = store.notes.first { $0.id == preview.noteID && $0.deletedAt == nil }
+            let title = note?.displayTitle ?? ""
+            NoteTranscriptSheet(preview: preview, noteTitle: title.isEmpty ? strings["Без названия"] : title,
+                canInsert: note != nil && !store.unreadable,
+                insert: {
+                    try voice.insertTranscript(preview.id, store: store)
+                    withImmediateNavigationUpdate {
+                        if !showsNotes || !visibleNotes.contains(where: { $0.id == preview.noteID }) { selectNoteScope(.all) }
+                        createdNoteID = nil
+                        selectedNoteID = preview.noteID
+                    }
+                }, close: { voice.dismissTranscript(preview.id) })
+                .id(preview.id)
+        }
+    }
+
     private func openNotificationTask() {
         guard let id = notifications.taskToOpen, let task = tasks.first(where: { $0.id == id }) else { return }
         showsNotes = false
@@ -475,6 +520,32 @@ struct WorkspaceView: View {
             // При неудачном сохранении возвращаем прежний фокус, не меняя выбор.
             window.makeFirstResponder(previousList)
         }
+    }
+
+    private func handleWidgetAction() {
+        guard let action = widgetAction else { return }
+        widgetAction = nil
+        switch action {
+        case .newNote:
+            guard !showNoteFolderPicker, !showFolderEditor else { return }
+            let folder = noteScope == .folder && filter.acceptsNotes ? filter : .inbox
+            selectNoteScope(folder == .inbox ? .all : .folder)
+            createNote(in: folder)
+        case .newEvent:
+            preferences.rightPanel = .calendar
+            guard calendarState.presentation == nil else { return }
+            calendarState.today()
+            pendingWidgetEvent = true
+            showWidgetEventWhenReady()
+        }
+    }
+
+    private func showWidgetEventWhenReady() {
+        guard pendingWidgetEvent, preferences.calendarOpen, calendar.access == .full else { return }
+        pendingWidgetEvent = false
+        guard calendarState.presentation == nil,
+              calendar.creationCalendar(preferred: preferences.creationCalendarID) != nil else { return }
+        calendarState.presentation = EventPresentation(day: calendarState.selectedDate)
     }
 
     private func selectNoteScope(_ scope: NoteScope) {

@@ -1,19 +1,16 @@
 {
   "fill": {
-    "linear-gradient": [
-      "srgb:0.55,0.25,1,1",
-      "srgb:0.34,0.06,0.9,1"
-    ]
+    "solid": "srgb:0.99127,0.96547,0.94352,1"
   },
   "groups": [
     {
       "layers": [
         {
           "image-name": "tasks-icon.png",
-          "name": "Tasks",
+          "name": "Checklist",
           "glass": false,
           "position": {
-            "scale": 1.27,
+            "scale": 1,
             "translation-in-points": [
               0,
               0

@@ -92,7 +92,10 @@ struct SidebarView: View {
     }
 
     private func noteFilter(_ filter: SidebarSelection, title: String, symbol: String, identifier: String) -> some View {
-        SidebarFolderRow(title: title, symbol: symbol, selected: selection == filter)
+        let count = filter == .allNotes ? notes.count(where: { $0.deletedAt == nil && !$0.isPurged }) : nil
+        return SidebarFolderRow(title: title, symbol: symbol, countText: count?.formatted(),
+                                countDescription: count.map { strings.format("Заметок: %d", $0) } ?? "",
+                                selected: selection == filter)
             .tag(filter)
             .accessibilityIdentifier(identifier)
     }

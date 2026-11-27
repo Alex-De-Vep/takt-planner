@@ -57,14 +57,29 @@ extension AssistantService {
         }
     }
 
+    func chatMenuModels(preferences: AppPreferences) -> [AssistantCatalogModel] {
+        modelCatalog(preferences: preferences).filter { $0.supportsChat && preferences.assistantModelVisibility.includes($0) }
+    }
+
+    var configuredChatModelID: AssistantCatalogModel.ID? {
+        guard let settings = current?.cloud, let modelID = settings.modelID else { return nil }
+        return .init(gateway: settings.gateway, modelID: modelID)
+    }
+
+    func selectedChatModelID(in visibility: AssistantModelVisibility) -> AssistantCatalogModel.ID? {
+        guard let id = configuredChatModelID, visibility.includes(id) else { return nil }
+        let available = id.gateway == nil ? cloudModel != nil : gatewayModel != nil
+        return available ? id : nil
+    }
+
     func canSelectChatModel(_ model: AssistantCatalogModel) -> Bool {
         guard !generating, !applying, !storageFailed else { return false }
         if let gateway = model.gateway { return !gateways.busy.contains(gateway) }
         return cloud.canSend(to: chatGPTAccountID)
     }
 
-    func selectChatModel(_ model: AssistantCatalogModel) {
-        guard model.supportsChat, canSelectChatModel(model) else { return }
+    func selectChatModel(_ model: AssistantCatalogModel, visibility: AssistantModelVisibility) {
+        guard visibility.includes(model), model.supportsChat, canSelectChatModel(model) else { return }
         if let gateway = model.gateway { selectGatewayModel(model.modelID, gateway: gateway) }
         else { selectCloudModel(model.modelID) }
     }

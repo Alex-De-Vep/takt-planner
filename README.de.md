@@ -111,7 +111,7 @@ Deine Aufgaben sind auf deinem Gerät verfügbar. Wenn du die Cloud-Synchronisie
 
 [macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (geplant)](apps/windows/README.md)
 
-Benötigt werden macOS 26+, Xcode 26 mit Unterstützung für Swift 6.2 und die Command Line Tools. Die Hilfsskripte benötigen Python 3. Das Lokalisierungspaket ist enthalten. Der Build verwendet festgelegte Versionen der MLX-Pakete.
+Benötigt werden macOS 26+, Xcode 26 mit Unterstützung für Swift 6.2 und die Command Line Tools. Die Hilfsskripte benötigen Python 3. Das Lokalisierungspaket ist enthalten.
 
 Öffne `apps/macos/Planner.xcodeproj`, wähle **Planner → My Mac** und starte die App mit **⌘R**.
 
@@ -126,8 +126,6 @@ xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
 Release-DMG für Apple Silicon erstellen:
 
 ```sh
-xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
-  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
 python3 apps/macos/scripts/build_release.py
 ```
 

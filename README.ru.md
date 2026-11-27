@@ -119,7 +119,7 @@ Takt помогает собрать дела по папкам, выбрать 
 
 [macOS](apps/macos/README.md) · [Android](apps/android/README.md) · [Windows (в планах)](apps/windows/README.md)
 
-Нужны macOS 26+, Xcode 26 с поддержкой Swift 6.2 и Command Line Tools. Для вспомогательных скриптов нужен Python 3. Сборка использует закреплённые Swift-пакеты MLX. Пакет переводов находится в репозитории.
+Нужны macOS 26+, Xcode 26 с поддержкой Swift 6.2 и Command Line Tools. Для вспомогательных скриптов нужен Python 3. Пакет переводов находится в репозитории.
 
 Откройте `apps/macos/Planner.xcodeproj`, выберите схему **Planner** и **My Mac**, затем нажмите **⌘R**.
 
@@ -134,8 +134,6 @@ xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
 Release-сборка и DMG для Apple Silicon:
 
 ```sh
-xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
-  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
 python3 apps/macos/scripts/build_release.py
 ```
 

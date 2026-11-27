@@ -1,57 +1,59 @@
-import Foundation
+import AppKit
 import Testing
 @testable import Planner
 
 @MainActor struct AssistantModelSettingsTests {
-    @Test func visibilityStartsWithAllModelsAndSeparatesProvidersAndPurposes() {
-        var visibility = AssistantModelVisibility()
-        #expect(visibility.isVisible("shared", gateway: .openRouter, purpose: .chat))
-        visibility.setVisible(false, modelID: "shared", gateway: .openRouter, purpose: .chat)
-        #expect(!visibility.isVisible("shared", gateway: .openRouter, purpose: .chat))
-        #expect(visibility.isVisible("shared", gateway: .openRouter, purpose: .transcription))
-        #expect(visibility.isVisible("shared", gateway: .liteLLM, purpose: .chat))
-        #expect(visibility.isVisible("shared", gateway: nil, purpose: .chat))
-        #expect(visibility.isVisible("new-model", gateway: .openRouter, purpose: .chat))
-        visibility.setVisible(true, modelID: "shared", gateway: .openRouter, purpose: .chat)
-        #expect(visibility == AssistantModelVisibility())
+    @Test func priorPreferencesKeepOnlyExplicitSelectionsPerProvider() throws {
+        let data = Data(#"{"chat":{"openRouter":["hidden"]},"transcription":{},"knownSources":["openRouter"],"choices":{"openRouter":{"picked":true,"removed":false}}}"#.utf8)
+        var visibility = try JSONDecoder().decode(AssistantModelVisibility.self, from: data)
+        let chosen = AssistantCatalogModel(gateway: .openRouter, modelID: "picked", name: "Selected", supportsChat: true)
+        #expect(visibility.includes(chosen))
+        for id in ["hidden", "removed", "new"] {
+            #expect(!visibility.includes(.init(gateway: .openRouter, modelID: id)))
+        }
+        #expect(!visibility.includes(.init(gateway: .liteLLM, modelID: "picked")))
+        visibility.setIncluded(false, model: chosen)
+        #expect(!visibility.includes(chosen))
+        let old = try JSONDecoder().decode(AssistantModelVisibility.self, from: Data(#"{"chat":{},"transcription":{}}"#.utf8))
+        #expect(!old.includes(chosen))
     }
 
-    @Test func sharedChoicesMergePreviousListsAndKeepSelectionsWhenReconnecting() throws {
-        var visibility = AssistantModelVisibility()
-        let audio = AssistantTranscriptionSelection(gateway: .gemini, profileID: UUID(), modelID: "same", name: "Speech")
-        let dual = AssistantCatalogModel(gateway: .gemini, modelID: "same", name: "Dual", supportsChat: true, speech: audio)
-        visibility.setVisible(false, modelID: "same", gateway: .gemini, purpose: .chat)
-        visibility = try JSONDecoder().decode(AssistantModelVisibility.self, from: JSONEncoder().encode(visibility))
-        #expect(visibility.includes(dual))
-
-        visibility.setIncluded(false, model: dual)
-        #expect(!visibility.includes(dual))
-        visibility.setIncluded(true, model: dual)
-        #expect(visibility.includes(dual))
-
-        visibility.startWithEmptyList(gateway: .liteLLM)
-        let other = AssistantCatalogModel(gateway: .liteLLM, modelID: "same", name: "Other", supportsChat: true)
-        #expect(!visibility.includes(other))
-        visibility.setIncluded(true, model: other)
-        visibility.startWithEmptyList(gateway: .liteLLM)
-        #expect(visibility.includes(other))
-    }
-
-    @Test func displayListsAndTranscriptionChoiceSurviveRestartIndependently() throws {
+    @Test func chatMenuShowsOnlyChosenChatCapableModelsAcrossRestarts() throws {
+        let fixture = try ModelSettingsFixture()
+        defer { fixture.close() }
         let suite = "assistant.model-settings.\(UUID())"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = AppPreferences(defaults: defaults)
-        let selected = AssistantTranscriptionSelection(gateway: .liteLLM, profileID: UUID(), modelID: "audio", name: "Speech")
-        preferences.transcriptionModel = selected
-        preferences.assistantModelVisibility.setVisible(false, modelID: "chat", gateway: nil, purpose: .chat)
-        preferences.assistantModelVisibility.setVisible(false, modelID: "audio", gateway: .liteLLM, purpose: .transcription)
+        let service = fixture.assistant
+        let profile = try #require(fixture.gateways.profiles[.liteLLM])
+        let speech = AssistantTranscriptionSelection(gateway: .liteLLM, profileID: profile.id, modelID: "audio", name: "Speech")
+        preferences.manualSpeechModels = [speech]
+        preferences.transcriptionModel = speech
+        #expect(service.chatMenuModels(preferences: preferences).isEmpty)
+        let catalog = service.modelCatalog(preferences: preferences)
+        for model in catalog where ["second", "audio"].contains(model.modelID) {
+            preferences.assistantModelVisibility.setIncluded(true, model: model)
+        }
+        let reopened = AppPreferences(defaults: defaults)
+        #expect(service.chatMenuModels(preferences: reopened).map(\.modelID) == ["second"])
+        #expect(reopened.transcriptionModel == speech)
+    }
 
-        let restored = AppPreferences(defaults: defaults)
-        #expect(!restored.assistantModelVisibility.isVisible("chat", gateway: nil, purpose: .chat))
-        #expect(!restored.assistantModelVisibility.isVisible("audio", gateway: .liteLLM, purpose: .transcription))
-        #expect(restored.assistantModelVisibility.isVisible("audio", gateway: .liteLLM, purpose: .chat))
-        #expect(restored.transcriptionModel == selected)
+    @Test func logoIdentifiesTheModelCompanyAcrossConnections() {
+        func logo(_ gateway: AssistantGateway?, _ id: String) -> String? {
+            AssistantCatalogModel(gateway: gateway, modelID: id, name: id).brandLogo
+        }
+        #expect(logo(nil, "gpt-test") == "ChatGPTLogo")
+        #expect(logo(.openRouter, "anthropic/claude-test") == logo(.claude, "claude-test"))
+        #expect(logo(.copilot, "gemini-test") == logo(.gemini, "gemini-test"))
+        #expect(logo(.liteLLM, "qwen3.5-test") == logo(.qwen, "qwen-test"))
+        #expect(logo(.liteLLM, "private-alias") == nil)
+        #expect(logo(.openRouter, "unlisted/claude-alias") == nil)
+        for gateway in AssistantGateway.allCases {
+            if let asset = logo(gateway, "test") { #expect(NSImage(named: asset) != nil) }
+        }
+        #expect(NSImage(named: "ChatGPTLogo") != nil)
     }
 
     @Test func malformedDisplayPreferencesDoNotDiscardTheTranscriptionSelection() throws {
@@ -86,20 +88,32 @@ import Testing
         #expect(restored.current?.cloud?.modelID == "second")
     }
 
-    @Test func hidingTheActiveModelDoesNotChangeChatOrSpeechSelections() throws {
+    @Test func removingCurrentChatModelKeepsDraftAndRequiresAnExplicitReplacement() throws {
         let fixture = try ModelSettingsFixture()
         defer { fixture.close() }
-        let suite = "assistant.model-settings.\(UUID())"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let preferences = AppPreferences(defaults: defaults)
-        fixture.assistant.selectGatewayModel("first", gateway: .liteLLM)
-        preferences.transcriptionModel = .init(gateway: .liteLLM, profileID: UUID(), modelID: "speech", name: "Speech")
-        preferences.assistantModelVisibility.setVisible(false, modelID: "first", gateway: .liteLLM, purpose: .chat)
-        preferences.assistantModelVisibility.setVisible(false, modelID: "speech", gateway: .liteLLM, purpose: .transcription)
-        #expect(fixture.assistant.cloudModelName == "First model")
-        #expect(fixture.assistant.canSendCloud)
-        #expect(preferences.transcriptionModel?.modelID == "speech")
+        let assistant = fixture.assistant
+        let first = AssistantCatalogModel(gateway: .liteLLM, modelID: "first", name: "First model", supportsChat: true)
+        let second = AssistantCatalogModel(gateway: .liteLLM, modelID: "second", name: "Second model", supportsChat: true)
+        var visibility = AssistantModelVisibility()
+        visibility.setIncluded(true, model: first)
+        visibility.setIncluded(true, model: second)
+        assistant.selectChatModel(first, visibility: visibility)
+        assistant.setDraft("Unsent text")
+        #expect(assistant.canSendCloud(using: visibility))
+
+        visibility.setIncluded(false, model: first)
+        #expect(assistant.selectedChatModelID(in: visibility) == nil)
+        #expect(!assistant.canSendCloud(using: visibility))
+        let context = AssistantContext(now: .now, timeZoneID: "UTC", language: "en", folders: [], calendars: [],
+            defaultFolderID: "inbox", durationMinutes: 30)
+        assistant.sendCloud("Unsent text", context: context, visibility: visibility, tasks: nil)
+        #expect(assistant.error == "Выберите модель чата перед отправкой сообщения.")
+        #expect(assistant.current?.messages.isEmpty == true && assistant.current?.draft == "Unsent text")
+        #expect(!assistant.generating)
+        assistant.selectChatModel(second, visibility: visibility)
+        assistant.selectChatModel(first, visibility: visibility)
+        #expect(assistant.selectedChatModelID(in: visibility) == second.id)
+        #expect(assistant.canSendCloud(using: visibility) && assistant.error == nil)
     }
 
     @Test func modelSelectionRemainsLockedDuringGenerationAndRejectsUnknownModels() throws {

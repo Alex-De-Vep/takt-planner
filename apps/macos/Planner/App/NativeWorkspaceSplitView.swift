@@ -100,6 +100,8 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, Deadli
     let deadlineTitle: String
     let hasSelectedTask: Bool
     let noteRecording: WorkspaceNoteRecordingActions?
+    let voice: NoteVoiceRecording
+    let showsActiveRecording: Bool
     let noteActions: WorkspaceNoteToolbarActions?
     let listAnimationKey: WorkspaceListAnimationKey
     let newFolder: () -> Void
@@ -138,6 +140,9 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, Deadli
         })
         controller.updateNoteRecording(noteRecording, voiceTitle: strings["Записать голос"],
                                        callTitle: strings["Записать звонок"])
+        controller.updateActiveRecording(showsActiveRecording ? AnyView(
+            NoteActiveRecordingControls(voice: voice, compact: true).environment(\.self, context.environment)
+        ) : nil, title: strings["Текущая запись"])
         controller.updateSearch(text: search, title: searchTitle, clearTitle: clearSearchTitle, changed: { search = $0 })
         controller.updateDeadline(AnyView(deadline().environment(\.self, context.environment)),
                                   title: deadlineTitle, visible: hasSelectedTask)
@@ -243,6 +248,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let checklistToolbarItem = NSToolbarItem(itemIdentifier: .plannerChecklist)
     private let recordVoiceItem = NSToolbarItem(itemIdentifier: .plannerRecordVoice)
     private let recordCallItem = NSToolbarItem(itemIdentifier: .plannerRecordCall)
+    private let activeRecordingItem = NSToolbarItem(itemIdentifier: .plannerActiveRecording)
+    private let activeRecordingHost = NSHostingView(rootView: AnyView(EmptyView()))
     private let deadlineToolbarItem = NSToolbarItem(itemIdentifier: .plannerDeadline)
     private let deleteTaskToolbarItem = NSToolbarItem(itemIdentifier: .plannerDeleteTask)
     private let pinNoteToolbarItem = NSToolbarItem(itemIdentifier: .plannerPinNote)
@@ -354,6 +361,25 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         checklistButton.isEnabled = false
         configureButtonSurface(for: recordVoiceItem, content: recordVoiceButton)
         configureButtonSurface(for: recordCallItem, content: recordCallButton)
+        let recordingSize = NSSize(width: 134, height: WorkspaceToolbarButtonSurface.diameter)
+        let recordingSurface = WorkspaceToolbarContentView(frame: NSRect(origin: .zero, size: recordingSize))
+        recordingSurface.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            recordingSurface.widthAnchor.constraint(equalToConstant: recordingSize.width),
+            recordingSurface.heightAnchor.constraint(equalToConstant: recordingSize.height)
+        ])
+        let recordingGlass = NSGlassEffectView(frame: recordingSurface.bounds)
+        recordingGlass.style = .regular
+        recordingGlass.cornerRadius = recordingSize.height / 2
+        recordingGlass.autoresizingMask = [.width, .height]
+        activeRecordingHost.autoresizingMask = [.width, .height]
+        activeRecordingHost.frame = recordingGlass.bounds
+        recordingGlass.contentView = activeRecordingHost
+        recordingSurface.addSubview(recordingGlass)
+        activeRecordingItem.view = recordingSurface
+        activeRecordingItem.isBordered = false
+        activeRecordingItem.visibilityPriority = .user
+        activeRecordingItem.isHidden = true
         updateNoteRecording(nil, voiceTitle: "", callTitle: "")
         configureButtonSurface(for: deadlineToolbarItem, content: deadlineHost)
         deadlineToolbarItem.isHidden = true
@@ -717,11 +743,13 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         + (sidebarItem.isCollapsed ? [] : [.sidebarTrackingSeparator])
         + [.plannerFolderHeading, .flexibleSpace, .plannerSearch, .plannerDetailTrackingSeparator,
          .plannerNewTask, .space, .plannerChecklist, .plannerRecordVoice, .space, .plannerRecordCall, .plannerDeadline, .space, .plannerPinNote, .plannerDeleteTask]
+        + (activeRecordingItem.isHidden ? [] : [.plannerActiveRecording])
         + [.flexibleSpace, .plannerRightPanelSwitch] + calendarToolbarIdentifiers
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar) + [.sidebarTrackingSeparator, .plannerCalendarBoundary, .plannerCalendarTrailingBoundary, .plannerCalendarHeading]
+        toolbarDefaultItemIdentifiers(toolbar) + (activeRecordingItem.isHidden ? [.plannerActiveRecording] : [])
+        + [.sidebarTrackingSeparator, .plannerCalendarBoundary, .plannerCalendarTrailingBoundary, .plannerCalendarHeading]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
@@ -734,6 +762,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         case .plannerChecklist: return checklistToolbarItem
         case .plannerRecordVoice: return recordVoiceItem
         case .plannerRecordCall: return recordCallItem
+        case .plannerActiveRecording: return activeRecordingItem
         case .plannerDeadline: return deadlineToolbarItem
         case .plannerDeleteTask: return deleteTaskToolbarItem
         case .plannerPinNote: return pinNoteToolbarItem
@@ -773,6 +802,21 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             item.isEnabled = enabled
             button.isEnabled = enabled
         }
+    }
+
+    func updateActiveRecording(_ content: AnyView?, title: String) {
+        activeRecordingHost.rootView = content ?? AnyView(EmptyView())
+        activeRecordingItem.label = title
+        let shouldShow = content != nil
+        guard activeRecordingItem.isHidden == shouldShow else { return }
+        activeRecordingItem.isHidden = !shouldShow
+        if let index = workspaceToolbar.items.firstIndex(where: { $0.itemIdentifier == .plannerActiveRecording }) {
+            if !shouldShow { workspaceToolbar.removeItem(at: index) }
+        } else if shouldShow,
+                  let index = workspaceToolbar.items.firstIndex(where: { $0.itemIdentifier == .plannerDeleteTask }) {
+            workspaceToolbar.insertItem(withItemIdentifier: .plannerActiveRecording, at: index + 1)
+        }
+        scheduleToolbarAlignment()
     }
 
     @objc private func recordNoteVoice() {
@@ -1437,6 +1481,7 @@ private extension NSToolbarItem.Identifier {
     static let plannerChecklist = NSToolbarItem.Identifier("Planner.Checklist")
     static let plannerRecordVoice = NSToolbarItem.Identifier("Planner.RecordVoice")
     static let plannerRecordCall = NSToolbarItem.Identifier("Planner.RecordCall")
+    static let plannerActiveRecording = NSToolbarItem.Identifier("Planner.ActiveRecording")
     static let plannerDeadline = NSToolbarItem.Identifier("Planner.Deadline")
     static let plannerDeleteTask = NSToolbarItem.Identifier("Planner.DeleteTask")
     static let plannerPinNote = NSToolbarItem.Identifier("Planner.PinNote")

@@ -94,7 +94,7 @@ import Testing
         var action = AssistantAction(proposal: proposal(.event), context: context()); action.status = .applying
         var thread = AssistantThread(); thread.actions = [action]; thread.draft = "Черновик"
         try store.save(AssistantArchive(currentID: thread.id, threads: [thread]))
-        let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
+        let service = AssistantService(store: store)
         #expect(service.current?.draft == "Черновик")
         #expect(service.current?.actions.first?.status == .needsReview)
     }
@@ -102,24 +102,26 @@ import Testing
         let store = tempStore(); defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
         try FileManager.default.createDirectory(at: store.url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("broken".utf8).write(to: store.url)
-        let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
+        let service = AssistantService(store: store)
         service.newConversation()
         #expect(service.storageFailed && service.archive.threads.isEmpty)
         #expect(try String(contentsOf: store.url, encoding: .utf8) == "broken")
     }
-    @Test func conversationGenerationAndClarificationKeepActionIdentity() async throws {
-        let backend = FakeAIBackend()
-        let fixture = try InstalledModelFixture(backend: backend); defer { fixture.clean() }
-        let model = fixture.manager
-        let store = tempStore(); defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
-        let service = AssistantService(model: model, store: store)
-        service.send("Создай задачу", context: context())
-        while service.generating { await Task.yield() }
-        let id = try #require(service.current?.actions.first?.id)
-        service.send("Исправь название", context: context())
-        while service.generating { await Task.yield() }
-        #expect(service.current?.actions.first?.id == id)
-        #expect(service.current?.messages.count == 4)
+    @Test func editingACloudDraftKeepsItsIdentity() throws {
+        var thread = AssistantThread()
+        thread.chooseModel(id: "test-model")
+        var item = proposal()
+        thread = try AssistantService.cloudReply(.init(message: "", actions: [item]),
+            to: thread, drafts: [:], text: "Создай задачу", context: context(), edit: nil)
+        let original = try #require(thread.actions.first)
+        let request = try AssistantCloudRequest(thread: thread, text: "Исправь название",
+            context: context(), edit: nil, modelID: "test-model")
+        item.key = "draft_1"
+        item.title = "Новое название"
+        thread = try AssistantService.cloudReply(.init(message: "", actions: [item]),
+            to: thread, drafts: request.drafts, text: "Исправь название", context: context(), edit: nil)
+        #expect(thread.actions.map(\.id) == [original.id])
+        #expect(thread.actions.first?.proposal.title == "Новое название")
     }
     @Test func onlyOneRightPanelAndIndependentWidths() throws {
         let name = "assistant.preferences.\(UUID())"; let defaults = UserDefaults(suiteName: name)!
@@ -135,7 +137,7 @@ import Testing
     @Test func applyTwiceDoesNotDuplicateTaskOrEvent() async throws {
         let container = try PlannerPersistence.makeContainer(inMemory: true), store = tempStore()
         defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
-        let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
+        let service = AssistantService(store: store)
         var task = AssistantAction(proposal: proposal(), context: context())
         task.proposal.date = nil
         var event = AssistantAction(proposal: proposal(.event), context: context()); event.proposal.linkTo = "task1"
@@ -148,25 +150,6 @@ import Testing
         #expect(fake.saves == 1)
         #expect(try container.mainContext.fetchCount(FetchDescriptor<TaskEventLink>()) == 1)
     }
-    @Test func modelInstallationVerifiesAndReusesFiles() async throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: "model-test-\(UUID())")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let file = ModelManifest.File(name: "test.bin", bytes: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-        let manifest = ModelManifest(id: "test/model", revision: "fixed", files: [file])
-        let download = FakeModelDownload()
-        let defaults = UserDefaults(suiteName: "model-test-\(UUID())")!
-        let manager = ModelManager(backend: FakeAIBackend(), directory: directory, defaults: defaults, manifest: manifest, downloaderFactory: { download })
-        manager.install(); manager.install()
-        while manager.busy { await Task.yield() }
-        #expect(manager.state == .installed && manager.enabled)
-        #expect(try Data(contentsOf: directory.appending(path: "test.bin")) == Data("abc".utf8))
-        await manager.disable(); #expect(!manager.enabled)
-        manager.install()
-        while manager.busy { await Task.yield() }
-        #expect(manager.state == .installed)
-        await manager.remove()
-        #expect(!FileManager.default.fileExists(atPath: directory.path) && !manager.enabled)
-    }
     @Test func missingEventTimeAndTaskReminderNeverAppearReady() {
         var action = AssistantAction(proposal: proposal(.event), context: context()); action.proposal.time = nil
         #expect(!ActionPlanValidator.problems(action, folders: context().folders, calendars: context().calendars).isEmpty)
@@ -176,32 +159,22 @@ import Testing
     @Test func nextRequestCanReuseAModelKeyWithoutReapplyingThePreviousTask() async throws {
         let container = try PlannerPersistence.makeContainer(inMemory: true), store = tempStore()
         defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
-        let fixture = try InstalledModelFixture(); defer { fixture.clean() }
-        let model = fixture.manager
-        let service = AssistantService(model: model, store: store)
+        let service = AssistantService(store: store)
+        service.archive.threads[0].chooseModel(id: "test-model")
+        var item = proposal()
+        item.date = nil
         let tasks = TaskService(context: container.mainContext), calendar = CalendarService(store: FakeCalendarStore())
-        service.send("Создай задачу", context: context())
-        while service.generating { await Task.yield() }
+        service.archive.threads[0] = try AssistantService.cloudReply(.init(message: "", actions: [item]),
+            to: service.archive.threads[0], drafts: [:], text: "Создай задачу", context: context(), edit: nil)
         await service.apply(taskService: tasks, calendar: calendar, folders: [])
         let previous = try #require(service.current?.actions.first?.id)
-        service.send("Создай ещё одну задачу", context: context())
-        while service.generating { await Task.yield() }
+        service.archive.threads[0] = try AssistantService.cloudReply(.init(message: "", actions: [item]),
+            to: service.archive.threads[0], drafts: [:], text: "Создай ещё одну задачу", context: context(), edit: nil)
         #expect(service.current?.actions.count == 2)
         #expect(service.current?.actions.last?.id != previous)
         await service.apply(taskService: tasks, calendar: calendar, folders: [])
         await service.apply(taskService: tasks, calendar: calendar, folders: [])
         #expect(try container.mainContext.fetchCount(FetchDescriptor<PlannerTask>()) == 2)
-    }
-    @Test func modelCannotInventEventReminders() {
-        var p = proposal(.event); p.reminderMinutes = 60
-        var thread = AssistantThread(); thread.messages = [AssistantMessage(role: .user, text: "Создай встречу завтра в 12:00")]
-        let response = AssistantResponse(message: "", actions: [p])
-        let corrected = AssistantResponsePolicy.normalize(response, thread: thread, context: context())
-        #expect(corrected.actions?.first?.reminderMinutes == nil)
-        var english = context(); english.language = "en"
-        #expect(AssistantResponsePolicy.normalize(response, thread: thread, context: english).message == "Review the proposals before creating them.")
-        thread.messages.append(AssistantMessage(role: .user, text: "Напомни за час"))
-        #expect(AssistantResponsePolicy.normalize(response, thread: thread, context: context()).actions?.first?.reminderMinutes == 60)
     }
     @Test func allDayUsesTheProposalsTimeZone() throws {
         var action = AssistantAction(proposal: proposal(.event), context: context())
@@ -210,55 +183,9 @@ import Testing
         let draft = try ActionPlanValidator.eventDraft(action)
         #expect(try draft.interval().duration == 23 * 3600)
     }
-    @Test func modelHashesDetectTampering() throws {
-        let url = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: url) }
-        try Data("abc".utf8).write(to: url)
-        #expect(try ModelManager.valid(url, file: ModelManifest.File(name: "test", bytes: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")))
-        try Data("abd".utf8).write(to: url)
-        #expect(try !ModelManager.valid(url, file: ModelManifest.File(name: "test", bytes: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")))
-    }
-}
-
-actor FakeAIBackend: LocalAIBackend {
-    func prepare(directory: URL) async throws {}
-    func unload() async {}
-    func respond(instructions: String, prompt: String) async throws -> String {
-        """
-        {"message":"Проверьте предложение","actions":[{"key":"task1","kind":"task","title":"Проверка","folderID":"inbox"}],"questions":[]}
-        """
-    }
-}
-
-final class FakeModelDownload: ModelFileDownloading, @unchecked Sendable {
-    func download(url: URL, to target: URL, progress: @escaping @Sendable (Int64) -> Void) async throws {
-        try Task.checkCancellation()
-        try Data("abc".utf8).write(to: target, options: .atomic)
-        progress(3)
-    }
-    func cancel() {}
-}
-
-/// Отдельные файлы и настройки: ни один тест жизненного цикла не использует пользовательскую модель.
-@MainActor struct InstalledModelFixture {
-    let directory: URL
-    let defaults: UserDefaults
-    let suite: String
-    let manager: ModelManager
-    init(backend: any LocalAIBackend = FakeAIBackend()) throws {
-        suite = "assistant-memory-tests-\(UUID())"
-        directory = FileManager.default.temporaryDirectory.appending(path: suite)
-        defaults = UserDefaults(suiteName: suite)!
-        defaults.set(true, forKey: "assistantEnabled")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        for name in ["accepted.json", "ready.json"] { try Data("fixed".utf8).write(to: directory.appending(path: name)) }
-        try Data("abc".utf8).write(to: directory.appending(path: "test.bin"))
-        let file = ModelManifest.File(name: "test.bin", bytes: 3, sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-        manager = ModelManager(backend: backend, directory: directory, defaults: defaults,
-            manifest: ModelManifest(id: "test/model", revision: "fixed", files: [file]))
-    }
-    func clean() {
-        defaults.removePersistentDomain(forName: suite)
-        try? FileManager.default.removeItem(at: directory)
+    @Test func unambiguousChecklistTextObjectsAreAcceptedButFlagsAreNotDiscarded() throws {
+        let response = try ActionPlanValidator.decode("{\"message\":\"\",\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Проверить\",\"checklist\":[{\"text\":\"Первый\"},{\"title\":\"Второй\"}]}]}")
+        #expect(response.actions?.first?.checklist == ["Первый", "Второй"])
+        #expect(throws: (any Error).self) { try ActionPlanValidator.decode("{\"message\":\"\",\"actions\":[{\"key\":\"task1\",\"kind\":\"task\",\"title\":\"Проверить\",\"checklist\":[{\"text\":\"Первый\",\"done\":true}]}]}") }
     }
 }

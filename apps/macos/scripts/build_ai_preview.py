@@ -15,11 +15,12 @@ MACOS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = MACOS_ROOT.parents[1]
 BUILD = MACOS_ROOT / '.build'
 DIST = REPO_ROOT / 'dist'
-DERIVED = BUILD / 'AIReleaseDerivedData'
+DERIVED = BUILD / 'ReleaseDerivedData'
 DISPLAY_NAME = 'Takt'
 APP_NAME = f'{DISPLAY_NAME}.app'
 WIDGET_ENTITLEMENT = 'com.apple.security.application-groups'
 WIDGET_PATH = Path('Contents/PlugIns/TodayWidget.appex')
+QUICK_WIDGET_PATH = Path('Contents/PlugIns/QuickActionsWidget.appex')
 
 
 def run(*args, **kwargs):
@@ -68,8 +69,8 @@ def verify(app, widget_group):
     metadata = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert metadata['CFBundleIdentifier'] == 'local.planner.Planner'
     assert metadata['CFBundleDisplayName'] == metadata['CFBundleName'] == DISPLAY_NAME
-    assert metadata['CFBundleShortVersionString'] == '0.3.37'
-    assert metadata['CFBundleVersion'] == '121'
+    assert metadata['CFBundleShortVersionString'] == '0.3.49'
+    assert metadata['CFBundleVersion'] == '133'
     assert metadata['LSMinimumSystemVersion'] == '26.0'
     for language in ('ru', 'en'):
         localized = run('/usr/bin/plutil', '-convert', 'json', '-o', '-',
@@ -80,7 +81,6 @@ def verify(app, widget_group):
     architectures = run('/usr/bin/lipo', '-archs', executable, capture_output=True, text=True).stdout.strip()
     assert architectures == 'arm64', architectures
     resources = app / 'Contents/Resources'
-    assert (resources / 'ModelManifest.json').exists()
     for name in ('start.sh', 'bridge.mjs', 'package.json', 'package-lock.json'):
         assert (resources / 'CopilotBridge.bundle' / name).is_file()
     anchor = resources / 'GigaChatTrust.bundle' / 'RussianTrustedRootCA.der'
@@ -89,9 +89,9 @@ def verify(app, widget_group):
         host: {'NSExceptionAllowsInsecureHTTPLoads': True}
         for host in ('ngw.devices.sberbank.ru', 'api.giga.chat')
     }
-    assert list(resources.glob('*.bundle')), 'Отсутствуют ресурсы Swift-пакетов'
-    assert list(resources.rglob('*.metallib')), 'Отсутствует скомпилированная библиотека Metal'
-    assert not list(app.rglob('*.safetensors')), 'Веса должны скачиваться отдельно'
+    assert (resources / 'PlannerLocalization_PlannerLocalization.bundle').is_dir()
+    assert not (resources / 'ModelManifest.json').exists()
+    assert not any(resources.glob('mlx*.bundle')) and not any(resources.rglob('*.safetensors'))
     run('/usr/bin/codesign', '--verify', '--deep', '--strict', app)
     entitlements = signature_entitlements(app)
     assert entitlements['com.apple.security.network.client']
@@ -101,9 +101,9 @@ def verify(app, widget_group):
     assert not any(k.startswith('com.apple.security.temporary-exception') for k in entitlements)
     assert not entitlements.get('com.apple.security.files.user-selected.read-only', False)
     if widget_group:
-        verify_widget(app, metadata, entitlements, widget_group)
+        verify_widgets(app, metadata, entitlements, widget_group)
     else:
-        assert not (app / WIDGET_PATH).exists()
+        assert not any((app / path).exists() for path in (WIDGET_PATH, QUICK_WIDGET_PATH))
         assert WIDGET_ENTITLEMENT not in entitlements
         assert 'TaktWidgetAppGroup' not in metadata
     for name in ('LICENSE', 'NOTICE'):
@@ -112,30 +112,34 @@ def verify(app, widget_group):
     return metadata
 
 
-def verify_widget(app, metadata, entitlements, group):
+def verify_widgets(app, metadata, entitlements, group):
     assert entitlements[WIDGET_ENTITLEMENT] == [group]
     assert metadata['TaktWidgetAppGroup'] == group
-    widget = app / WIDGET_PATH
-    assert list(widget.parent.glob('*.appex')) == [widget]
-    widget_metadata = plistlib.loads((widget / 'Contents/Info.plist').read_bytes())
-    assert widget_metadata['CFBundleIdentifier'] == metadata['CFBundleIdentifier'] + '.TodayWidget'
-    assert widget_metadata['CFBundleShortVersionString'] == metadata['CFBundleShortVersionString']
-    assert widget_metadata['CFBundleVersion'] == metadata['CFBundleVersion']
-    assert widget_metadata['NSExtension']['NSExtensionPointIdentifier'] == 'com.apple.widgetkit-extension'
-    assert widget_metadata['TaktWidgetAppGroup'] == group
-    assert signature_entitlements(widget) == {
-        'com.apple.security.app-sandbox': True,
-        WIDGET_ENTITLEMENT: [group],
-    }
+    expected = {app / WIDGET_PATH, app / QUICK_WIDGET_PATH}
+    assert set((app / WIDGET_PATH).parent.glob('*.appex')) == expected
     team = group.partition('.')[0]
-    assert apple_team(app) == apple_team(widget) == team
-    widget_binary = widget / 'Contents/MacOS' / widget_metadata['CFBundleExecutable']
-    assert run('/usr/bin/lipo', '-archs', widget_binary, capture_output=True, text=True).stdout.strip() == 'arm64'
+    assert apple_team(app) == team
+    for widget in expected:
+        widget_metadata = plistlib.loads((widget / 'Contents/Info.plist').read_bytes())
+        assert widget_metadata['CFBundleIdentifier'] == metadata['CFBundleIdentifier'] + '.' + widget.stem
+        assert widget_metadata['CFBundleShortVersionString'] == metadata['CFBundleShortVersionString']
+        assert widget_metadata['CFBundleVersion'] == metadata['CFBundleVersion']
+        assert widget_metadata['NSExtension']['NSExtensionPointIdentifier'] == 'com.apple.widgetkit-extension'
+        widget_entitlements = {'com.apple.security.app-sandbox': True}
+        if widget == app / WIDGET_PATH:
+            assert widget_metadata['TaktWidgetAppGroup'] == group
+            widget_entitlements[WIDGET_ENTITLEMENT] = [group]
+        else:
+            assert widget_metadata['TaktWidgetURLScheme'] == metadata['TaktWidgetURLScheme']
+        assert signature_entitlements(widget) == widget_entitlements
+        assert apple_team(widget) == team
+        binary = widget / 'Contents/MacOS' / widget_metadata['CFBundleExecutable']
+        assert run('/usr/bin/lipo', '-archs', binary, capture_output=True, text=True).stdout.strip() == 'arm64'
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--without-widget', action='store_true', help='Build a DMG without Today for local testing.')
+    parser.add_argument('--without-widget', action='store_true', help='Build a DMG without widgets for local testing.')
     args = parser.parse_args()
     identity = os.environ.get('PLANNER_RELEASE_SIGNING_IDENTITY', '-')
     try:
@@ -157,8 +161,7 @@ def main():
         try:
             run('xcodebuild', '-project', MACOS_ROOT / 'Planner.xcodeproj', '-scheme', 'Planner', '-configuration', 'Release',
                 '-destination', 'generic/platform=macOS', '-derivedDataPath', DERIVED,
-                '-clonedSourcePackagesDirPath', BUILD / 'SourcePackages', '-disableAutomaticPackageResolution',
-                '-skipPackagePluginValidation', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=NO',
+                'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=NO',
                 f'PLANNER_WIDGET_APP_GROUP={widget_group or "group.local.planner.today"}', 'build', cwd=MACOS_ROOT, stdout=log, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError:
             print((BUILD / 'ai-release-build.log').read_text()[-12000:]); raise
@@ -170,20 +173,16 @@ def main():
         metadata = plistlib.loads(info_path.read_bytes())
         metadata['CFBundleDisplayName'] = metadata['CFBundleName'] = DISPLAY_NAME
         if not widget_group:
-            shutil.rmtree(app / WIDGET_PATH)
+            for path in (WIDGET_PATH, QUICK_WIDGET_PATH):
+                shutil.rmtree(app / path)
             metadata.pop('TaktWidgetAppGroup', None)
         info_path.write_bytes(plistlib.dumps(metadata))
         for name in ('LICENSE', 'NOTICE'):
             shutil.copy2(REPO_ROOT / name, app / 'Contents/Resources' / name)
             shutil.copy2(REPO_ROOT / name, stage / name)
-        # Уведомления об авторстве всех включённых Swift-пакетов и их зависимостей.
-        notices = []
-        for checkout in sorted((BUILD / 'SourcePackages/checkouts').iterdir()):
-            for license_file in checkout.glob('LICENSE*'):
-                if license_file.is_file(): notices.append(checkout.name + '\n' + license_file.read_text(errors='replace'))
-        (app / 'Contents/Resources/ThirdPartyLicenses.txt').write_text('\n\n'.join(notices))
         if widget_group:
             sign(app / WIDGET_PATH, 'Configuration/TodayWidget.entitlements', Path(tmp), identity, widget_group)
+            sign(app / QUICK_WIDGET_PATH, 'Configuration/QuickActionsWidget.entitlements', Path(tmp), identity, None)
         sign(app, 'Planner/Planner.entitlements', Path(tmp), identity, widget_group)
         metadata = verify(app, widget_group)
         (stage / 'Applications').symlink_to('/Applications', target_is_directory=True)

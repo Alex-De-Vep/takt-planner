@@ -10,10 +10,9 @@ final class AssistantService {
     var applying = false
     var error: String?
     var storageFailed = false
-    let localModel: ModelManager?
     let cloud = AssistantCloudConnection()
     let gateways: AssistantGatewayConnections
-    var cloudPreview = ""
+    let replyPreview = AssistantReplyPreview()
     @ObservationIgnored private let store: AssistantStore
     @ObservationIgnored private var unsavedDrafts: [UUID: AssistantStore.Draft] = [:]
     @ObservationIgnored var generation: Task<Void, Never>?
@@ -21,12 +20,10 @@ final class AssistantService {
     var currentIndex: Int? { archive.threads.firstIndex { $0.id == archive.currentID } }
     var current: AssistantThread? { currentIndex.map { archive.threads[$0] } }
 
-    init(model: ModelManager? = nil, store: AssistantStore = AssistantStore(),
+    init(store: AssistantStore = AssistantStore(),
          gateways: AssistantGatewayConnections = AssistantGatewayConnections()) {
         self.gateways = gateways
-        // Локальный движок доступен только при явной подстановке в тестах.
-        self.localModel = model; self.store = store
-        model?.cancelGeneration = { [weak self] in self?.stop() }
+        self.store = store
         do {
             archive = try store.load()
             // После аварии task UUID позволяет восстановление. Неизвестный результат EventKit требует проверки.
@@ -116,81 +113,6 @@ final class AssistantService {
     }
     // Следующий запрос ждёт фактического завершения отмены, чтобы не запускать две генерации.
     func stop() { generation?.cancel() }
-    func disableModel() async {
-        guard let model = localModel else { return }
-        stop()
-        if let generation { await generation.value }
-        await model.disable()
-    }
-    func send(_ text: String, context: AssistantContext, taskService: TaskService? = nil) {
-        if current?.usesCloudModel == true { sendCloud(text, context: context, tasks: taskService); return }
-        guard let model = localModel else { return }
-        if let taskService, routeTextRequest(text, context: context, tasks: taskService) { return }
-        guard current?.textEdits?.contains(where: { $0.target == .proposal && $0.status == .pending && $0.hasChanges }) != true else {
-            error = "Сначала примите или отмените предложенные правки."; return
-        }
-        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard text.count <= 8000 else { error = "Сообщение слишком длинное. Сократите его до 8000 символов."; return }
-        guard !text.isEmpty, !generating, !applying, !storageFailed,
-              model.canChat, let i = currentIndex else { return }
-        error = nil
-        let previous = archive
-        var context = context
-        if archive.threads[i].messages.last?.questions.isEmpty == false,
-           let previous = archive.threads[i].clarificationContext {
-            context.now = previous.now; context.timeZoneID = previous.timeZoneID
-        }
-        archive.threads[i].clarificationContext = context
-        archive.threads[i].draft = ""
-        archive.threads[i].messages.append(AssistantMessage(role: .user, text: text))
-        if archive.threads[i].messages.count == 1 { archive.threads[i].title = String(text.prefix(60)) }
-        guard persist() else { archive = previous; return }
-        var snapshot = archive.threads[i]
-        let protectedIDs = snapshot.protectedLocalActionIDs ?? []
-        let protected = snapshot.actions.filter { protectedIDs.contains($0.id) }
-        snapshot.actions.removeAll { protectedIDs.contains($0.id) }
-        let token = UUID(); requestID = token; generating = true
-        generation = Task { [weak self] in
-            guard let self else { return }
-            var acquired = false
-            do {
-                try await model.beginUse()
-                acquired = true
-                let input = try AssistantPrompt.request(context: context, thread: snapshot)
-                let output = try await model.backend.respond(instructions: AssistantPrompt.instructions, prompt: input)
-                try Task.checkCancellation()
-                let response = AssistantResponsePolicy.normalize(try ActionPlanValidator.decode(output), thread: snapshot, context: context)
-                guard token == requestID, let index = archive.threads.firstIndex(where: { $0.id == snapshot.id }) else { throw CancellationError() }
-                let completed = snapshot.actions.filter { $0.status == .created || $0.createdEventID != nil || $0.status == .needsReview }
-                let incoming = response.actions ?? []
-                guard !incoming.contains(where: { p in completed.contains { $0.proposal.key == p.key && $0.status != .created } }) else {
-                    throw AssistantFailure(message: "Сначала завершите сохранение связи или проверьте результат предыдущей операции.")
-                }
-                // Ключ модели не является UUID операции. Новый запрос после применения может снова вернуть task1.
-                // Разводим такие ключи, сохраняя ссылки внутри нового плана и готовые результаты в истории.
-                let occupied = Set((completed + protected).map { $0.proposal.key })
-                var remapped: [String: String] = [:]
-                for p in incoming where occupied.contains(p.key) { remapped[p.key] = p.key + "-" + UUID().uuidString }
-                let proposed = incoming.map { original -> AssistantAction in
-                    var p = original
-                    p.key = remapped[p.key] ?? p.key
-                    if let link = p.linkTo { p.linkTo = remapped[link] ?? link }
-                    // Уточнение сохраняет UUID и часовой пояс исходной карточки.
-                    if var old = snapshot.actions.first(where: { $0.proposal.key == p.key && $0.proposal.kind == p.kind && $0.status != .created }) {
-                        old.proposal = p; old.error = nil; old.status = .pending; return old
-                    }
-                    return AssistantAction(proposal: p, context: context)
-                }
-                archive.threads[index].actions = protected + completed + proposed
-                archive.threads[index].messages.append(AssistantMessage(role: .assistant, text: response.message, questions: response.questions ?? []))
-                persist()
-            } catch {
-                if token == requestID, !Task.isCancelled, !(error is CancellationError) { self.error = error is DecodingError ? "Не удалось проверить ответ модели. Упростите запрос и повторите." : error.localizedDescription }
-            }
-            if acquired { await model.endUse() }
-            if token == requestID { generating = false; generation = nil }
-        }
-    }
     @discardableResult func updateAction(_ updated: AssistantAction) -> Bool {
         guard !applying, !generating, !storageFailed, updated.isEditable, let i = currentIndex,
               let a = archive.threads[i].actions.firstIndex(where: { $0.id == updated.id && $0.isEditable }) else { return false }
@@ -293,5 +215,45 @@ final class AssistantService {
             AssistantFolder(id: id, name: preferences?.translations[name] ?? name)
         }
         return system + folders.filter { !$0.isDeleted }.map { AssistantFolder(id: $0.id.uuidString, name: $0.name) }
+    }
+}
+
+/// Render the first delta immediately, then present arriving text in batches.
+@MainActor @Observable
+final class AssistantReplyPreview {
+    private(set) var text = ""
+    @ObservationIgnored private var pending = ""
+    @ObservationIgnored private var nextUpdate = ContinuousClock.now
+    @ObservationIgnored private var scheduled: Task<Void, Never>?
+
+    func append(_ delta: String) {
+        guard !delta.isEmpty else { return }
+        pending += delta
+        guard scheduled == nil else { return }
+        if ContinuousClock.now >= nextUpdate {
+            publish()
+        } else {
+            let deadline = nextUpdate
+            scheduled = Task { [weak self] in
+                do { try await Task.sleep(until: deadline, clock: .continuous) } catch { return }
+                guard !Task.isCancelled else { return }
+                self?.publish()
+            }
+        }
+    }
+
+    private func publish() {
+        text += pending
+        pending = ""
+        nextUpdate = .now + .milliseconds(100)
+        scheduled = nil
+    }
+
+    func reset() {
+        scheduled?.cancel()
+        scheduled = nil
+        pending = ""
+        text = ""
+        nextUpdate = .now
     }
 }

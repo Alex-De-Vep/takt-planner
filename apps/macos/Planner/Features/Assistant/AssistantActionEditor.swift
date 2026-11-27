@@ -100,11 +100,12 @@ struct AssistantActionEditor: View {
     }
 
     private var eventDates: some View {
-        let components: DatePickerComponents = event.allDay ? [.date] : [.date, .hourAndMinute]
-        return Group {
-            DatePicker(strings["Начало"], selection: Binding(get: { event.start }, set: { event.setStart($0, calendar: calendar) }),
-                       displayedComponents: components)
-            DatePicker(strings["Окончание"], selection: $event.end, displayedComponents: components)
+        Group {
+            EventDateTimeRow(title: strings["Начало"], dateTitle: strings["Дата начала"], timeTitle: strings["Время начала"],
+                             identifier: "event-start", selection: Binding(get: { event.start }, set: { event.setStart($0, calendar: calendar) }),
+                             allDay: event.allDay)
+            EventDateTimeRow(title: strings["Окончание"], dateTitle: strings["Дата окончания"], timeTitle: strings["Время окончания"],
+                             identifier: "event-end", selection: $event.end, allDay: event.allDay)
         }
     }
 

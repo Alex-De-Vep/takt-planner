@@ -43,20 +43,17 @@ project_configs = configurations("project", {
 localization_package = add("localization-package", "XCLocalSwiftPackageReference", relativePath="Packages/PlannerLocalization")
 localization_product = add("localization-product", "XCSwiftPackageProductDependency", productName="PlannerLocalization", package=localization_package)
 localization_build = add("localization-link", "PBXBuildFile", productRef=localization_product)
-# AI Preview использует закреплённый MLX и собирается только для Apple silicon.
-mlx_package = add("mlx-package", "XCRemoteSwiftPackageReference", repositoryURL="https://github.com/ml-explore/mlx-swift-lm.git", requirement={"kind": "exactVersion", "version": "2.31.3"})
-mlx_products = [add("mlx-product-" + name, "XCSwiftPackageProductDependency", productName=name, package=mlx_package) for name in ("MLXLLM", "MLXLMCommon")]
-mlx_builds = [add("mlx-link-" + name, "PBXBuildFile", productRef=product) for name, product in zip(("MLXLLM", "MLXLMCommon"), mlx_products)]
 shared_widget_group = add("widget-shared-sources", "PBXFileSystemSynchronizedRootGroup",
                           path="TodayWidgetShared", sourceTree="<group>")
 groups = [shared_widget_group]
 products = []
 targets = []
+widget_targets = ("TodayWidget", "QuickActionsWidget")
 for name, product_type, extension in (
     ("Planner", "com.apple.product-type.application", "app"),
     ("PlannerTests", "com.apple.product-type.bundle.unit-test", "xctest"),
     ("PlannerUITests", "com.apple.product-type.bundle.ui-testing", "xctest"),
-    ("TodayWidget", "com.apple.product-type.app-extension", "appex"),
+    *((widget, "com.apple.product-type.app-extension", "appex") for widget in widget_targets),
 ):
     group = add(f"{name}-sources", "PBXFileSystemSynchronizedRootGroup", path=name, sourceTree="<group>")
     groups.append(group)
@@ -67,7 +64,7 @@ for name, product_type, extension in (
     products.append(product)
     settings = {
         "PRODUCT_NAME": "$(TARGET_NAME)", "PRODUCT_BUNDLE_IDENTIFIER": f"local.planner.{name}",
-        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.37", "CURRENT_PROJECT_VERSION": "121", "ARCHS": "arm64",
+        "GENERATE_INFOPLIST_FILE": "YES", "MARKETING_VERSION": "0.3.49", "CURRENT_PROJECT_VERSION": "133", "ARCHS": "arm64",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
     }
     if name == "Planner":
@@ -83,11 +80,11 @@ for name, product_type, extension in (
                         INFOPLIST_KEY_NSMicrophoneUsageDescription="Takt использует микрофон, чтобы записать голос для расшифровки в заметке.",
                         INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription="Takt нужен доступ к календарям для просмотра событий и планирования времени.",
                         INFOPLIST_KEY_NSHumanReadableCopyright="", INFOPLIST_KEY_CFBundleDevelopmentRegion="ru")
-    elif name == "TodayWidget":
-        settings.update(PRODUCT_BUNDLE_IDENTIFIER="$(PLANNER_APP_BUNDLE_IDENTIFIER).TodayWidget",
-                        INFOPLIST_FILE="Configuration/TodayWidget-Info.plist",
+    elif name in widget_targets:
+        settings.update(PRODUCT_BUNDLE_IDENTIFIER=f"$(PLANNER_APP_BUNDLE_IDENTIFIER).{name}",
+                        INFOPLIST_FILE=f"Configuration/{name}-Info.plist",
                         INFOPLIST_KEY_CFBundleDisplayName="Takt",
-                        CODE_SIGN_ENTITLEMENTS="Configuration/TodayWidget.entitlements",
+                        CODE_SIGN_ENTITLEMENTS=f"Configuration/{name}.entitlements",
                         APPLICATION_EXTENSION_API_ONLY="YES", ENABLE_APP_SANDBOX="YES",
                         ENABLE_HARDENED_RUNTIME="YES", SKIP_INSTALL="YES")
     elif name == "PlannerTests":
@@ -97,24 +94,24 @@ for name, product_type, extension in (
     phases = [add(f"{name}-{kind}", f"PBX{kind}BuildPhase", buildActionMask=2147483647, files=[], runOnlyForDeploymentPostprocessing=0)
               for kind in ("Sources", "Frameworks", "Resources")]
     if name == "Planner":
-        objects[identifier(f"{name}-Frameworks")]["files"] = [localization_build] + mlx_builds
+        objects[identifier(f"{name}-Frameworks")]["files"] = [localization_build]
     dependencies = []
-    dependency = {"Planner": "TodayWidget", "PlannerTests": "Planner", "PlannerUITests": "Planner"}.get(name)
-    if dependency:
+    target_dependencies = {"Planner": widget_targets, "PlannerTests": ("Planner",), "PlannerUITests": ("Planner",)}
+    for dependency in target_dependencies.get(name, ()):
         target = identifier(f"{dependency}-target")
-        proxy = add(f"{name}-proxy", "PBXContainerItemProxy", containerPortal=identifier("project"), proxyType=1,
+        proxy = add(f"{name}-{dependency}-proxy", "PBXContainerItemProxy", containerPortal=identifier("project"), proxyType=1,
                     remoteGlobalIDString=target, remoteInfo=dependency)
-        dependencies.append(add(f"{name}-dependency", "PBXTargetDependency", target=target, targetProxy=proxy))
+        dependencies.append(add(f"{name}-{dependency}-dependency", "PBXTargetDependency", target=target, targetProxy=proxy))
     if name == "Planner":
-        widget = add("embed-widget-build", "PBXBuildFile", fileRef=identifier("TodayWidget-product"),
-                     settings={"ATTRIBUTES": ["CodeSignOnCopy", "RemoveHeadersOnCopy"]})
-        phases.append(add("embed-widget-phase", "PBXCopyFilesBuildPhase", name="Embed Widget Extension",
-                          buildActionMask=2147483647, dstPath="", dstSubfolderSpec=13, files=[widget],
+        widgets = [add(f"embed-{widget}-build", "PBXBuildFile", fileRef=identifier(f"{widget}-product"),
+                       settings={"ATTRIBUTES": ["CodeSignOnCopy", "RemoveHeadersOnCopy"]}) for widget in widget_targets]
+        phases.append(add("embed-widget-phase", "PBXCopyFilesBuildPhase", name="Embed Widget Extensions",
+                          buildActionMask=2147483647, dstPath="", dstSubfolderSpec=13, files=widgets,
                           runOnlyForDeploymentPostprocessing=0))
-    source_groups = [group, shared_widget_group] if name in ("Planner", "TodayWidget") else [group]
+    source_groups = [group, shared_widget_group] if name in ("Planner", *widget_targets) else [group]
     targets.append(add(f"{name}-target", "PBXNativeTarget", buildConfigurationList=configurations(name, settings),
                        buildPhases=phases, buildRules=[], dependencies=dependencies, fileSystemSynchronizedGroups=source_groups,
-                       packageProductDependencies=[localization_product] + mlx_products if name == "Planner" else [],
+                       packageProductDependencies=[localization_product] if name == "Planner" else [],
                        name=name, productName=product_name, productReference=product, productType=product_type))
 
 products_group = add("products", "PBXGroup", children=products, name="Products", sourceTree="<group>")
@@ -125,7 +122,7 @@ project = add("project", "PBXProject", attributes={"BuildIndependentTargetsInPar
                                    identifier("PlannerUITests-target"): {"TestTargetID": identifier("Planner-target")}}},
               buildConfigurationList=project_configs, compatibilityVersion="Xcode 16.0", developmentRegion="ru",
               knownRegions=["ru", "en", "Base"], mainGroup=main, productRefGroup=products_group,
-              projectDirPath="", projectRoot="", targets=targets, preferredProjectObjectVersion=77, packageReferences=[localization_package, mlx_package])
+              projectDirPath="", projectRoot="", targets=targets, preferredProjectObjectVersion=77, packageReferences=[localization_package])
 
 def serialize(value, level=0):
     if isinstance(value, dict):
@@ -162,10 +159,3 @@ def reference(name):
 </Scheme>
 ''')
 print(directory)
-
-# Отдельная opt-in схема проверяет настоящую модель только на вымышленных данных.
-smoke_scheme = (scheme_dir / "Planner.xcscheme").read_text().replace('<Testables>', '<EnvironmentVariables><EnvironmentVariable key="PLANNER_AI_SMOKE" value="1" isEnabled="YES"/></EnvironmentVariables><Testables>')
-(scheme_dir / "PlannerAIModelSmoke.xcscheme").write_text(smoke_scheme.replace('shouldUseLaunchSchemeArgsEnv="YES"', 'shouldUseLaunchSchemeArgsEnv="NO"', 1))
-
-smoke4 = (scheme_dir / "PlannerAIModelSmoke.xcscheme").read_text().replace('</EnvironmentVariables>', '<EnvironmentVariable key="PLANNER_AI_VARIANT" value="4" isEnabled="YES"/></EnvironmentVariables>')
-(scheme_dir / "PlannerAIModelSmoke4.xcscheme").write_text(smoke4)

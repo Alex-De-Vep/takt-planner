@@ -173,8 +173,7 @@ struct AssistantProvidersSheet: View {
             if case .manage(let provider) = route { chosen = provider }
         }
         .onChange(of: chosen?.isConnected(to: service) == true) { _, connected in
-            if connected, case .choose = route, let chosen {
-                preferences.assistantModelVisibility.startWithEmptyList(gateway: chosen.gateway)
+            if connected, case .choose = route {
                 dismiss()
             }
         }

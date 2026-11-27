@@ -3,6 +3,8 @@ import SwiftUI
 /// День выбирается в календаре, время редактируется отдельно штатным полем macOS.
 struct EventDateTimeRow: View {
     @Environment(\.translations) private var strings
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
     let title: String
     let dateTitle: String
     let timeTitle: String
@@ -11,13 +13,17 @@ struct EventDateTimeRow: View {
     let allDay: Bool
     @State private var showingCalendar = false
 
+    private var dateFormat: Date.FormatStyle {
+        .init(locale: locale, calendar: calendar, timeZone: calendar.timeZone)
+    }
+
     var body: some View {
         LabeledContent(title) {
             HStack(spacing: 10) {
                 Button { showingCalendar.toggle() } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "calendar").foregroundStyle(.secondary)
-                        Text(selection, format: .dateTime.day().month(.abbreviated).year())
+                        Text(selection, format: dateFormat.day().month(.abbreviated).year())
                             .lineLimit(1)
                         Spacer(minLength: 4)
                         Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
@@ -25,7 +31,7 @@ struct EventDateTimeRow: View {
                 }
                 .buttonStyle(.bordered)
                 .accessibilityLabel(dateTitle)
-                .accessibilityValue(Text(selection, format: .dateTime.day().month(.wide).year()))
+                .accessibilityValue(Text(selection, format: dateFormat.day().month(.wide).year()))
                 .accessibilityIdentifier(identifier + "-date")
                 .popover(isPresented: $showingCalendar, arrowEdge: .bottom) {
                     VStack(alignment: .leading, spacing: 12) {
@@ -55,7 +61,6 @@ struct EventDateTimeRow: View {
     }
 
     private func chooseDay(_ day: Date) {
-        let calendar = Calendar.current
         if !calendar.isDate(day, inSameDayAs: selection) {
             // Выбор дня не сбрасывает заданное время. При переходе на летнее время
             // Calendar подбирает допустимое время, если выбранный час пропущен.

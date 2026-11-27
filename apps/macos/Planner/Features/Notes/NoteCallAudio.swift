@@ -48,6 +48,7 @@ final class NoteCallAudio {
         let source: URL
         let totalFrames: AVAudioFramePosition
         let framesPerPart: AVAudioFramePosition
+        let sampleRate: Double
         var count: Int { Int((totalFrames - 1) / framesPerPart + 1) }
 
         init(_ source: URL, framesPerPart: AVAudioFramePosition = NoteCallAudio.framesPerPiece) throws {
@@ -57,15 +58,25 @@ final class NoteCallAudio {
             }
             self.source = source
             totalFrames = reader.length
+            sampleRate = reader.processingFormat.sampleRate
             self.framesPerPart = framesPerPart
         }
 
         func preparePart(at index: Int) throws -> URL {
-            try Task.checkCancellation()
-            if count == 1 { return source }
-            let reader = try AVAudioFile(forReading: source)
+            guard (0..<count).contains(index) else {
+                throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+            }
             let start = AVAudioFramePosition(index) * framesPerPart
-            let end = min(totalFrames, start + framesPerPart)
+            return try preparePart(from: start, to: min(totalFrames, start + framesPerPart))
+        }
+
+        func preparePart(from start: AVAudioFramePosition, to end: AVAudioFramePosition) throws -> URL {
+            try Task.checkCancellation()
+            guard start >= 0, end > start, end <= totalFrames else {
+                throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")
+            }
+            if start == 0 && end == totalFrames { return source }
+            let reader = try AVAudioFile(forReading: source)
             let format = reader.processingFormat
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8192) else {
                 throw AssistantFailure(message: "Не удалось подготовить запись к расшифровке.")

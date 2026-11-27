@@ -1,6 +1,6 @@
 # Конфиденциальность / Privacy
 
-Обновлено: 16 ноября 2026 года. Применяется к приложению Takt в этом репозитории.
+Обновлено: 21 ноября 2026 года. Применяется к приложению Takt в этом репозитории.
 
 ## Что хранится на устройстве
 
@@ -10,7 +10,7 @@
 
 ## ИИ-помощник
 
-Локальная модель обрабатывает запросы на Mac. При выборе ChatGPT приложение отправляет запрос и необходимый контекст в OpenAI. Для подключения используется отдельный вход, токены сохраняются в Связке ключей macOS. Если в меню контекста включено «Использовать заметку», заголовок и текст открытой заметки отправляются выбранному провайдеру вместе с сообщением.
+При отправке сообщения Takt передаёт его и выбранный контекст подключённому ИИ-провайдеру. История разговоров хранится на Mac. Токены входа и ключи провайдеров хранятся в Связке ключей macOS. При подтверждении расшифровки приложение отправляет аудио провайдеру выбранной модели. Если в меню контекста включено «Использовать заметку», заголовок и текст открытой заметки отправляются выбранному провайдеру вместе с сообщением.
 
 ## Доступ к календарю
 
@@ -32,13 +32,15 @@
 
 ## Обращения к разработчику
 
+Когда вы отправляете обращение через **Настройки → Поддержка → Написать нам** на Android, сервер передаёт в ящик поддержки тему, описание, указанный вами адрес для ответа, версию и сборку Takt, версию ОС и время устройства с часовым поясом. По умолчанию форма подставляет почту аккаунта. Сервер присваивает код обращения и фиксирует время приёма. Данные из библиотеки и история чата автоматически не прикладываются.
+
 Проект поддерживает [Alex-De-Vep](https://github.com/Alex-De-Vep). Сообщения в публичных [Issues](https://github.com/Alex-De-Vep/takt-planner/issues) видны другим пользователям. Не публикуйте там содержимое своей библиотеки или личных событий. Использование сайта GitHub регулируется его собственной политикой конфиденциальности.
 
 ## English
 
 Takt stores task content, folders, subtasks, deadlines and event links in a local SwiftData library inside its app sandbox. Notes and their attachments are stored with the library. A compatible server receives notes when the cloud library syncs. Preferences are stored locally. On-device mode requires no account. In cloud mode, the app server receives your email address and the library data you sync. The app connects over HTTPS and keeps sign-in tokens in the macOS Keychain. There are no ads or analytics SDKs.
 
-The local assistant processes requests on your Mac. If you choose ChatGPT, the app sends the request and relevant context to OpenAI. Sign-in tokens are stored in the macOS Keychain. When Use note is enabled in the context menu, the app sends the open note’s title and text to the selected provider with your message.
+When you send a message, Takt sends it and the selected context to the connected AI provider. Chat history is stored on your Mac. Sign-in tokens and provider API keys are stored in the macOS Keychain. When you confirm transcription, the app sends the audio to the provider of your selected transcription model. When Use note is enabled in the context menu, the app sends the open note’s title and text to the selected provider with your message.
 
 Calendar access is requested only after you choose to connect calendars. EventKit reads and writes the system calendar. Events may sync via iCloud or another calendar provider configured in macOS; that provider's privacy terms apply. Declining calendar access does not prevent task management.
 
@@ -47,3 +49,5 @@ With notification permission, Takt passes the task title, local ID and deadline 
 Deleting a task removes its local subtasks and links but keeps calendar events. Deleting an event keeps the task. Revoke access in macOS Privacy & Security → Calendars. Revoking permission does not delete existing events. Removing the app bundle alone does not guarantee deletion of the local library; system backups may retain earlier data.
 
 Public GitHub issues are visible to others. Do not include personal tasks or events in reports. The maintainer is [Alex-De-Vep](https://github.com/Alex-De-Vep).
+
+When you submit a request via **Settings → Support → Contact us** on Android, the server sends your subject, description, selected reply email, Takt version and build, OS version, and device time with offset to the support inbox. The form pre-fills your account email. The server assigns a request code and records when it received the request. Library data and chat history are not attached automatically.

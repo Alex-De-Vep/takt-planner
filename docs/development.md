@@ -49,7 +49,7 @@ xcodebuild -project apps/macos/Planner.xcodeproj -scheme Planner \
 
 Новые Swift-файлы автоматически включаются благодаря синхронизированным группам Xcode. `apps/macos/scripts/generate_project.py` воспроизводит проект и общую схему; изменения build settings должны отражаться и в генераторе. Запускать генератор ради обычного изменения Swift-файла не требуется.
 
-Иконка: `python3 apps/macos/scripts/prepare_app_icon.py` обновляет стандартный набор PNG и `apps/macos/Planner/TasksIcon.icon` из `Design/AppIcon/tasks-icon.png`. Активная иконка в build settings — `TasksIcon`. [Исходник и композиция](../Design/AppIcon/README.md).
+Активная иконка `TasksIcon` хранится в `apps/macos/Planner/TasksIcon.icon`. Команда `python3 apps/macos/scripts/prepare_app_icon.py` экспортирует из этой композиции стандартный набор PNG и изображение для README. [Исходник и композиция](../Design/AppIcon/README.md).
 
 ## Скриншоты
 

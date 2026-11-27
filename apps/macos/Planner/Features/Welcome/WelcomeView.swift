@@ -12,22 +12,23 @@ struct WelcomeView: View {
 
     private struct Feature {
         let id: String
-        let icon: String
+        let icon: Image
         let title: String
         let example: String
-        let tint: Color
+        let tint: AnyShapeStyle
     }
 
     private var features: [Feature] {
         [
-            Feature(id: "tasks", icon: "checklist", title: "Задачи и напоминания",
-                    example: "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание.", tint: .indigo),
-            Feature(id: "notes", icon: "note.text", title: "Заметки",
-                    example: "Откройте свою папку и выберите «Заметки», чтобы сохранить идеи и списки.", tint: .orange),
-            Feature(id: "calendar", icon: "calendar.badge.plus", title: "События календаря",
-                    example: "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30.", tint: .teal),
-            Feature(id: "assistant", icon: "sparkles", title: "ИИ-помощник",
-                    example: "Попросите помощника сократить описание задачи и проверьте правку перед сохранением.", tint: .purple)
+            Feature(id: "tasks", icon: Image(systemName: "checklist"), title: "Задачи и напоминания",
+                    example: "Поставьте задаче «Отправить отчёт» срок на 17:00 и получите напоминание.", tint: AnyShapeStyle(PlannerStyle.accent)),
+            Feature(id: "notes", icon: Image(systemName: "note.text"), title: "Заметки",
+                    example: "Откройте свою папку и выберите «Заметки», чтобы сохранить идеи и списки.", tint: AnyShapeStyle(PlannerStyle.noteControlAccent)),
+            Feature(id: "calendar", icon: Image(systemName: "calendar.badge.plus"), title: "События календаря",
+                    example: "Добавьте «Встречу с командой» на завтра с 11:00 до 11:30.", tint: AnyShapeStyle(PlannerStyle.calendarAccent)),
+            Feature(id: "assistant", icon: Image(nsImage: WorkspaceAIChatSymbol.image()).resizable(),
+                    title: "ИИ-помощник",
+                    example: "Попросите помощника сократить описание задачи и проверьте правку перед сохранением.", tint: AnyShapeStyle(PlannerStyle.assistantGradient))
         ]
     }
 
@@ -73,9 +74,13 @@ struct WelcomeView: View {
     private var cards: some View {
         ForEach(Array(features.enumerated()), id: \.element.id) { index, feature in
             VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: feature.icon)
-                    .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(feature.tint)
+                Rectangle()
+                    .fill(feature.tint)
+                    .frame(width: 28, height: 28)
+                    .mask {
+                        feature.icon
+                            .font(.system(size: 24, weight: .medium))
+                    }
                     .frame(width: 46, height: 46)
                     .background(feature.tint.opacity(0.13), in: RoundedRectangle(cornerRadius: 12))
                     .accessibilityHidden(true)

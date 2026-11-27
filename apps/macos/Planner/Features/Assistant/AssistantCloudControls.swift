@@ -7,7 +7,6 @@ struct AssistantModelPicker: View {
     let preferences: AppPreferences
     let configureModels: () -> Void
 
-    private var isCloud: Bool { service.current?.usesCloudModel == true }
     private var locked: Bool { service.generating || service.applying || service.storageFailed }
 
     var body: some View {
@@ -15,7 +14,7 @@ struct AssistantModelPicker: View {
             AssistantChatModelMenu(service: service, preferences: preferences, configureModels: configureModels)
                 .accessibilityIdentifier("assistant-model-picker")
 
-            if isCloud, !service.cloudEfforts.isEmpty {
+            if service.selectedChatModelID(in: preferences.assistantModelVisibility) != nil, !service.cloudEfforts.isEmpty {
                 Menu {
                     Button { service.selectCloudEffort(nil) } label: {
                         if service.cloudEffort == nil { Label(strings["По умолчанию"], systemImage: "checkmark") }
@@ -50,24 +49,19 @@ struct AssistantChatModelMenu: View {
     let preferences: AppPreferences
     var configureModels: (() -> Void)? = nil
 
-    private var currentID: AssistantCatalogModel.ID? {
-        if let gateway = service.gatewayProfile?.gateway, let model = service.gatewayModel {
-            return .init(gateway: gateway, modelID: model.id)
-        }
-        if let model = service.cloudModel { return .init(gateway: nil, modelID: model.id) }
-        return nil
-    }
-
     var body: some View {
-        let models = service.modelCatalog(preferences: preferences).filter {
-            $0.supportsChat && preferences.assistantModelVisibility.includes($0)
-        }
-        let title = service.current?.usesCloudModel == true ? service.cloudModelName : strings["Выбрать модель"]
+        let models = service.chatMenuModels(preferences: preferences)
+        let selection = service.selectedChatModelID(in: preferences.assistantModelVisibility)
+        let selected = models.first { $0.id == selection }
+        let title = selected?.name ?? strings["Выбрать модель"]
         Group {
             if configureModels != nil {
-                modelMenu(models, title: title).menuStyle(.borderlessButton).frame(maxWidth: 164)
+                modelMenu(models, selected: selected, title: title)
+                    .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .foregroundStyle(PlannerStyle.assistantAccent)
             } else {
-                modelMenu(models, title: title).menuStyle(.borderedButton).frame(maxWidth: 245)
+                modelMenu(models, selected: selected, title: title).menuStyle(.borderedButton).frame(maxWidth: 245)
             }
         }
         .help(title)
@@ -76,11 +70,11 @@ struct AssistantChatModelMenu: View {
         .disabled((models.isEmpty && configureModels == nil) || service.generating || service.applying || service.storageFailed)
     }
 
-    private func modelMenu(_ models: [AssistantCatalogModel], title: String) -> some View {
+    private func modelMenu(_ models: [AssistantCatalogModel], selected: AssistantCatalogModel?, title: String) -> some View {
         Menu {
             let groups = Dictionary(grouping: models, by: \.providerName)
             if models.count <= 15 {
-                choices(models, showProvider: groups.count > 1)
+                choices(models, selection: selected?.id, showProvider: groups.count > 1)
             } else {
                 ForEach(groups.keys.sorted(), id: \.self) { provider in
                     if let entries = groups[provider] {
@@ -90,9 +84,9 @@ struct AssistantChatModelMenu: View {
                                     $0.modelID.split(separator: "/").first.map(String.init) ?? provider
                                 }
                                 ForEach(vendors.keys.sorted(), id: \.self) { vendor in
-                                    Menu(vendor) { choices(vendors[vendor] ?? []) }
+                                    Menu(vendor) { choices(vendors[vendor] ?? [], selection: selected?.id) }
                                 }
-                            } else { choices(entries) }
+                            } else { choices(entries, selection: selected?.id) }
                         }
                     }
                 }
@@ -102,16 +96,29 @@ struct AssistantChatModelMenu: View {
                 Button(strings["Настроить список моделей…"], action: configureModels)
             }
         } label: {
-            if configureModels != nil { Label(title, systemImage: "cloud").lineLimit(1) }
-            else { Text(title).lineLimit(1) }
+            if configureModels != nil {
+                HStack(spacing: 4) {
+                    if let selected {
+                        if let logo = selected.brandLogo {
+                            Image(logo).renderingMode(.template).resizable().scaledToFit()
+                                .frame(width: 15, height: 15).accessibilityHidden(true)
+                        } else {
+                            Image(systemName: "cpu").accessibilityHidden(true)
+                        }
+                    }
+                    Text(title).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.caption2.bold()).accessibilityHidden(true)
+                }
+                .frame(maxWidth: 164, alignment: .leading).contentShape(Rectangle())
+            } else { Text(title).lineLimit(1) }
         }
     }
 
-    private func choices(_ models: [AssistantCatalogModel], showProvider: Bool = false) -> some View {
+    private func choices(_ models: [AssistantCatalogModel], selection: AssistantCatalogModel.ID?, showProvider: Bool = false) -> some View {
         ForEach(models) { model in
-            Button { service.selectChatModel(model) } label: {
+            Button { service.selectChatModel(model, visibility: preferences.assistantModelVisibility) } label: {
                 let title = showProvider ? model.providerName + " · " + model.name : model.name
-                if currentID == model.id { Label(title, systemImage: "checkmark") }
+                if selection == model.id { Label(title, systemImage: "checkmark") }
                 else { Text(title) }
             }.disabled(!service.canSelectChatModel(model))
         }

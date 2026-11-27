@@ -12,8 +12,6 @@
 Из корня репозитория:
 
 ```sh
-xcodebuild -resolvePackageDependencies -project apps/macos/Planner.xcodeproj -scheme Planner \
-  -clonedSourcePackagesDirPath apps/macos/.build/SourcePackages
 PLANNER_RELEASE_SIGNING_IDENTITY='<certificate fingerprint>' python3 apps/macos/scripts/build_release.py
 ```
 

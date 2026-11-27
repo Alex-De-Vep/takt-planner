@@ -5,6 +5,32 @@ import Testing
 
 @MainActor
 struct SyncTests {
+    @Test(arguments: [URLError.timedOut.rawValue, URLError.networkConnectionLost.rawValue, 503, 429])
+    func refreshResumesAfterRestart(failure: Int) async throws {
+        let file = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let store = SyncPilotTests.TestCredential(url: file)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SyncRefreshTransportFixture.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let initial = SyncHTTP(origin: URL(string: "https://error-\(failure).invalid")!, store: store, session: session)
+        try await initial.install(.init(accessToken: "expired", refreshToken: "previous", expiresIn: 0))
+        await initial.setRefreshRecoveryEnabled(true)
+        do {
+            let _: SyncOK = try await initial.authorized("/fixture")
+            Issue.record("Expected a transient network failure")
+        } catch let error as URLError { #expect(error.errorCode == failure) }
+        catch let error as SyncHTTPFailure { #expect(error.status == failure) }
+        let operation = try #require(store.load()?.operationID)
+        // The replacement instance reads only the file. Its first request must carry the same operation.
+        let resumed = SyncHTTP(origin: URL(string: "https://\(operation.syncID).invalid")!, store: store, session: session)
+        let result: SyncOK = try await resumed.authorized("/fixture")
+        #expect(result.ok)
+        #expect(try store.load()?.token == "replacement")
+        #expect(try store.load()?.operationID == nil)
+    }
+
     @Test func defaultLanguageFollowsSystemAndKeepsManualChoice() throws {
         let suite = "local.planner.language.test." + UUID().syncID
         let defaults = try #require(UserDefaults(suiteName: suite))
@@ -415,4 +441,39 @@ struct CloudWorkspacePilotTests {
         let completed = try condition()
         try #require(completed)
     }
+}
+
+private final class SyncRefreshTransportFixture: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let url = request.url, let host = url.host?.components(separatedBy: ".").first else { return }
+        var status = 200
+        var response = #"{"ok":true}"#
+        if url.path == "/v1/auth/refresh" {
+            let payload: [String:String]?
+            if let body = request.httpBody {
+                payload = try? JSONDecoder().decode([String:String].self, from: body)
+            } else if let stream = request.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                payload = (try? JSONSerialization.jsonObject(with: stream)) as? [String:String]
+            } else { payload = nil }
+            if host.hasPrefix("error-"), let failure = Int(host.dropFirst(6)), payload?["operationId"] != nil {
+                if failure < 0 {
+                    client?.urlProtocol(self, didFailWithError: URLError(URLError.Code(rawValue: failure)))
+                    return
+                }
+                status = failure
+            } else {
+                status = payload?["operationId"] == host && payload?["refreshToken"] == "previous" ? 200 : 401
+            }
+            response = #"{"accessToken":"renewed","refreshToken":"replacement","expiresIn":900}"#
+        } else if request.value(forHTTPHeaderField: "Authorization") != "Bearer renewed" { status = 401 }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!,
+                            cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(response.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }

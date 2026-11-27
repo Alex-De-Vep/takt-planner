@@ -4,6 +4,30 @@ import SwiftUI
 /// Спокойные поверхности в духе «Заметок» и собственный фиолетовый акцент в обеих темах macOS.
 enum PlannerStyle {
     static let accent = Color("AccentColor")
+
+    private static let settingsAccentLight: UInt32 = 0x59616D
+    static let settingsAccent = color(light: settingsAccentLight, dark: 0xA7B1BF)
+    static let settingsSelection = color(light: 0xE9ECF1, dark: 0x323740)
+    static let settingsControlTint = Color(nsColor: rgb(settingsAccentLight))
+
+    private static let assistantBlue: UInt32 = 0x2E58FF
+    static let assistantAccent = Color(nsColor: rgb(assistantBlue))
+    private static let calendarAccentLight: UInt32 = 0x456FAF
+    static let calendarAccent = color(light: calendarAccentLight, dark: 0x8EB9F2)
+    static let calendarControlTint = Color(nsColor: rgb(calendarAccentLight))
+    static let calendarAccentForeground = color(light: 0xFFFFFF, dark: 0x151B2D)
+    static let assistantUserMessageBackground = color(light: 0xEDF1F8, dark: 0x282C37)
+    static let assistantGradient = LinearGradient(stops: [
+        (assistantBlue, 0.000), (0x584FFF, 0.083), (0x7446FC, 0.167),
+        (0x8C3DF4, 0.250), (0xA134E8, 0.333), (0xB42BD9, 0.417),
+        (0xC51FC6, 0.500), (0xD410B1, 0.583), (0xE0009A, 0.667),
+        (0xEA0080, 0.750), (0xF20066, 0.833), (0xF90046, 0.917), (0xFF0000, 1.000)
+    ].map { hex, location in
+        Gradient.Stop(color: Color(nsColor: rgb(hex)), location: location)
+    }, startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let assistantReplyBackground = AnyShapeStyle(assistantGradient.opacity(0.13))
+    static let noteControlAccent = color(light: 0x7BC8AB, dark: 0x70BFA2)
+    static let noteActionTint = color(light: 0x286D57, dark: 0x70BFA2)
     // Подложка панели папок и список используют одну поверхность в обеих темах.
     static let workspaceBackground = nativeColor(light: 0xFAFAFA, dark: 0x242426)
     static let listBackground = Color(nsColor: workspaceBackground)
@@ -12,6 +36,10 @@ enum PlannerStyle {
     static let actionBackground = color(light: 0xF7F7F5, dark: 0x272729)
     static let successBackground = color(light: 0xEDF5EE, dark: 0x293E30)
 
+    static func assistantCardBackground(_ tint: Color, in colorScheme: ColorScheme) -> Color {
+        tint.opacity(colorScheme == .dark ? 0.08 : 0.13)
+    }
+
     static func color(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: nativeColor(light: light, dark: dark))
     }
@@ -19,8 +47,12 @@ enum PlannerStyle {
     private static func nativeColor(light: UInt32, dark: UInt32) -> NSColor {
         NSColor(name: nil) { appearance in
             let hex = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-            return NSColor(srgbRed: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255, alpha: 1)
+            return rgb(hex)
         }
+    }
+
+    private static func rgb(_ hex: UInt32) -> NSColor {
+        NSColor(srgbRed: Double((hex >> 16) & 255) / 255, green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255, alpha: 1)
     }
 }
 

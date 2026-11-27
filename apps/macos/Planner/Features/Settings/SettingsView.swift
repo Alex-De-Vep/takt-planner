@@ -4,10 +4,7 @@ import PlannerLocalization
 /// Нативное окно настроек macOS, доступное через меню приложения и ⌘,.
 struct SettingsView: View {
     private enum Pane: String, CaseIterable {
-        case general, backup, notifications, calendar
-        #if canImport(MLXLLM)
-        case assistant
-        #endif
+        case general, backup, notifications, calendar, assistant
 
         var label: (title: String, icon: String) {
             switch self {
@@ -19,9 +16,7 @@ struct SettingsView: View {
             case .backup: ("Резервная копия", "externaldrive")
             case .notifications: ("Уведомления", "bell")
             case .calendar: ("Календарь", "calendar")
-            #if canImport(MLXLLM)
             case .assistant: ("Помощник", "sparkles")
-            #endif
             }
         }
     }
@@ -29,14 +24,13 @@ struct SettingsView: View {
     @Environment(\.translations) private var strings
     @Environment(\.openWindow) private var openWindow
     @State private var selection: Pane? = .general
+    @State private var showingSupport = false
     @Bindable var preferences: AppPreferences
     let calendar: CalendarService
     @Bindable var notifications: PlannerNotifications
     var cloud: CloudWorkspace? = nil
     var service: TaskService? = nil
-    #if canImport(MLXLLM)
     let assistant: AssistantService
-    #endif
     let restoreBackup: (PlannerBackup) throws -> Void
 
     var body: some View {
@@ -44,9 +38,18 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 List(selection: $selection) {
                     ForEach(Pane.allCases, id: \.self) { pane in
-                        Label(strings[pane.label.title], systemImage: pane.label.icon)
-                            .accessibilityIdentifier("settings-pane-\(pane.rawValue)")
-                            .tag(pane)
+                        Label {
+                            Text(strings[pane.label.title])
+                                .foregroundStyle(selection == pane ? PlannerStyle.settingsAccent : .primary)
+                        } icon: {
+                            Image(systemName: pane.label.icon).foregroundStyle(PlannerStyle.settingsAccent)
+                        }
+                        .accessibilityIdentifier("settings-pane-\(pane.rawValue)")
+                        .tag(pane)
+                        .listItemTint(.fixed(.clear))
+                        .listRowBackground(selection == pane
+                            ? RoundedRectangle(cornerRadius: 8).fill(PlannerStyle.settingsSelection).padding(.horizontal, 8)
+                            : nil)
                     }
                 }
                 .listStyle(.sidebar)
@@ -61,6 +64,19 @@ struct SettingsView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .accessibilityIdentifier("settings-help")
+                #if !SHOWCASE
+                if cloud != nil {
+                    Button { showingSupport = true } label: {
+                        Label(strings["Написать нам"], systemImage: "envelope")
+                            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .accessibilityIdentifier("settings-support")
+                }
+                #endif
             }
             .frame(width: 188)
             Divider()
@@ -71,33 +87,28 @@ struct SettingsView: View {
         }
         .frame(minWidth: 700, idealWidth: 748, minHeight: 490, idealHeight: 590)
         .navigationTitle(strings["Настройки"])
+        .sheet(isPresented: $showingSupport) {
+            if let cloud { SupportRequestSheet(cloud: cloud, service: service) }
+        }
         .onAppear { calendar.refresh() }
-        #if canImport(MLXLLM)
         .onChange(of: preferences.assistantSettingsRequest, initial: true) { _, request in
             if request != nil {
                 selection = .assistant
                 preferences.assistantSettingsRequest = nil
             }
         }
-        #endif
     }
 
     @ViewBuilder private var detail: some View {
         switch selection ?? .general {
         case .general: general
         case .backup:
-            #if canImport(MLXLLM)
             BackupSettingsSection(preferences: preferences, service: service, assistant: assistant, restore: restoreBackup)
-            #else
-            BackupSettingsSection(preferences: preferences, service: service, assistant: nil, restore: restoreBackup)
-            #endif
         case .notifications:
             NotificationSettingsSection(preferences: preferences, notifications: notifications)
         case .calendar: calendarSettings
-        #if canImport(MLXLLM)
         case .assistant:
             AssistantSettingsSection(assistant: assistant, preferences: preferences)
-        #endif
         }
     }
 
@@ -130,16 +141,18 @@ struct SettingsView: View {
                 Toggle(strings["Все календари"], isOn: Binding(get: { preferences.visibleCalendarIDs == nil }, set: {
                     preferences.visibleCalendarIDs = $0 ? nil : Set(calendar.calendars.map(\.id))
                 }))
+                .tint(PlannerStyle.settingsControlTint)
                 ForEach(calendar.calendars) { item in
                     Toggle(item.title, isOn: Binding(get: { preferences.visibleCalendarIDs?.contains(item.id) ?? true }, set: { enabled in
                         var ids = preferences.visibleCalendarIDs ?? Set(calendar.calendars.map(\.id))
                         if enabled { ids.insert(item.id) } else { ids.remove(item.id) }
                         preferences.visibleCalendarIDs = ids
                     }))
+                    .tint(PlannerStyle.settingsControlTint)
                 }
                 if calendar.calendars.isEmpty { Text(strings["Нет доступных календарей."]).foregroundStyle(.secondary) }
                 Button(strings["Открыть системные настройки"]) { calendar.openPrivacySettings() }
-            } else { CalendarAccessView(service: calendar) }
+            } else { CalendarAccessView(service: calendar, primaryTint: PlannerStyle.settingsControlTint) }
         } header: { Label(strings["Календарь"], systemImage: "calendar") }
     }
 }

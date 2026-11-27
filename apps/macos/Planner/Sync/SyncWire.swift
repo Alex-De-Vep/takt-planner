@@ -119,6 +119,7 @@ struct SyncConfig: Codable, Sendable {
         var maxNoteFormatVersion: Int? = nil
         var noteEventsVersion: Int? = nil
         var taskEventsVersion: Int? = nil
+        var refreshOperationVersion: Int? = nil
     }
     let protocolVersion: Int
     let serverTime: String

@@ -78,9 +78,10 @@ struct NoteListView: View {
                 folderDrag?.finish(sourceViewID: dragSourceID)
                 nativeFocus.transitions.detach()
             }
-            Text(strings[trash ? "Заметки удаляются навсегда через 30 дней."
-                         : store.syncEnabled ? "Заметки синхронизируются с аккаунтом" : "Заметки сохраняются на этом Mac"])
-                .font(.caption).foregroundStyle(.secondary).padding(10)
+            if trash || !store.syncEnabled {
+                Text(strings[trash ? "Заметки удаляются навсегда через 30 дней." : "Заметки сохраняются на этом Mac"])
+                    .font(.caption).foregroundStyle(.secondary).padding(10)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

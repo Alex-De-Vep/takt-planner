@@ -34,6 +34,7 @@ struct SyncHTTPFailure: LocalizedError, Sendable {
 struct SyncRefreshCredential: Codable, Sendable {
     let token: String
     var inFlight = false
+    var operationID: UUID?
 }
 
 protocol SyncCredentialStore: Sendable {
@@ -98,6 +99,9 @@ actor SyncHTTP {
     private var expiry = Date.distantPast
     private var refreshTask: Task<SyncTokens, Error>?
     private var closed = false
+    private var refreshRecoveryEnabled = false
+
+    func setRefreshRecoveryEnabled(_ enabled: Bool) { refreshRecoveryEnabled = enabled }
 
     init(origin: URL = SyncHTTP.production, store: any SyncCredentialStore, session: URLSession? = nil) {
         self.origin = origin
@@ -160,6 +164,13 @@ actor SyncHTTP {
         }
     }
 
+    func sendSupport(_ submission: SupportSubmission) async throws -> String {
+        let receipt: SupportReceipt = try await authorized("/v1/support/requests", method: "POST",
+            body: Self.payload(submission))
+        guard receipt.isValid else { throw SyncProblem.invalidResponse }
+        return receipt.code
+    }
+
     private func validAccess() async throws -> String {
         guard !closed else { throw CancellationError() }
         if let accessToken, expiry > .now { return accessToken }
@@ -171,10 +182,23 @@ actor SyncHTTP {
     }
 
     private func rotate() async throws -> SyncTokens {
-        guard !closed, let credential = try store.load(), !credential.inFlight else {
+        guard !closed, let credential = try store.load(), !credential.inFlight || credential.operationID != nil else {
             throw SyncProblem.signInRequired
         }
-        // При потере ответа старый refresh может быть уже использован сервером.
+        if let operationID = credential.operationID ?? (refreshRecoveryEnabled ? UUID() : nil) {
+            if credential.operationID == nil {
+                try store.save(SyncRefreshCredential(token: credential.token, inFlight: true, operationID: operationID))
+            }
+            do {
+                let tokens: SyncTokens = try await request("/v1/auth/refresh", method: "POST",
+                    body: Self.payload(["refreshToken": credential.token, "operationId": operationID.syncID]), bearer: nil)
+                try install(tokens)
+                return tokens
+            } catch let failure as SyncHTTPFailure where failure.status == 401 {
+                throw SyncProblem.signInRequired
+            }
+        }
+        // Older servers cannot safely replay a refresh after losing its response.
         // Маркер переживает аварийный выход и предотвращает повтор такого токена.
         try store.save(SyncRefreshCredential(token: credential.token, inFlight: true))
         do {

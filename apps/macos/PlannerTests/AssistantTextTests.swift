@@ -16,8 +16,14 @@ import Testing
         return task
     }
     private func service() -> AssistantService {
-        AssistantService(model: ModelManager(backend: FakeAIBackend()),
-            store: AssistantStore(url: FileManager.default.temporaryDirectory.appending(path: "TextTests-\(UUID())/history.json")))
+        AssistantService(store: AssistantStore(url: FileManager.default.temporaryDirectory.appending(path: "TextTests-\(UUID())/history.json")))
+    }
+    private func stageEdit(in service: AssistantService, task: PlannerTask, tasks: TaskService) throws {
+        stageEdit(in: service, edit: .init(target: .savedTask, before: try tasks.assistantTextSnapshot(task)))
+    }
+    private func stageEdit(in service: AssistantService, edit: AssistantTextEdit) {
+        service.archive.threads[0].textEdits = (service.archive.threads[0].textEdits ?? []) + [edit]
+        service.archive.threads[0].activeTextEditID = edit.id
     }
     private func context(task: PlannerTask? = nil) -> AssistantContext {
         .init(now: .now, timeZoneID: "Europe/Moscow", language: "ru", folders: [.init(id: "inbox", name: "Входящие")], calendars: [],
@@ -27,7 +33,7 @@ import Testing
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext)
         let task = try task(tasks), other = try #require(tasks.createTask(in: .inbox, folders: []))
         let service = service()
-        #expect(service.beginTextEdit(task: task, tasks: tasks))
+        try stageEdit(in: service, task: task, tasks: tasks)
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(title: "Презентация проекта", description: "Структура и результат.", checklist: ["Проверить слайды"]))
         service.updateTextEdit(edit)
@@ -37,7 +43,7 @@ import Testing
     @Test func partialApplyIsAtomicIdempotentAndPreservesMetadataAndChecklist() throws {
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext)
         let task = try task(tasks)
-        let service = service(); service.beginTextEdit(task: task, tasks: tasks)
+        let service = service(); try stageEdit(in: service, task: task, tasks: tasks)
         let createdAt = task.createdAt, folder = task.systemFolderKind
         task.focusDay = LocalDay.key(for: .now); task.completedAt = .now
         try db.mainContext.save()
@@ -56,7 +62,7 @@ import Testing
     @Test func conflictsBlockButUnrelatedChangesDoNot() throws {
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext)
         let task = try task(tasks), service = service()
-        service.beginTextEdit(task: task, tasks: tasks)
+        try stageEdit(in: service, task: task, tasks: tasks)
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(description: "Новое описание")); service.updateTextEdit(edit)
         tasks.updateDescription(task, text: "Ручное изменение")
@@ -73,7 +79,7 @@ import Testing
     @Test func checklistConflictAndDeletedTaskNeverRecreateObjects() throws {
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext)
         let task = try task(tasks), service = service()
-        service.beginTextEdit(task: task, tasks: tasks)
+        try stageEdit(in: service, task: task, tasks: tasks)
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(checklist: ["Проверить результат"])); service.updateTextEdit(edit)
         _ = tasks.addChecklistItem(to: task)
@@ -88,7 +94,7 @@ import Testing
         let db = try PlannerPersistence.makeContainer(inMemory: true)
         let good = TaskService(context: db.mainContext), task = try task(good)
         let failing = TaskService(context: db.mainContext, saveContext: { _ in throw AssistantFailure(message: "disk") })
-        let service = service(); service.beginTextEdit(task: task, tasks: failing)
+        let service = service(); try stageEdit(in: service, task: task, tasks: failing)
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(title: "Новое", description: "Новое описание", checklist: ["Пункт"]))
         service.updateTextEdit(edit); service.applyTextEdit(edit.id, tasks: failing)
@@ -101,10 +107,10 @@ import Testing
     @Test func unsavedDraftBlocksSnapshotAndApply() throws {
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext)
         let task = try task(tasks), service = service()
-        service.beginTextEdit(task: task, tasks: tasks)
+        try stageEdit(in: service, task: task, tasks: tasks)
         var edit = try #require(service.activeTextEdit); try edit.propose(.init(title: "Новое")); service.updateTextEdit(edit)
         tasks.descriptionDrafts[task.id] = "Несохранённое"
-        #expect(!service.beginTextEdit(task: task, tasks: tasks))
+        #expect(throws: (any Error).self) { try tasks.assistantTextSnapshot(task) }
         service.applyTextEdit(edit.id, tasks: tasks)
         #expect(task.title == edit.before.title && tasks.descriptionDrafts[task.id] == "Несохранённое")
     }
@@ -112,7 +118,7 @@ import Testing
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext), service = service()
         let action = AssistantAction(proposal: .init(key: "a", kind: .task, title: "Макет", folderID: "week", description: "Коротко", checklist: ["Исходный"], date: "2026-11-10", today: true), context: context())
         service.archive.threads[0].actions = [action]
-        service.beginTextEdit(proposal: action)
+        stageEdit(in: service, edit: .init(target: .proposal, before: AssistantService.textSnapshot(action)))
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(description: "Цель, шаги, результат", checklist: ["Исходный", "Новый"]))
         service.updateTextEdit(edit)
@@ -123,7 +129,7 @@ import Testing
         #expect(result.proposal.description == "Цель, шаги, результат" && result.proposal.checklist == ["Исходный", "Новый"])
         #expect(!service.hasUnreviewedText(for: action.id) && service.current?.textEdits?.first?.status == .accepted)
         #expect(try db.mainContext.fetchCount(FetchDescriptor<PlannerTask>()) == 0)
-        service.beginTextEdit(proposal: result)
+        stageEdit(in: service, edit: .init(target: .proposal, before: AssistantService.textSnapshot(result)))
         #expect(service.activeTextEdit?.before.description == "Цель, шаги, результат")
     }
     @Test func followupKeepsBaselineAndStableAdditionIDs() throws {
@@ -139,7 +145,7 @@ import Testing
     }
     @Test func interruptedJournalRecoversWithoutDuplicatingSubtasks() throws {
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext), task = try task(tasks)
-        let service = service(); service.beginTextEdit(task: task, tasks: tasks)
+        let service = service(); try stageEdit(in: service, task: task, tasks: tasks)
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(title: "Новое", checklist: ["Добавление"]))
         edit.committed = edit.selected; edit.status = .applying
@@ -161,11 +167,7 @@ import Testing
         try JSONSerialization.data(withJSONObject: json).write(to: url)
         #expect(throws: (any Error).self) { try AssistantStore(url: url).load() }
     }
-    @Test func oversizedSourceIsRejectedWithoutTruncation() throws {
-        let before = AssistantTextSnapshot(id: UUID(), title: "Название", description: String(repeating: "А", count: 19000), checklist: [])
-        #expect(throws: (any Error).self) { try AssistantTextPrompt.request(edit: .init(target: .savedTask, before: before), thread: AssistantThread(), language: "ru") }
-        #expect(AssistantTextPrompt.isTextRequest("Распиши открытую задачу"))
-        #expect(!AssistantTextPrompt.isTextRequest("Создай задачу и распиши её"))
+    @Test func textEditsDecodeLineBreaks() throws {
         let response = try ActionPlanValidator.decode("{\"message\":\"\",\"textEdit\":{\"description\":\"Цель\\nРезультат\"}}")
         #expect(response.textEdit?.description == "Цель\nРезультат")
     }
@@ -186,7 +188,7 @@ import Testing
         let service = service()
         let action = AssistantAction(proposal: .init(key: "draft", kind: .task, title: "План", folderID: "inbox", checklist: ["Первый", "Второй"]), context: context())
         service.archive.threads[0].actions = [action]
-        service.beginTextEdit(proposal: action)
+        stageEdit(in: service, edit: .init(target: .proposal, before: AssistantService.textSnapshot(action)))
         var edit = try #require(service.activeTextEdit)
         try edit.propose(.init(checklist: ["Первый", "Уточнённый третий"]))
         service.updateTextEdit(edit)
@@ -201,21 +203,23 @@ import Testing
         edit.additions[0].included = false
         #expect(edit.hasChanges && !edit.hasSelection && edit.selected.checklist.isEmpty)
     }
-    @Test func generationUsesExplicitTargetAndLeavesCreationProposalsIntact() async throws {
-        let backend = TextResponseBackend()
-        let fixture = try InstalledModelFixture(backend: backend); defer { fixture.clean() }
-        let service = AssistantService(model: fixture.manager, store: AssistantStore(url: FileManager.default.temporaryDirectory.appending(path: "TextGeneration-\(UUID())/chat.json")))
-        let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext), task = try task(tasks)
-        let action = AssistantAction(proposal: .init(key: "untouched", kind: .task, title: "Другая задача", folderID: "inbox"), context: context())
-        service.archive.threads[0].actions = [action]
-        service.beginTextEdit(task: task, tasks: tasks)
-        service.send("Распиши описание", context: context(), taskService: tasks)
-        while service.generating { await Task.yield() }
-        #expect(service.activeTextEdit?.change.description == "Цель\nДействия\nРезультат")
-        #expect(service.current?.actions.first?.id == action.id && task.descriptionText == "Рассказать о проекте.")
-        let prompt = await backend.lastPrompt
-        #expect(prompt.contains("Рассказать о проекте.") && prompt.contains("Собрать материалы"))
-        #expect(!prompt.contains("Другая задача"))
+    @Test func providerEditsOnlyTheAttachedTask() throws {
+        let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext)
+        let task = try task(tasks)
+        let edit = AssistantTextEdit(target: .savedTask, before: try tasks.assistantTextSnapshot(task))
+        let action = AssistantAction(proposal: .init(key: "untouched", kind: .task, title: "Другая задача"), context: context())
+        var thread = AssistantThread()
+        thread.actions = [action]
+        thread.chooseModel(id: "test-model")
+        let text = "Распиши описание"
+        let request = try AssistantCloudRequest(thread: thread, text: text, context: context(), edit: edit, modelID: "test-model")
+        let payload = String(decoding: request.body, as: UTF8.self)
+        #expect(payload.contains("Рассказать о проекте.") && payload.contains("Собрать материалы"))
+        #expect(!payload.contains("Другая задача"))
+        let reply = AssistantResponse(message: "", textEdit: .init(description: "Цель и результат"))
+        thread = try AssistantService.cloudReply(reply, to: thread, drafts: request.drafts, text: text, context: context(), edit: edit)
+        #expect(thread.textEdits?.first?.change.description == "Цель и результат")
+        #expect(thread.actions.map(\.id) == [action.id] && task.descriptionText == "Рассказать о проекте.")
     }
 
     @Test func checklistTextUsesOnlyCompleteJsonAndRemovesTextMarkers() throws {
@@ -225,7 +229,7 @@ import Testing
     }
     @Test func deselectedInvalidTextDoesNotBlockOtherChanges() throws {
         let db = try PlannerPersistence.makeContainer(inMemory: true), tasks = TaskService(context: db.mainContext), task = try task(tasks), service = service()
-        service.beginTextEdit(task: task, tasks: tasks)
+        try stageEdit(in: service, task: task, tasks: tasks)
         var edit = try #require(service.activeTextEdit)
         edit.change.title = ""; edit.includeTitle = false
         edit.change.description = "Подтверждено"
@@ -240,8 +244,8 @@ import Testing
         do {
             let db = try PlannerPersistence.makeContainer(at: url), tasks = TaskService(context: db.mainContext), task = try task(tasks)
             taskID = task.id
-            let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
-            service.beginTextEdit(task: task, tasks: tasks)
+            let service = AssistantService(store: store)
+            try stageEdit(in: service, task: task, tasks: tasks)
             var edit = try #require(service.activeTextEdit)
             try edit.propose(.init(title: "Готовая презентация", description: "План\nРезультат", checklist: ["Проверить"]))
             expectedItemID = edit.additions.first?.id
@@ -251,7 +255,7 @@ import Testing
             try tasks.applyAssistantText(edit)
         }
         let reopened = try PlannerPersistence.makeContainer(at: url), tasks = TaskService(context: reopened.mainContext)
-        let service = AssistantService(model: ModelManager(backend: FakeAIBackend()), store: store)
+        let service = AssistantService(store: store)
         let edit = try #require(service.activeTextEdit)
         #expect(edit.status == .pending && edit.committed != nil)
         service.applyTextEdit(edit.id, tasks: tasks)
@@ -261,14 +265,4 @@ import Testing
         #expect(service.current?.textEdits?.first?.status == .applied)
     }
 
-}
-
-actor TextResponseBackend: LocalAIBackend {
-    var lastPrompt = ""
-    func prepare(directory: URL) async throws {}
-    func unload() async {}
-    func respond(instructions: String, prompt: String) async throws -> String {
-        lastPrompt = prompt
-        return #"{"message":"","questions":[],"actions":[],"textEdit":{"description":"Цель\nДействия\nРезультат"}}"#
-    }
 }

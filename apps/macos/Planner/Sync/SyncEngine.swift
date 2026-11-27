@@ -181,6 +181,8 @@ final class SyncEngine {
         let config: SyncConfig = try await api.publicRequest("/v1/config")
         try checkActive()
         guard config.protocolVersion == 1 else { throw SyncProblem.incompatibleProtocol }
+        await api.setRefreshRecoveryEnabled(config.limits.refreshOperationVersion == 1)
+        try checkActive()
         limits = config.limits
         notes?.syncEnabled = config.limits.maxNoteBytes != nil
         notes?.sharedFormatLimit = (config.limits.maxNoteFormatVersion ?? 0) >= SharedNoteText.currentVersion
