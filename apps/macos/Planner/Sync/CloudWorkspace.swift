@@ -303,7 +303,7 @@ final class CloudWorkspace {
 
     func sendSupport(_ submission: SupportSubmission, for profile: SyncProfile) async throws -> String {
         guard profile == self.profile, let api = activeAPI else { throw SyncProblem.signInRequired }
-        guard SupportSubmission.isValid(submission.message) else { throw SyncProblem.invalidResponse }
+        guard submission.isValid else { throw SyncProblem.invalidResponse }
         try Task.checkCancellation()
         let key = supportSubmissionKey(for: profile)
         defaults.set(try JSONEncoder().encode(submission), forKey: key)

@@ -41,9 +41,10 @@ private struct SupportRequestForm: View {
     let cloud: CloudWorkspace
     let profile: SyncProfile
     let signIn: () -> Void
+    @State private var subject: String
     @State private var message: String
+    @State private var replyEmail: String
     @State private var pending: SupportSubmission?
-    @State private var deviceDetails = SupportSubmission()
     @State private var code: String?
     @State private var copied = false
     @State private var needsSignIn = false
@@ -56,15 +57,26 @@ private struct SupportRequestForm: View {
         self.signIn = signIn
         let saved = cloud.pendingSupportSubmission(for: profile)
         _pending = State(initialValue: saved)
+        _subject = State(initialValue: saved?.subject ?? "")
         _message = State(initialValue: saved?.message ?? "")
+        _replyEmail = State(initialValue: saved?.replyEmail ?? profile.account.email)
     }
 
-    private var normalized: String { SupportSubmission.normalized(message) }
-    private var valid: Bool { SupportSubmission.isValid(normalized) }
+    private var normalizedSubject: String { SupportSubmission.normalized(subject) }
+    private var normalizedMessage: String { SupportSubmission.normalized(message) }
+    private var normalizedReplyEmail: String { SupportSubmission.normalized(replyEmail) }
+    private var validSubject: Bool { SupportSubmission.isValidSubject(normalizedSubject) }
+    private var validMessage: Bool { SupportSubmission.isValidMessage(normalizedMessage) }
+    private var validReplyEmail: Bool { SupportSubmission.isValidReplyEmail(normalizedReplyEmail) }
+    private var valid: Bool { validMessage && (legacyRetry != nil || (validSubject && validReplyEmail)) }
     private var requiresLogin: Bool { needsSignIn || cloud.engine?.status == .signIn }
-    private var details: SupportSubmission {
-        if let pending, pending.message == normalized { return pending }
-        return deviceDetails
+
+    private var legacyRetry: SupportSubmission? {
+        // Preserve the original payload when retrying an unchanged request from an older build.
+        guard let pending, pending.subject == nil, pending.replyEmail == nil, normalizedSubject.isEmpty,
+              pending.message == normalizedMessage, normalizedReplyEmail == SupportSubmission.normalized(profile.account.email)
+        else { return nil }
+        return pending
     }
 
     var body: some View {
@@ -84,29 +96,7 @@ private struct SupportRequestForm: View {
                 }
             } else {
                 Text(strings["Написать нам"]).font(.title2.bold())
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(strings["Опишите проблему"]).fontWeight(.medium)
-                    TextEditor(text: $message)
-                        .font(.body)
-                        .frame(height: 120)
-                        .border(.quaternary)
-                        .accessibilityLabel(strings["Опишите проблему"])
-                        .accessibilityIdentifier("support-description")
-                        .disabled(sending != nil)
-                    if !normalized.isEmpty && !valid {
-                        Text(strings["Описание должно содержать от 1 до 4000 символов."])
-                            .font(.callout).foregroundStyle(.red)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(strings["В обращение войдут"]).fontWeight(.medium)
-                    LabeledContent(strings["Версия Takt"], value: strings.format("%@ (сборка %@)", details.appVersion, details.appBuild))
-                    LabeledContent("macOS", value: details.osVersion)
-                    LabeledContent(strings["Время на устройстве"], value: details.deviceTime.replacingOccurrences(of: "T", with: " "))
-                    LabeledContent(strings["Почта для ответа"], value: profile.account.email)
-                }
-                .font(.callout)
-                .textSelection(.enabled)
+                fields.disabled(sending != nil)
                 if requiresLogin {
                     Text(strings["Войдите в аккаунт, чтобы написать в поддержку."]).foregroundStyle(.secondary)
                 } else if let error {
@@ -136,9 +126,51 @@ private struct SupportRequestForm: View {
         .onDisappear { sending?.cancel() }
     }
 
+    private var fields: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(strings["Тема"]).fontWeight(.medium)
+                TextField(strings["Тема"], text: $subject)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("support-subject")
+                if !normalizedSubject.isEmpty && !validSubject {
+                    Text(strings["Укажите тему до 120 символов в одну строку."])
+                        .font(.callout).foregroundStyle(.red)
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(strings["Опишите проблему"]).fontWeight(.medium)
+                TextEditor(text: $message)
+                    .font(.body)
+                    .frame(height: 120)
+                    .border(.quaternary)
+                    .accessibilityLabel(strings["Опишите проблему"])
+                    .accessibilityIdentifier("support-description")
+                if !normalizedMessage.isEmpty && !validMessage {
+                    Text(strings["Описание должно содержать от 1 до 4000 символов."])
+                        .font(.callout).foregroundStyle(.red)
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(strings["Почта для ответа"]).fontWeight(.medium)
+                TextField("", text: $replyEmail, prompt: Text(strings["Почта"]))
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.emailAddress)
+                    .accessibilityLabel(strings["Почта для ответа"])
+                    .accessibilityIdentifier("support-reply-email")
+                if !normalizedReplyEmail.isEmpty && !validReplyEmail && legacyRetry == nil {
+                    Text(strings["Укажите корректный адрес почты."])
+                        .font(.callout).foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
     private func send() {
         guard valid, sending == nil, !requiresLogin else { return }
-        let submission = SupportSubmission.prepare(message: normalized, retrying: pending)
+        let submission = legacyRetry ?? SupportSubmission.prepare(
+            subject: normalizedSubject, message: normalizedMessage, replyEmail: normalizedReplyEmail, retrying: pending
+        )
         pending = submission
         error = nil
         sending = Task {

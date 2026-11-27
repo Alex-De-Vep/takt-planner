@@ -49,8 +49,8 @@ struct WorkspaceSidebarRoot: View {
 
 /// Только идентичность результатов: ввод и смена фокуса не запускают переход всего списка.
 enum WorkspaceListScope: Hashable {
-    case tasks(TaskFilter, search: String)
-    case notes(NoteScope, folder: TaskFilter?, search: String)
+    case tasks(TaskFilter, search: String, labelID: UUID? = nil)
+    case notes(NoteScope, folder: TaskFilter?, search: String, labelID: UUID? = nil)
 }
 
 struct WorkspaceListAnimationKey: Equatable {
@@ -103,6 +103,7 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, Deadli
     let voice: NoteVoiceRecording
     let showsActiveRecording: Bool
     let noteActions: WorkspaceNoteToolbarActions?
+    let folderLabelToolbarContent: AnyView?
     let listAnimationKey: WorkspaceListAnimationKey
     let newFolder: () -> Void
     let newTask: () -> Void
@@ -146,6 +147,8 @@ struct NativeWorkspaceSplitView<Sidebar: View, Tasks: View, Detail: View, Deadli
         controller.updateSearch(text: search, title: searchTitle, clearTitle: clearSearchTitle, changed: { search = $0 })
         controller.updateDeadline(AnyView(deadline().environment(\.self, context.environment)),
                                   title: deadlineTitle, visible: hasSelectedTask)
+        controller.updateFolderLabels(folderLabelToolbarContent.map { AnyView($0.environment(\.self, context.environment)) },
+                                      title: strings["Ярлыки"])
         controller.update(
             sidebar: AnyView(sidebar().environment(\.self, context.environment)),
             tasks: AnyView(tasks().environment(\.self, context.environment)),
@@ -241,6 +244,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let deleteTaskHost = NSHostingView(rootView: AnyView(EmptyView()))
     private let pinNoteHost = NSHostingView(rootView: AnyView(EmptyView()))
     private let deadlineHost = NSHostingView(rootView: AnyView(EmptyView()))
+    private let folderLabelsHost = NSHostingView(rootView: AnyView(EmptyView()))
     private let folderToolbarItem = NSToolbarItem(itemIdentifier: .plannerNewFolder)
     private let sidebarToolbarItem = NSToolbarItem(itemIdentifier: .plannerToggleSidebar)
     private let headingToolbarItem = NSToolbarItem(itemIdentifier: .plannerFolderHeading)
@@ -251,6 +255,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     private let activeRecordingItem = NSToolbarItem(itemIdentifier: .plannerActiveRecording)
     private let activeRecordingHost = NSHostingView(rootView: AnyView(EmptyView()))
     private let deadlineToolbarItem = NSToolbarItem(itemIdentifier: .plannerDeadline)
+    private let folderLabelsToolbarItem = NSToolbarItem(itemIdentifier: .plannerFolderLabels)
     private let deleteTaskToolbarItem = NSToolbarItem(itemIdentifier: .plannerDeleteTask)
     private let pinNoteToolbarItem = NSToolbarItem(itemIdentifier: .plannerPinNote)
     private lazy var sidebarTrackingItem = NSTrackingSeparatorToolbarItem(
@@ -384,6 +389,9 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         configureButtonSurface(for: deadlineToolbarItem, content: deadlineHost)
         deadlineToolbarItem.isHidden = true
         deadlineToolbarItem.visibilityPriority = .high
+        configureButtonSurface(for: folderLabelsToolbarItem, content: folderLabelsHost)
+        folderLabelsToolbarItem.isHidden = true
+        folderLabelsToolbarItem.visibilityPriority = .high
         deleteTaskSurface = configureButtonSurface(for: deleteTaskToolbarItem, content: deleteTaskHost)
         deleteTaskToolbarItem.isHidden = true
         configureButtonSurface(for: pinNoteToolbarItem, content: pinNoteHost)
@@ -456,7 +464,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         if let noteActions {
             updateHostedAction(title: noteActions.pinTitle, symbol: noteActions.isPinned ? "pin.fill" : "pin",
                 identifier: "pin-note-button", item: pinNoteToolbarItem, host: pinNoteHost,
-                selector: #selector(toggleNotePin), active: noteActions.isPinned) { [weak self] in
+                selector: #selector(toggleNotePin),
+                foreground: noteActions.isPinned ? PlannerStyle.noteControlAccent : .primary) { [weak self] in
                     self?.toggleNotePin()
                 }
         }
@@ -742,7 +751,8 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         [.plannerNewFolder, .plannerToggleSidebar]
         + (sidebarItem.isCollapsed ? [] : [.sidebarTrackingSeparator])
         + [.plannerFolderHeading, .flexibleSpace, .plannerSearch, .plannerDetailTrackingSeparator,
-         .plannerNewTask, .space, .plannerChecklist, .plannerRecordVoice, .space, .plannerRecordCall, .plannerDeadline, .space, .plannerPinNote, .plannerDeleteTask]
+         .plannerNewTask, .space, .plannerFolderLabels, .plannerChecklist, .plannerRecordVoice, .space,
+         .plannerRecordCall, .plannerDeadline, .space, .plannerPinNote, .plannerDeleteTask]
         + (activeRecordingItem.isHidden ? [] : [.plannerActiveRecording])
         + [.flexibleSpace, .plannerRightPanelSwitch] + calendarToolbarIdentifiers
     }
@@ -764,6 +774,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         case .plannerRecordCall: return recordCallItem
         case .plannerActiveRecording: return activeRecordingItem
         case .plannerDeadline: return deadlineToolbarItem
+        case .plannerFolderLabels: return folderLabelsToolbarItem
         case .plannerDeleteTask: return deleteTaskToolbarItem
         case .plannerPinNote: return pinNoteToolbarItem
         case .plannerRightPanelSwitch: return rightPanelSwitchItem
@@ -837,6 +848,14 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         deadlineToolbarItem.isHidden = !visible
     }
 
+    func updateFolderLabels(_ content: AnyView?, title: String) {
+        folderLabelsHost.rootView = content ?? AnyView(EmptyView())
+        folderLabelsToolbarItem.label = title
+        folderLabelsToolbarItem.paletteLabel = title
+        folderLabelsToolbarItem.toolTip = title
+        folderLabelsToolbarItem.isHidden = content == nil
+    }
+
     func updateSearch(text: String, title: String, clearTitle: String, changed: @escaping (String) -> Void) {
         searchChangedAction = changed
         searchToolbarItem.label = title
@@ -892,7 +911,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
     }
 
     private func updateHostedAction(title: String, symbol: String, identifier: String, item: NSToolbarItem,
-                                    host: NSHostingView<AnyView>, selector: Selector, active: Bool = false,
+                                    host: NSHostingView<AnyView>, selector: Selector, foreground: Color = .primary,
                                     action: @escaping () -> Void) {
         guard item.label != title else { return }
         item.label = title
@@ -907,7 +926,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             Button(action: action) {
                 Image(systemName: symbol)
                     .font(.system(size: 17))
-                    .foregroundStyle(active ? PlannerStyle.accent : Color.primary)
+                    .foregroundStyle(foreground)
                     .frame(width: WorkspaceToolbarButtonSurface.diameter, height: WorkspaceToolbarButtonSurface.diameter)
                     .contentShape(Circle())
             }
@@ -1040,8 +1059,7 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
         guard holdsRightPanelToolbar else { return }
         if let anchor = rightPanelToolbarAnchor, anchor.arrangedSubviews.count > 3 {
             let start = anchor.arrangedSubviews[2].frame.maxX
-            let currentWidth = anchor.arrangedSubviews[3].frame.width
-            let end = start + currentWidth - width
+            let end = calendarDividerPosition(for: width)
             animateRightPanelToolbar(from: start, to: end) { [weak anchor] x in anchor?.setPosition(x, ofDividerAt: 2) }
         }
     }
@@ -1242,9 +1260,13 @@ final class WorkspaceSplitController: NSSplitViewController, NSToolbarDelegate {
             setCalendarToolbar(column: true, visible: true)
             if !calendarIsAnimating {
                 // Обычное изменение ширины не должно перебивать анимацию раскрытия.
-                splitView.setPosition(splitView.bounds.width - CalendarPanelLayout.outerInset - width - splitView.dividerThickness, ofDividerAt: 2)
+                splitView.setPosition(calendarDividerPosition(for: width), ofDividerAt: 2)
             }
         }
+    }
+
+    private func calendarDividerPosition(for width: CGFloat) -> CGFloat {
+        splitView.bounds.maxX - CalendarPanelLayout.outerInset - CalendarPanelLayout.columnGlassInset - width
     }
 
     func collapseCalendarSidebar(animate: Bool) {
@@ -1483,6 +1505,7 @@ private extension NSToolbarItem.Identifier {
     static let plannerRecordCall = NSToolbarItem.Identifier("Planner.RecordCall")
     static let plannerActiveRecording = NSToolbarItem.Identifier("Planner.ActiveRecording")
     static let plannerDeadline = NSToolbarItem.Identifier("Planner.Deadline")
+    static let plannerFolderLabels = NSToolbarItem.Identifier("Planner.FolderLabels")
     static let plannerDeleteTask = NSToolbarItem.Identifier("Planner.DeleteTask")
     static let plannerPinNote = NSToolbarItem.Identifier("Planner.PinNote")
 }

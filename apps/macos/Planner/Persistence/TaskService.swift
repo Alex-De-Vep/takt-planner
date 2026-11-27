@@ -32,6 +32,7 @@ final class TaskService {
 
     let context: ModelContext
     var notes = NoteStore()
+    let folderLabels: FolderLabelStore
     private let saveContext: (ModelContext) throws -> Void
     private let textSaveDelay: Duration
     // AppKit already displays the edit. Observing it here would refresh the SwiftUI document on every key.
@@ -52,6 +53,11 @@ final class TaskService {
     init(context: ModelContext, textSaveDelay: Duration = .milliseconds(300),
          saveContext: @escaping (ModelContext) throws -> Void = { try $0.save() }) {
         self.context = context
+        let configuration = context.container.configurations.first
+        let folderLabelsURL: URL? = configuration.flatMap {
+            $0.isStoredInMemoryOnly ? nil : $0.url.deletingLastPathComponent().appending(path: "FolderLabels.json")
+        }
+        folderLabels = FolderLabelStore(url: folderLabelsURL)
         self.textSaveDelay = textSaveDelay
         self.saveContext = saveContext
         context.autosaveEnabled = false

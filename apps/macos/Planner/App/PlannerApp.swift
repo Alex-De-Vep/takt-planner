@@ -111,6 +111,9 @@ final class AppRuntime {
             try backup.restore(in: container.mainContext)
             if let history = try backup.assistantArchive() { try assistantStore.save(history) }
             try NoteStore(url: directory.appending(path: "Notes.json")).restore(backup.notes ?? [])
+            if let labels = backup.folderLabels {
+                try FolderLabelStore(url: directory.appending(path: "FolderLabels.json")).restore(labels)
+            }
         } catch {
             try? FileManager.default.removeItem(at: directory)
             throw error

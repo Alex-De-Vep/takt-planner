@@ -2,16 +2,21 @@ import Foundation
 
 struct SupportSubmission: Codable, Equatable, Sendable {
     let submissionId: String
+    let subject: String?
     let message: String
+    let replyEmail: String?
     let platform: String
     let appVersion: String
     let appBuild: String
     let osVersion: String
     let deviceTime: String
 
-    init(message: String = "", now: Date = .now, timeZone: TimeZone = .current) {
+    init(subject: String? = nil, message: String, replyEmail: String? = nil,
+         now: Date = .now, timeZone: TimeZone = .current) {
         submissionId = UUID().syncID
+        self.subject = subject
         self.message = message
+        self.replyEmail = replyEmail
         platform = "macos"
         appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         appBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
@@ -26,13 +31,31 @@ struct SupportSubmission: Codable, Equatable, Sendable {
         text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    static func isValid(_ message: String) -> Bool {
+    static func isValidSubject(_ subject: String) -> Bool {
+        (1...120).contains(subject.unicodeScalars.count)
+            && !subject.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }
+    }
+
+    static func isValidMessage(_ message: String) -> Bool {
         (1...4000).contains(message.unicodeScalars.count) && !message.utf8.contains(0)
     }
 
-    static func prepare(message: String, retrying pending: Self?) -> Self {
-        if let pending, pending.message == message { return pending }
-        return Self(message: message)
+    static func isValidReplyEmail(_ email: String) -> Bool {
+        let pattern = #"\A[^\s@,;<>"\x00-\x1f\x7f]+@[^\s@,;<>"\x00-\x1f\x7f]+\.[^\s@,;<>"\x00-\x1f\x7f]+\z"#
+        return email.unicodeScalars.count <= 254 && email.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    var isValid: Bool {
+        Self.isValidMessage(message)
+            && (subject.map(Self.isValidSubject) ?? true)
+            && (replyEmail.map(Self.isValidReplyEmail) ?? true)
+    }
+
+    static func prepare(subject: String? = nil, message: String, replyEmail: String? = nil, retrying pending: Self?) -> Self {
+        if let pending, pending.subject == subject, pending.message == message, pending.replyEmail == replyEmail {
+            return pending
+        }
+        return Self(subject: subject, message: message, replyEmail: replyEmail)
     }
 }
 

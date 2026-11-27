@@ -33,6 +33,32 @@ import Testing
         #expect(host.fittingSize.height < narrowHeight)
     }
 
+    @Test func clickingChatBackgroundClearsTheMessageSelection() throws {
+        let bounds = NSRect(x: 0, y: 0, width: 300, height: 200)
+        let window = NSWindow(contentRect: bounds, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let content = NSView(frame: bounds)
+        window.contentView = content
+        let host = NSHostingView(rootView: AssistantSelectableText(text: "First chat message").frame(width: 200))
+        host.frame = NSRect(x: 0, y: 150, width: 200, height: 40)
+        content.addSubview(host)
+        defer { window.close() }
+        host.layoutSubtreeIfNeeded()
+
+        let native = try #require(textView(in: host))
+        #expect(window.makeFirstResponder(native))
+        let selection = NSRange(location: 0, length: 5)
+        native.setSelectedRange(selection)
+        #expect(native.selectedRange() == selection)
+
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 260, y: 80),
+                                                  modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                  context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+        NSApplication.shared.sendEvent(click)
+
+        #expect(native.selectedRange().length == 0)
+    }
+
     @Test func changingMessageTextInvalidatesTheMeasuredHeight() async throws {
         let short = "Short"
         let long = String(repeating: "Длинное сообщение 👩🏽‍💻 e\u{301} ", count: 180) + "\n"

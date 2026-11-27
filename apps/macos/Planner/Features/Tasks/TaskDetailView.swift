@@ -46,6 +46,7 @@ struct TaskDetailView: View {
                             .padding(.top, 24)
                         VStack(alignment: .leading, spacing: 8) {
                             WorkspaceFolderMenu(kind: .task, current: task.primaryFolder, folders: folders, move: move)
+                            AssignedFolderLabels(labels: service.folderLabels.labels(for: .task(taskID)))
                             PlainTextTaskEditor(taskID: task.id, isTitle: true, store: editorStore,
                                 text: Binding(get: { service.title(for: task) }, set: { service.editTitle(task, text: $0) }),
                                 requestFocus: $titleFocused, placeholder: strings["Название задачи"],

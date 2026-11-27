@@ -39,13 +39,24 @@ struct WorkspaceView: View {
     @State private var noteSearch = ""
     @State private var showNoteFolderPicker = false
     @State private var createNoteAfterFolderCreation = false
+    @State private var labelFolder: TaskFolder?
+    @State private var selectedLabelID: UUID?
 
-    private var visibleNotes: [PlannerNote] {
+    private var selectedLabel: FolderLabel? { service.folderLabels.label(selectedLabelID) }
+
+    private var notesInScope: [PlannerNote] {
         service.notes.notes.filter { note in
             guard !note.isPurged else { return false }
             let deleted = note.deletedAt != nil
             guard deleted == (noteScope == .trash) else { return false }
-            guard noteScope != .folder || (filter.acceptsNotes && note.folder == filter.id) else { return false }
+            return noteScope != .folder || (filter.acceptsNotes && note.folder == filter.id)
+        }
+    }
+
+    private var visibleNotes: [PlannerNote] {
+        let labelID = selectedLabel?.id
+        return notesInScope.filter { note in
+            guard labelID.map({ service.folderLabels.contains($0, on: .note(note.id)) }) ?? true else { return false }
             return noteSearch.isEmpty || note.title.localizedStandardContains(noteSearch) || note.text.localizedStandardContains(noteSearch)
         }.sorted {
             if $0.pinned != $1.pinned { return $0.pinned }
@@ -53,13 +64,13 @@ struct WorkspaceView: View {
         }
     }
     private var noteListScope: WorkspaceListScope {
-        .notes(noteScope, folder: noteScope == .folder ? filter : nil, search: noteSearch)
+        .notes(noteScope, folder: noteScope == .folder ? filter : nil, search: noteSearch, labelID: selectedLabel?.id)
     }
     private var listAnimationKey: WorkspaceListAnimationKey {
         if showsNotes {
             return WorkspaceListAnimationKey(scope: noteListScope, active: visibleNotes.map(\.id), completed: [])
         }
-        return WorkspaceListAnimationKey(scope: .tasks(filter, search: state.search),
+        return WorkspaceListAnimationKey(scope: .tasks(filter, search: state.search, labelID: selectedLabel?.id),
             active: taskList.activeTasks.map(\.id), completed: taskList.completedTasks.map(\.id))
     }
     private var selectedNote: PlannerNote? { visibleNotes.first { $0.id == selectedNoteID } }
@@ -91,6 +102,32 @@ struct WorkspaceView: View {
             },
             moveToTrash: { trashingNoteID = note.id }
         )
+    }
+
+    private var folderLabelToolbarContent: AnyView? {
+        let target: FolderLabelTarget?
+        let placement: TaskFilter?
+        if let note = editableNote {
+            target = .note(note.id)
+            placement = assistantContextFolder
+        } else if let task = selectedTask {
+            target = .task(task.id)
+            placement = task.primaryFolder
+        } else {
+            target = nil
+            placement = noteScope == .folder ? filter : nil
+        }
+        let folder: TaskFolder?
+        if case .folder(let id)? = placement {
+            folder = folders.first { $0.id == id && !$0.isDeleted }
+        } else {
+            folder = nil
+        }
+        let store = service.folderLabels
+        guard folder != nil || target.map({ !store.labels(for: $0).isEmpty }) == true else { return nil }
+        return AnyView(FolderLabelsToolbarButton(store: store, target: target, folder: folder,
+                                                folders: folders, showsNotes: showsNotes)
+            .id(target).id(folder?.id))
     }
 
     private var noteRecordingActions: WorkspaceNoteRecordingActions? {
@@ -140,6 +177,7 @@ struct WorkspaceView: View {
         }
         if let id {
             withImmediateNavigationUpdate {
+                selectedLabelID = nil
                 noteSearch = ""
                 selectedNoteID = id
                 createdNoteID = id
@@ -151,8 +189,33 @@ struct WorkspaceView: View {
 
 
     private var filter: TaskFilter { state.filter ?? .inbox }
-    private var taskList: TaskListSnapshot {
-        TaskListSnapshot(tasks: tasks, filter: filter, search: state.search, now: now)
+    private var taskList: TaskListSnapshot { taskSnapshot(search: state.search) }
+
+    private func taskSnapshot(search: String) -> TaskListSnapshot {
+        let matchingTasks: [PlannerTask]
+        if let id = selectedLabel?.id {
+            let targets = service.folderLabels.targets(with: id)
+            matchingTasks = tasks.filter { targets.contains(.task($0.id)) }
+        } else {
+            matchingTasks = tasks
+        }
+        return TaskListSnapshot(tasks: matchingTasks, filter: filter, search: search, now: now)
+    }
+
+    private var labelFilterOptions: [FolderLabel] {
+        let folderID: UUID?
+        if noteScope == .folder, case .folder(let id) = filter { folderID = id }
+        else { folderID = nil }
+        let store = service.folderLabels
+        let targets: [FolderLabelTarget]
+        if store.archive.assignments.isEmpty {
+            targets = []
+        } else if showsNotes {
+            targets = notesInScope.map { .note($0.id) }
+        } else {
+            targets = tasks.filter { filter.matches($0, now: now) }.map { .task($0.id) }
+        }
+        return store.labels(for: targets, includingFrom: folderID)
     }
     private var selectedTask: PlannerTask? { showsNotes ? nil : tasks.first { $0.id == state.selectedTaskID } }
 
@@ -180,7 +243,7 @@ struct WorkspaceView: View {
 
     private var searchText: Binding<String> {
         Binding(get: { state.search }, set: { search in
-            let snapshot = TaskListSnapshot(tasks: tasks, filter: filter, search: search, now: now)
+            let snapshot = taskSnapshot(search: search)
             state.updateSearch(search, visibleIDs: snapshot.taskIDs)
         })
     }
@@ -278,6 +341,7 @@ struct WorkspaceView: View {
             voice: service.notes.voice,
             showsActiveRecording: service.notes.voice.isBusy,
             noteActions: noteToolbarActions,
+            folderLabelToolbarContent: folderLabelToolbarContent,
             listAnimationKey: listAnimationKey,
             newFolder: newFolder,
             newTask: showsNotes ? createNote : newTask,
@@ -286,15 +350,16 @@ struct WorkspaceView: View {
         ) {
             SidebarView(selection: sidebarSelection, folders: folders, tasks: tasks, now: now, renameFolder: { folder in
                 editingFolder = folder; showFolderEditor = true
-            }, deleteFolder: { deletingFolder = $0 }, receiveItem: receiveFolderItem,
-                dragScopeID: service.dragScopeID, folderDrag: folderDrag, notes: service.notes.notes, syncEngine: syncEngine)
+            }, deleteFolder: { deletingFolder = $0 }, manageLabels: { labelFolder = $0 }, receiveItem: receiveFolderItem,
+                dragScopeID: service.dragScopeID, folderDrag: folderDrag, notes: service.notes.notes,
+                syncEngine: syncEngine, showsNotes: showsNotes)
         } tasks: {
             workspaceList
         } detail: {
             if showsNotes {
                 if let note = selectedNote {
                     NoteDetailView(note: note, folders: folders, store: service.notes, voice: service.notes.voice, assistant: assistant,
-                                   preferences: preferences, focusTitle: note.id == createdNoteID).id(note.id)
+                                   preferences: preferences, focusTitle: note.id == createdNoteID, labels: service.folderLabels).id(note.id)
                 } else {
                     ContentUnavailableView(strings["Выберите заметку"], systemImage: "note.text",
                         description: Text(strings["Создайте заметку или откройте её из списка."]))
@@ -318,7 +383,7 @@ struct WorkspaceView: View {
             ZStack {
                 CalendarPanel(state: calendarState, preferences: preferences, service: calendar, taskService: service,
                           selectedTask: selectedTask, tasks: tasks, links: eventLinks,
-                          openTask: { state.openLinkedTask($0, visibleIDs: taskList.taskIDs) },
+                          openTask: openLinkedTask,
                           isVisible: preferences.calendarOpen)
                     .opacity(preferences.rightPanel == .calendar ? 1 : 0)
                     .allowsHitTesting(preferences.rightPanel == .calendar)
@@ -343,11 +408,14 @@ struct WorkspaceView: View {
     }
 
     private var workspaceList: some View {
-        VStack(spacing: 0) {
+        let options = labelFilterOptions
+        return VStack(spacing: 0) {
             if noteScope == .folder && filter.acceptsNotes {
-                WorkspaceModeSwitch(showsNotes: contentMode)
-                    .padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    WorkspaceModeSwitch(showsNotes: contentMode)
+                    Spacer(minLength: 4)
+                    labelFilter(options)
+                }.padding(EdgeInsets(top: 10, leading: 13, bottom: 10, trailing: 13))
                 Divider()
                 GeometryReader { geometry in
                     let width = geometry.size.width
@@ -369,20 +437,37 @@ struct WorkspaceView: View {
                     .frame(width: width, height: geometry.size.height, alignment: .leading)
                     .clipped()
                 }
-            } else if showsNotes {
-                notesPage
             } else {
-                tasksPage
+                if selectedLabel != nil || !options.isEmpty {
+                    HStack {
+                        Spacer(minLength: 4)
+                        labelFilter(options)
+                    }
+                        .padding(.horizontal, 13).padding(.vertical, 6)
+                    Divider()
+                }
+                if showsNotes { notesPage } else { tasksPage }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder private func labelFilter(_ options: [FolderLabel]) -> some View {
+        if selectedLabel != nil || !options.isEmpty {
+            FolderLabelFilter(labels: options, folders: folders, selected: selectedLabel,
+                              tint: showsNotes ? PlannerStyle.noteActionTint : PlannerStyle.accent) { id in
+                withImmediateNavigationUpdate { selectedLabelID = id }
+            }
+            .frame(maxWidth: 120, alignment: .trailing)
+        }
     }
 
     private var notesPage: some View {
         NoteListView(store: service.notes, notes: visibleNotes,
                      selection: noteSelection, trash: noteScope == .trash,
                      createdNoteID: noteScope == .folder ? createdNoteID : nil, scope: noteListScope,
-                     dragScopeID: service.dragScopeID, folderDrag: folderDrag, create: createNote)
+                     dragScopeID: service.dragScopeID, folderDrag: folderDrag,
+                     labels: service.folderLabels, filteredByLabel: selectedLabel != nil, create: createNote)
             .background(PlannerStyle.listBackground)
     }
 
@@ -392,13 +477,15 @@ struct WorkspaceView: View {
                      createdTaskID: state.createdTaskID,
                      search: state.search, filter: filter, snapshot: taskList, now: now,
                      create: newTask, toggleToday: toggleToday, toggleCompleted: { service.toggleCompleted($0) },
-                     deleteImmediately: deleteTask, dragScopeID: service.dragScopeID, folderDrag: folderDrag)
+                     deleteImmediately: deleteTask, dragScopeID: service.dragScopeID, folderDrag: folderDrag,
+                     labels: service.folderLabels, labelID: selectedLabel?.id)
     }
 
     /// Диалоги вынесены отдельно: основной экран остаётся читаемым и быстро компилируется.
     private var workspaceWithDialogs: some View {
         splitView
         .sheet(isPresented: transcriptSheetPresented) { transcriptSheet }
+        .sheet(item: $labelFolder) { folder in FolderLabelsPanel(store: service.folderLabels, folder: folder) }
         .sheet(isPresented: $showFolderEditor) {
             FolderEditor(folder: editingFolder, service: service) { folder in
                 selectFilter(.folder(folder.id))
@@ -487,8 +574,13 @@ struct WorkspaceView: View {
     private func openNotificationTask() {
         guard let id = notifications.taskToOpen, let task = tasks.first(where: { $0.id == id }) else { return }
         showsNotes = false
-        state.openLinkedTask(task, visibleIDs: taskList.taskIDs)
+        openLinkedTask(task)
         notifications.taskToOpen = nil
+    }
+
+    private func openLinkedTask(_ task: PlannerTask) {
+        selectedLabelID = nil
+        state.openLinkedTask(task, visibleIDs: taskList.taskIDs)
     }
 
     private func deleteTask(_ task: PlannerTask) {
@@ -515,7 +607,10 @@ struct WorkspaceView: View {
         let task = withAnimation(PlannerMotion.animation(.listChange, reduceMotion: reduceMotion)) {
             service.createTask(in: filter, folders: folders)
         }
-        if let task { state.selectCreatedTask(task.id) }
+        if let task {
+            selectedLabelID = nil
+            state.selectCreatedTask(task.id)
+        }
         else if let window, let previousList, window.firstResponder === window {
             // При неудачном сохранении возвращаем прежний фокус, не меняя выбор.
             window.makeFirstResponder(previousList)
@@ -550,12 +645,14 @@ struct WorkspaceView: View {
 
     private func selectNoteScope(_ scope: NoteScope) {
         noteScope = scope
+        selectedLabelID = nil
         contentMode.wrappedValue = true
         noteSearch = ""
     }
 
     private func selectFilter(_ filter: TaskFilter) {
         service.notes.flush()
+        if state.filter != filter || noteScope != .folder { selectedLabelID = nil }
         noteScope = .folder
         noteSearch = ""
         selectedNoteID = nil
@@ -637,7 +734,7 @@ private struct WorkspaceModeSwitch: View {
         .background {
             GeometryReader { geometry in
                 selection(width: geometry.size.width)
-                    .foregroundStyle(PlannerStyle.color(light: 0x714BB0, dark: 0x7954B7))
+                    .foregroundStyle(showsNotes ? PlannerStyle.noteControlAccent : PlannerStyle.color(light: 0x714BB0, dark: 0x7954B7))
             }
         }
         .overlay {

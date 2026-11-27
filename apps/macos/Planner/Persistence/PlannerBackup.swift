@@ -27,6 +27,7 @@ struct PlannerBackup: Codable, Sendable {
     var conversations: Data?
     var preferences: BackupPreferences?
     var notes: [PlannerNote]? = nil
+    var folderLabels: FolderLabelArchive? = nil
 
     struct Folder: Codable, Sendable {
         let id: UUID
@@ -100,8 +101,10 @@ struct PlannerBackup: Codable, Sendable {
             notes[index].folder = "inbox"
         }
         let version = notes.contains { $0.richText != nil } ? 3 : (notes.isEmpty ? 1 : 2)
+        let labeledTargets = Set(tasks.map { FolderLabelTarget.task($0.id) } + notes.map { .note($0.id) })
+        let labels = service.folderLabels.archive.keepingAssignments(for: labeledTargets)
         return Self(version: version, folders: folders, tasks: tasks, conversations: history,
-                    preferences: BackupPreferences(preferences), notes: notes)
+                    preferences: BackupPreferences(preferences), notes: notes, folderLabels: labels.labels.isEmpty ? nil : labels)
     }
 
     func write(to url: URL) throws {
