@@ -1,0 +1,43 @@
+<ContentDialog
+ x:Class="Takt.Windows.Controls.WelcomeDialog"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Welcome to Takt" CloseButtonText="Get started" DefaultButton="Close">
+ <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="560">
+  <StackPanel Spacing="16">
+   <TextBlock Text="A place for your tasks, notes and plans." Style="{ThemeResource SubtitleTextBlockStyle}" TextWrapping="Wrap"/>
+   <TextBlock Text="Choose where to begin, or get started with your current library. Nothing is added automatically." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+   <Grid x:Name="WelcomeCards" RowSpacing="12" ColumnSpacing="12">
+    <VisualStateManager.VisualStateGroups>
+     <VisualStateGroup>
+      <VisualState x:Name="WideCards"><VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="640"/></VisualState.StateTriggers></VisualState>
+      <VisualState x:Name="NarrowCards">
+       <VisualState.StateTriggers><AdaptiveTrigger MinWindowWidth="0"/></VisualState.StateTriggers>
+       <VisualState.Setters>
+        <Setter Target="WelcomeSecondColumn.Width" Value="0"/>
+        <Setter Target="NotesCard.(Grid.Column)" Value="0"/><Setter Target="NotesCard.(Grid.Row)" Value="1"/>
+        <Setter Target="CalendarCard.(Grid.Row)" Value="2"/>
+        <Setter Target="ChatCard.(Grid.Column)" Value="0"/><Setter Target="ChatCard.(Grid.Row)" Value="3"/>
+       </VisualState.Setters>
+      </VisualState>
+     </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="WelcomeSecondColumn" Width="*"/></Grid.ColumnDefinitions>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Button x:Name="TasksCard" Grid.Row="0" Grid.Column="0" Tag="task" Click="Destination_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top" Padding="16" MinHeight="154" AutomationProperties.Name="Open tasks" AutomationProperties.HelpText="Organize tasks, subtasks and independent deadlines.">
+     <StackPanel Spacing="10"><SymbolIcon Symbol="Accept" HorizontalAlignment="Left"/><TextBlock Text="Plan your work" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="Organize tasks, add subtasks, and keep deadlines separate from your planning lists." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+    </Button>
+    <Button x:Name="NotesCard" Grid.Row="0" Grid.Column="1" Tag="note" Click="Destination_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top" Padding="16" MinHeight="154" AutomationProperties.Name="Open notes" AutomationProperties.HelpText="Write notes, add images and manage local recordings.">
+     <StackPanel Spacing="10"><SymbolIcon Symbol="Edit" HorizontalAlignment="Left"/><TextBlock Text="Capture your notes" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="Write and format notes, add images, and keep voice recordings on this device." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+    </Button>
+    <Button x:Name="CalendarCard" Grid.Row="1" Grid.Column="0" Tag="calendar" Click="Destination_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top" Padding="16" MinHeight="154" AutomationProperties.Name="Open calendar" AutomationProperties.HelpText="Plan local events and time blocks for tasks.">
+     <StackPanel Spacing="10"><SymbolIcon Symbol="Calendar" HorizontalAlignment="Left"/><TextBlock Text="Make time for it" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="Plan events and task blocks in your local Windows calendar." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+    </Button>
+    <Button x:Name="ChatCard" Grid.Row="1" Grid.Column="1" Tag="chat" Click="Destination_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top" Padding="16" MinHeight="154" AutomationProperties.Name="Open AI chat" AutomationProperties.HelpText="Connect a provider and review suggested changes.">
+     <StackPanel Spacing="10"><SymbolIcon Symbol="Message" HorizontalAlignment="Left"/><TextBlock Text="Think it through" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="Connect your AI provider. Review context and suggested changes before applying them." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+    </Button>
+   </Grid>
+   <TextBlock Text="Tasks and notes can sync with your Takt account. Calendar events and chat history stay on this Windows device." TextWrapping="Wrap" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+  </StackPanel>
+ </ScrollViewer>
+</ContentDialog>

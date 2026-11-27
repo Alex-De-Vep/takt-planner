@@ -1,0 +1,31 @@
+<UserControl x:Class="Takt.Windows.Controls.ChatWorkspace"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="12" RowSpacing="10">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <TextBlock Text="AI chat" Style="{StaticResource SubtitleTextBlockStyle}" VerticalAlignment="Center"/>
+   <Button x:Name="NewChatButton" Grid.Column="1" Click="NewChat_Click" ToolTipService.ToolTip="New conversation" AutomationProperties.Name="New conversation"><SymbolIcon Symbol="Add"/></Button>
+   <Button x:Name="HistoryButton" Grid.Column="2" Click="History_Click" ToolTipService.ToolTip="Conversation history" AutomationProperties.Name="Conversation history"><FontIcon Glyph="&#xE81C;"/></Button>
+   <Button x:Name="ChatSettingsButton" Grid.Column="3" Click="Settings_Click" ToolTipService.ToolTip="AI connections and models" AutomationProperties.Name="AI connections and models"><SymbolIcon Symbol="Setting"/></Button>
+  </Grid>
+  <TextBlock Grid.Row="1" x:Name="ConversationTitle" Text="New conversation" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+  <ScrollViewer Grid.Row="2" x:Name="ConversationScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+   <StackPanel x:Name="MessagePanel" Spacing="12" Padding="0,0,4,12"/>
+  </ScrollViewer>
+  <StackPanel Grid.Row="3" Spacing="6">
+   <TextBlock Text="Attach context to your next message" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+   <StackPanel Orientation="Horizontal" Spacing="12"><CheckBox x:Name="IncludeFolder" Content="Folder"/><CheckBox x:Name="IncludeTask" Content="Task"/><CheckBox x:Name="IncludeNote" Content="Note"/></StackPanel>
+   <TextBlock Text="Your message, conversation history and chosen context are sent to the selected provider. Changes always need your review." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+  </StackPanel>
+  <StackPanel Grid.Row="4" Spacing="8">
+   <ComboBox x:Name="ConnectionPicker" PlaceholderText="Connect an AI provider" DisplayMemberPath="DisplayName" HorizontalAlignment="Stretch" SelectionChanged="Connection_Changed" AutomationProperties.Name="AI connection"/>
+   <ComboBox x:Name="ModelPicker" PlaceholderText="Choose a model" HorizontalAlignment="Stretch" SelectionChanged="Model_Changed" AutomationProperties.Name="Chat model"/>
+  </StackPanel>
+  <Grid Grid.Row="5" ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <TextBox x:Name="Prompt" PlaceholderText="Message the assistant…" AcceptsReturn="True" TextWrapping="Wrap" MaxLength="32000" MaxHeight="180" MinHeight="72" KeyDown="Prompt_KeyDown" AutomationProperties.Name="Message"/>
+   <Button Grid.Column="1" x:Name="SendButton" Content="Send" Click="Send_Click" VerticalAlignment="Bottom" Style="{StaticResource AccentButtonStyle}"/>
+  </Grid>
+  <InfoBar Grid.Row="6" x:Name="ChatProblem" IsOpen="False" IsClosable="True" Severity="Warning"/>
+ </Grid>
+</UserControl>

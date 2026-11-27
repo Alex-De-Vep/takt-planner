@@ -1,0 +1,41 @@
+<UserControl
+    x:Class="Takt.Windows.Controls.CalendarWorkspace"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Padding="12" RowSpacing="12" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="Calendar" Style="{ThemeResource SubtitleTextBlockStyle}" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="Today" Click="Today_Click"/>
+            <Button Grid.Column="2" Click="Settings_Click" ToolTipService.ToolTip="Calendars and ICS files" AutomationProperties.Name="Calendar settings"><SymbolIcon Symbol="Setting"/></Button>
+        </Grid>
+        <CalendarView x:Name="Month" Grid.Row="1" SelectionMode="Single" IsTodayHighlighted="True" HorizontalAlignment="Stretch" MaxHeight="300"
+                      SelectedDatesChanged="Month_SelectedDatesChanged" CalendarViewDayItemChanging="Month_DayItemChanging"/>
+        <Grid Grid.Row="2" ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Button Content="&#xE76B;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="Previous_Click" AutomationProperties.Name="Previous agenda period"/>
+            <TextBlock x:Name="PeriodHeading" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" FontWeight="SemiBold"/>
+            <Button Grid.Column="2" Content="&#xE76C;" FontFamily="{ThemeResource SymbolThemeFontFamily}" Click="Next_Click" AutomationProperties.Name="Next agenda period"/>
+        </Grid>
+        <Grid Grid.Row="3" ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <ComboBox x:Name="ModePicker" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="Mode_Changed" AutomationProperties.Name="Agenda period">
+                <ComboBoxItem Content="Day"/><ComboBoxItem Content="3 days"/><ComboBoxItem Content="Week"/>
+            </ComboBox>
+            <ToggleButton x:Name="ColumnsToggle" Grid.Column="1" Content="Columns" Click="Columns_Click" ToolTipService.ToolTip="Switch between vertical agenda and horizontal day columns"/>
+        </Grid>
+        <ScrollViewer Grid.Row="4" HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Enabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="Agenda" Spacing="12"/>
+        </ScrollViewer>
+        <InfoBar x:Name="CalendarNotice" Grid.Row="5" IsOpen="False" IsClosable="True" Severity="Informational"/>
+        <Grid Grid.Row="6" ColumnSpacing="8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <Button HorizontalAlignment="Stretch" Style="{ThemeResource AccentButtonStyle}" Click="NewEvent_Click" Content="+ Event"/>
+            <Button x:Name="ForTaskButton" Grid.Column="1" HorizontalAlignment="Stretch" Click="ForTask_Click" Content="For task" IsEnabled="False" ToolTipService.ToolTip="Plan a time block for the selected task"/>
+        </Grid>
+    </Grid>
+</UserControl>

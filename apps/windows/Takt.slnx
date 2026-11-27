@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/Takt.Core/Takt.Core.csproj" />
+  <Project Path="src/Takt.Windows/Takt.Windows.csproj" />
+  <Project Path="tests/Takt.Core.Tests/Takt.Core.Tests.csproj" />
+</Solution>
