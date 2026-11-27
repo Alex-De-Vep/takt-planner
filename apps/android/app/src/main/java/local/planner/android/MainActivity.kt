@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,7 +43,10 @@ class MainActivity : AppCompatActivity() {
         super.attachBaseContext(newBase)
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        // The new toolbar can query detached text when leaving a screen with an active selection.
+        ComposeFoundationFlags.isNewContextMenuEnabled = false
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lifecycleScope.launch {
@@ -90,7 +95,7 @@ private fun Planner(model: PlannerModel) {
 }
 
 private val LightPalette = lightColorScheme(
-    primary = Color(0xFF7650B5), onPrimary = Color.White,
+    primary = Color(TaskPrimaryLight), onPrimary = Color.White,
     primaryContainer = Color(0xFFEEE7FA), onPrimaryContainer = Color(0xFF24163F),
     secondaryContainer = Color(0xFFEEE7FA), onSecondaryContainer = Color(0xFF3E2965),
     background = Color(0xFFFDFBFF), onBackground = Color(0xFF1F1F1F),
@@ -101,7 +106,7 @@ private val LightPalette = lightColorScheme(
 )
 
 private val DarkPalette = darkColorScheme(
-    primary = Color(0xFFB79BEA), onPrimary = Color(0xFF2D174F),
+    primary = Color(TaskPrimaryDark), onPrimary = Color(TaskOnPrimaryDark),
     primaryContainer = Color(0xFF3D2D58), onPrimaryContainer = Color(0xFFEEE7FA),
     secondaryContainer = Color(0xFF3D2D58), onSecondaryContainer = Color(0xFFEEE7FA),
     background = Color(0xFF131314), onBackground = Color(0xFFE3E3E3),

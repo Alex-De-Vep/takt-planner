@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,11 +14,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
@@ -53,11 +54,13 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun Settings(
-    library: Library, cloud: CloudState, model: PlannerModel,
-    calendar: DeviceCalendar, calendarRefresh: Int, calendarSettings: () -> Unit, chatSettings: () -> Unit,
+    library: Library, notes: NotesState, cloud: CloudState, model: PlannerModel,
+    calendar: DeviceCalendar, calendarRefresh: Int, calendarSettings: () -> Unit,
+    chatSettings: () -> Unit, chooseChatModel: () -> Unit,
 ) {
     var signOut by rememberSaveable { mutableStateOf(false) }
     var chooseSpeech by rememberSaveable { mutableStateOf(false) }
+    var showSupport by rememberSaveable { mutableStateOf(false) }
     val profile = requireNotNull(library.profile)
     val chat by model.chat.state.collectAsState()
     Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -70,13 +73,17 @@ internal fun Settings(
             SettingsSection(R.string.settings_account) {
                 Text(profile.email, style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.cloud_library_hint), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (cloud.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-                cloud.message?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
-                if (library.pending > 0) Text(stringResource(R.string.pending, library.pending))
-                if (library.rejected > 0) {
-                    Text(stringResource(R.string.rejected, library.rejected), color = MaterialTheme.colorScheme.error)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(onClick = model::refresh, modifier = Modifier.weight(1f, fill = false), enabled = !cloud.busy) {
+                        Text(stringResource(R.string.sync_now))
+                    }
+                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                        SyncStatus(library, notes, cloud, model::retrySync, showActivity = true)
+                    }
                 }
-                Button(onClick = model::refresh, enabled = !cloud.busy) { Text(stringResource(R.string.sync_now)) }
                 TextButton(onClick = { signOut = true }, enabled = !cloud.busy) { Text(stringResource(R.string.sign_out)) }
             }
             SettingsSection(R.string.settings_notifications) { ReminderSettings(library) }
@@ -84,20 +91,25 @@ internal fun Settings(
                 SettingsLink(R.drawable.ic_calendar, R.string.calendars, onClick = calendarSettings)
                 CreationCalendarSetting(calendar, calendarRefresh)
             }
-            SettingsSection(R.string.chat) {
-                SettingsLink(R.drawable.ic_chat, R.string.chat_choose_model,
-                    summary = chat.activeModelLabel?.let { stringResource(R.string.chat_current_model, it) }
-                        ?: stringResource(R.string.chat_no_models), onClick = chatSettings)
-                SettingsLink(R.drawable.ic_waveform, R.string.voice_model,
+            SettingsSection(R.string.settings_assistant) {
+                SettingsLink(R.drawable.ic_settings, R.string.chat_connection, onClick = chatSettings)
+                SettingsLink(R.drawable.ic_assistant, R.string.chat,
+                    summary = chat.activeModelLabel ?: stringResource(R.string.chat_no_models),
+                    onClick = chooseChatModel)
+                SettingsLink(R.drawable.ic_waveform, R.string.settings_transcription,
                     summary = chat.transcription?.let { "${it.provider.label} · ${it.label}" }
                         ?: stringResource(R.string.voice_model_unset)) {
-                    model.chat.clearCandidate()
+                    model.chat.clearMessage()
                     chooseSpeech = true
                 }
             }
+            SettingsSection(R.string.settings_support) {
+                SettingsLink(R.drawable.ic_chat, R.string.support_write, onClick = { showSupport = true })
+            }
         }
     }
-    if (chooseSpeech) TranscriptionConnectionDialog(model.chat) { chooseSpeech = false }
+    if (chooseSpeech) TranscriptionModelDialog(model.chat) { chooseSpeech = false }
+    if (showSupport) SupportRequestDialog(profile, model) { showSupport = false }
     if (signOut) {
         Confirm(R.string.sign_out, R.string.sign_out_hint, R.string.sign_out, { signOut = false }) {
             signOut = false

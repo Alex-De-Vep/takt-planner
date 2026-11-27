@@ -289,21 +289,25 @@ internal fun CalendarChooser(calendar: DeviceCalendar, done: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismiss: () -> Unit, changed: () -> Unit) {
-    val original = request.event
+internal fun EventEditor(
+    request: EventRequest, calendar: DeviceCalendar, dismiss: () -> Unit,
+    attachToChat: (PhoneEvent) -> Unit, changed: () -> Unit,
+) {
+    val suggestion = request.proposal
+    val original = suggestion?.original ?: request.event
     val readOnly = original != null && !original.editable
-    val zone = original?.zoneId?.let { runCatching { ZoneId.of(it) }.getOrNull() } ?: ZoneId.systemDefault()
+    val zone = (suggestion?.zoneId ?: original?.zoneId)?.let { runCatching { ZoneId.of(it) }.getOrNull() }
+        ?: ZoneId.systemDefault()
     val proposed = request.suggestedStart?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDateTime() }
         ?: LocalDateTime.now(zone).withSecond(0).withNano(0).plusHours(1).withMinute(0)
-    var title by rememberSaveable { mutableStateOf(original?.title.orEmpty()) }
-    var description by rememberSaveable { mutableStateOf(original?.description.orEmpty()) }
-    var location by rememberSaveable { mutableStateOf(original?.location.orEmpty()) }
-    var allDay by rememberSaveable { mutableStateOf(original?.allDay ?: false) }
-    var startText by rememberSaveable { mutableStateOf((original?.startsIn(zone) ?: proposed).toString()) }
-    var endText by rememberSaveable {
-        val end = original?.endsIn(zone) ?: proposed.plusHours(1)
-        mutableStateOf((if (original?.allDay == true) end.minusDays(1) else end).toString())
-    }
+    var title by rememberSaveable { mutableStateOf(suggestion?.title ?: original?.title.orEmpty()) }
+    var description by rememberSaveable { mutableStateOf(suggestion?.description ?: original?.description.orEmpty()) }
+    var location by rememberSaveable { mutableStateOf(suggestion?.location ?: original?.location.orEmpty()) }
+    var allDay by rememberSaveable { mutableStateOf(suggestion?.allDay ?: original?.allDay ?: false) }
+    val originalStart = original?.startsIn(zone)
+    val originalEnd = original?.endsIn(zone)?.let { if (original.allDay) it.minusDays(1) else it }
+    var startText by rememberSaveable { mutableStateOf(suggestion?.start ?: (originalStart ?: proposed).toString()) }
+    var endText by rememberSaveable { mutableStateOf(suggestion?.end ?: (originalEnd ?: proposed.plusHours(1)).toString()) }
     val start = LocalDateTime.parse(startText)
     val end = LocalDateTime.parse(endText)
     var selected by rememberSaveable { mutableStateOf(original?.calendarId) }
@@ -377,7 +381,12 @@ internal fun EventEditor(request: EventRequest, calendar: DeviceCalendar, dismis
                 })) },
                 navigationIcon = { ActionIcon(R.drawable.ic_back, R.string.back, enabled = !busy, onClick = navigateBack) },
                 actions = {
-                    if (original != null && !readOnly) {
+                    if (original != null && !readOnly && suggestion == null) {
+                        val unchanged = title == original.title && description == original.description &&
+                            location == original.location && allDay == original.allDay && start == originalStart && end == originalEnd
+                        ActionIcon(R.drawable.ic_assistant, R.string.open_context_chat, enabled = !busy && unchanged) {
+                            attachToChat(original)
+                        }
                         ActionIcon(R.drawable.ic_delete, R.string.delete_event, enabled = !busy && destination?.writable == true) {
                             confirmDelete = true
                         }

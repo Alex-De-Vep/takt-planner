@@ -15,8 +15,6 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import java.io.File
 
-internal const val VOICE_MAX_BYTES = 8 * 1024 * 1024
-private const val VOICE_MAX_DURATION = 15 * 60 * 1000
 internal data class VoiceClip(val file: File, val durationMs: Long)
 
 internal fun noteAudioFile(context: Context, workspace: String, noteID: String): File {
@@ -24,10 +22,16 @@ internal fun noteAudioFile(context: Context, workspace: String, noteID: String):
     return File(context.filesDir, "note-audio/$scope/$noteID.m4a")
 }
 
+internal data class VoiceRecording(val runningSinceMs: Long?, val accumulatedMs: Long = 0) {
+    val paused: Boolean get() = runningSinceMs == null
+
+    fun elapsedAt(nowMs: Long): Long = accumulatedMs + (runningSinceMs?.let { nowMs - it } ?: 0L)
+}
+
 internal class NoteVoice(private val context: Context) {
     var clip by mutableStateOf<VoiceClip?>(null)
         private set
-    var startedAt by mutableStateOf<Long?>(null)
+    var recording by mutableStateOf<VoiceRecording?>(null)
         private set
     var playing by mutableStateOf(false)
         private set
@@ -72,8 +76,6 @@ internal class NoteVoice(private val context: Context) {
             input.setAudioEncodingBitRate(64_000)
             input.setAudioSamplingRate(24_000)
             input.setOutputFile(temporary.absolutePath)
-            input.setMaxDuration(VOICE_MAX_DURATION)
-            input.setMaxFileSize(VOICE_MAX_BYTES.toLong())
             input.setOnInfoListener { current, what, _ ->
                 if (recorder === current && (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
                         what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)) stop()
@@ -82,11 +84,28 @@ internal class NoteVoice(private val context: Context) {
             input.prepare()
             input.start()
             recorder = input
-            startedAt = SystemClock.elapsedRealtime()
+            recording = VoiceRecording(runningSinceMs = SystemClock.elapsedRealtime())
         } catch (_: Exception) {
             runCatching { input.release() }
             temporary.delete()
             error = R.string.voice_start_error
+        }
+    }
+
+    fun togglePause() {
+        val input = recorder ?: return
+        val session = recording ?: return
+        try {
+            recording = if (session.paused) {
+                input.resume()
+                session.copy(runningSinceMs = SystemClock.elapsedRealtime())
+            } else {
+                input.pause()
+                VoiceRecording(runningSinceMs = null, accumulatedMs = session.elapsedAt(SystemClock.elapsedRealtime()))
+            }
+            error = null
+        } catch (_: RuntimeException) {
+            error = if (session.paused) R.string.voice_resume_error else R.string.voice_pause_error
         }
     }
 
@@ -95,7 +114,8 @@ internal class NoteVoice(private val context: Context) {
         val file = requireNotNull(destination)
         val temporary = temporary(file)
         recorder = null
-        startedAt = null
+        recording = null
+        error = null
         runCatching { input.stop() }
         runCatching { input.release() }
         // The recorder can already have stopped at the Android duration or size limit.

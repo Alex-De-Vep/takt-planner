@@ -110,6 +110,7 @@ internal class NoteDraft(
     val workspace: String,
     original: StoredNote?,
     initialFolder: String?,
+    val opensForRecording: Boolean = false,
 ) {
     private val newNoteId = original?.document?.id ?: newId()
     var original by mutableStateOf(original)
@@ -124,9 +125,13 @@ internal class NoteDraft(
     var saving by mutableStateOf(false)
     var persisting by mutableStateOf(false)
     var afterPersist: (() -> Unit)? = null
+    var recordOnOpen = opensForRecording
     var transcribing by mutableStateOf(false)
+    var transcriptionPart by mutableStateOf<Int?>(null)
+    var transcriptionAttempt: VoiceTranscriptionAttempt? = null
     var transcript by mutableStateOf<String?>(null)
-    var transcriptionError by mutableStateOf<Int?>(null)
+    var transcriptionIssue by mutableStateOf<VoiceTranscriptionIssue?>(null)
+    var transcriptionCleanupFailed by mutableStateOf(false)
     var error by mutableStateOf<Int?>(null)
 
     fun acknowledge(saved: StoredNote) { original = saved }

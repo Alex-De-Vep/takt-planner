@@ -13,8 +13,8 @@ android {
         applicationId = "local.planner.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 6
+        versionName = "0.1.5"
     }
 
     buildFeatures {

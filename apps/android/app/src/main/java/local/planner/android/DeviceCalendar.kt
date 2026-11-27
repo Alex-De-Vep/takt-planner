@@ -40,7 +40,7 @@ internal data class PhoneEvent(
 }
 
 internal data class EventRequest(
-    val event: PhoneEvent? = null, val suggestedStart: Long? = null,
+    val event: PhoneEvent? = null, val suggestedStart: Long? = null, val proposal: ChatEventProposal? = null,
 )
 
 internal data class EventValues(
@@ -119,8 +119,9 @@ internal class DeviceCalendar(private val context: Context, private val workspac
             checkNotNull(resolver.insert(Events.CONTENT_URI, body))
         } else {
             check(values.calendarId == original.calendarId)
-            val uri = unchangedEvent(original)
-            check(resolver.update(uri, body, null, null) == 1)
+            unchangedEvent(original)
+            val (selection, args) = eventSnapshot(original)
+            if (resolver.update(Events.CONTENT_URI, body, selection, args) != 1) throw StaleCalendarEvent()
         }
     }
 
@@ -128,6 +129,11 @@ internal class DeviceCalendar(private val context: Context, private val workspac
         check(mayRead() && mayWrite())
         check(calendars().any { it.id == original.calendarId && it.writable })
         unchangedEvent(original)
+        val (selection, args) = eventSnapshot(original)
+        if (resolver.delete(Events.CONTENT_URI, selection, args) != 1) throw StaleCalendarEvent()
+    }
+
+    private fun eventSnapshot(original: PhoneEvent): Pair<String, Array<String>> {
         val selection = listOf(
             "${Events._ID} = ?", "${Events.CALENDAR_ID} = ?", "${Events.DELETED} = 0",
             "COALESCE(${Events.STATUS}, 0) != ${Events.STATUS_CANCELED}",
@@ -139,20 +145,21 @@ internal class DeviceCalendar(private val context: Context, private val workspac
             original.id.toString(), original.calendarId.toString(), original.start.toString(), original.end.toString(),
             if (original.allDay) "1" else "0", original.title, original.description, original.location, original.zoneId,
         )
-        // Apply the recurrence and snapshot checks inside the provider's delete transaction too.
-        if (resolver.delete(Events.CONTENT_URI, selection.joinToString(" AND "), args) != 1) throw StaleCalendarEvent()
+        return selection.joinToString(" AND ") to args
     }
 
-    private fun unchangedEvent(original: PhoneEvent): Uri {
-        check(original.editable && !original.recurring)
-        val uri = ContentUris.withAppendedId(Events.CONTENT_URI, original.id)
-        val current = resolver.query(uri, arrayOf(Events.DTSTART, Events.DTEND, Events.DELETED, Events.STATUS) + eventColumns,
+    fun currentEvent(id: Long): PhoneEvent? {
+        if (!mayRead()) return null
+        val uri = ContentUris.withAppendedId(Events.CONTENT_URI, id)
+        return resolver.query(uri, arrayOf(Events.DTSTART, Events.DTEND, Events.DELETED, Events.STATUS) + eventColumns,
             null, null, null).rows {
-            if (getInt(2) != 0 || getInt(3) == Events.STATUS_CANCELED) null
-            else event(original.id, getLong(0), getLong(1), 4)
+            if (getInt(2) != 0 || getInt(3) == Events.STATUS_CANCELED) null else event(id, getLong(0), getLong(1), 4)
         }.singleOrNull()
-        if (current != original) throw StaleCalendarEvent()
-        return uri
+    }
+
+    private fun unchangedEvent(original: PhoneEvent) {
+        check(original.editable && !original.recurring)
+        if (currentEvent(original.id) != original) throw StaleCalendarEvent()
     }
 
     private fun Cursor.event(id: Long, start: Long, end: Long, offset: Int): PhoneEvent {

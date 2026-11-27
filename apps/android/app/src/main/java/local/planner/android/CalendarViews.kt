@@ -1,5 +1,8 @@
 package local.planner.android
 
+import android.icu.text.DateIntervalFormat
+import android.icu.util.DateInterval
+import android.icu.util.TimeZone
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,10 +35,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.text.FieldPosition
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
@@ -78,13 +86,35 @@ internal fun CalendarPeriodNavigation(
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val colors = MaterialTheme.colorScheme
     val currentDay = view == CalendarView.Day && date == today
+    val week = view == CalendarView.Week
+    val compactTitle = view != CalendarView.Day
     val todayLabel = stringResource(R.string.today)
     val title = when (view) {
         CalendarView.Month -> date.format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
             .replaceFirstChar { it.titlecase(locale) }
-        CalendarView.Week -> stringResource(R.string.calendar_week_range, dateLabel(range.start), dateLabel(range.last))
+        CalendarView.Week -> {
+            val sameMonth = range.start.year == range.last.year && range.start.month == range.last.month
+            val format = DateIntervalFormat.getInstance(if (sameMonth) "yMMMMd" else "yMMMd", locale)
+            format.timeZone = TimeZone.getTimeZone("UTC")
+            val interval = DateInterval(
+                range.start.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+                range.last.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+            )
+            format.format(interval, StringBuffer(), FieldPosition(0)).toString()
+        }
         CalendarView.Day -> dateLabel(date, FormatStyle.FULL)
     }
+    val titleModifier = when {
+        currentDay -> Modifier.background(colors.primary, RoundedCornerShape(12.dp))
+        week -> {
+            val description = stringResource(
+                R.string.calendar_week_range, dateLabel(range.start, FormatStyle.LONG), dateLabel(range.last, FormatStyle.LONG),
+            )
+            Modifier.clearAndSetSemantics { contentDescription = description }
+        }
+        else -> Modifier
+    }
+    val titleStyle = MaterialTheme.typography.titleSmall
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -97,12 +127,15 @@ internal fun CalendarPeriodNavigation(
         }) {
             Text(
                 title,
-                Modifier.then(
-                    if (currentDay) Modifier.background(colors.primary, RoundedCornerShape(12.dp)) else Modifier,
-                ).padding(horizontal = 10.dp, vertical = 4.dp),
+                titleModifier.padding(horizontal = 10.dp, vertical = 4.dp),
                 color = if (currentDay) colors.onPrimary else colors.primary,
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.titleSmall,
+                style = titleStyle,
+                maxLines = if (compactTitle) 1 else Int.MAX_VALUE,
+                overflow = if (compactTitle) TextOverflow.Ellipsis else TextOverflow.Clip,
+                autoSize = if (compactTitle) {
+                    TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = titleStyle.fontSize)
+                } else null,
             )
         }
         IconButton(onClick = { select(view.move(date, 1)) }) {

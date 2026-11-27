@@ -21,12 +21,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -46,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -110,23 +113,39 @@ internal fun NotesScreen(
         }
     }
 
-    if (state.limit != null && !trash) {
-        FolderTabs(listOf(null) + library.folders.map(Entity::id), folder, select, dividerBefore = 1) {
-            if (it == null) stringResource(R.string.all_notes) else sectionName(it, library)
+    val searchField: @Composable () -> Unit = {
+        if (searching) {
+            PlannerTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                placeholder = R.string.search, singleLine = true)
         }
     }
-    if (searching) {
-        PlannerTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            placeholder = R.string.search, singleLine = true)
+    if (state.limit != null && !trash) {
+        FolderPages(
+            listOf("") + library.folders.map(Entity::id), folder.orEmpty(), { select(it.ifEmpty { null }) },
+            dividerBefore = 1,
+            label = { if (it.isEmpty()) stringResource(R.string.all_notes) else sectionName(it, library) },
+            afterTabs = searchField,
+        ) { page ->
+            NoteFolderPage(library, state, cloud, page.ifEmpty { null }, false, search, matches, status, model)
+        }
+    } else {
+        searchField()
+        NoteFolderPage(library, state, cloud, folder, trash, search, matches, status, model)
     }
+}
 
+@Composable
+private fun NoteFolderPage(
+    library: Library, state: NotesState, cloud: CloudState, folder: String?, trash: Boolean,
+    search: String, matches: Set<String>?, status: Int?, model: PlannerModel,
+) {
     val entries = state.entries.filter {
         trash == (it.deletedAt != null) && (trash || folder == null || it.folderId == folder) &&
             (search.isBlank() || matches?.contains(it.id) == true)
     }.sortedWith(compareByDescending<NoteSummary> { it.pinned }.thenByDescending { it.updatedAt })
 
     LazyColumn(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 92.dp),
     ) {
         if (state.error == R.string.storage_error) item {
@@ -210,16 +229,36 @@ internal fun NoteEditor(
     val removed = original?.deletedAt != null
     val formatted = original?.document?.isNotEmpty() == true
     val voice = model.noteVoice
-    val recording = voice.startedAt != null
+    val recording = voice.recording != null
     val enabled = writable && !draft.saving && !recording
     val editing = enabled && !removed
     val sharedEditor = draft.richText != null || (sharedFormat && original == null)
     val hasContent = draft.title.isNotBlank() || draft.text.isNotBlank() || voice.clip != null
     val defaultVoiceTitle = stringResource(R.string.voice_note_title)
     val context = LocalContext.current
+    val view = LocalView.current
+    if (recording) DisposableEffect(view) {
+        val previous = view.keepScreenOn
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = previous }
+    }
     val focus = LocalFocusManager.current
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) voice.start() else voice.permissionDenied()
+        if (model.noteDraft === draft) {
+            if (granted) voice.start() else voice.permissionDenied()
+        }
+    }
+    val beginRecording = {
+        focus.clearFocus()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED) voice.start()
+        else permission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    LaunchedEffect(draft, editing) {
+        if (editing && draft.recordOnOpen) {
+            draft.recordOnOpen = false
+            beginRecording()
+        }
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle, voice, writable, draft) {
@@ -267,13 +306,14 @@ internal fun NoteEditor(
             )
         },
         bottomBar = {
+            val noteActionColors = ButtonDefaults.buttonColors(containerColor = NoteActionColor, contentColor = OnNoteActionColor)
             if (removed) {
-                EditorBottomAction(R.string.note_restore, enabled) {
+                EditorBottomAction(R.string.note_restore, enabled, colors = noteActionColors) {
                     draft.trashed = false
                     model.saveNote(draft)
                 }
             } else if (original == null) {
-                EditorBottomAction(R.string.save, editing && !draft.transcribing && hasContent) {
+                EditorBottomAction(R.string.save, editing && !draft.transcribing && hasContent, colors = noteActionColors) {
                     if (voice.clip != null && draft.title.isBlank() && draft.text.isBlank()) {
                         draft.title = defaultVoiceTitle
                     }
@@ -292,7 +332,7 @@ internal fun NoteEditor(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box {
                         TextButton(onClick = { folders = true }, enabled = editing && library.folders.isNotEmpty()) {
-                            Glyph(R.drawable.ic_folder)
+                            Glyph(R.drawable.ic_folder, tint = LocalContentColor.current)
                             Text(currentFolder?.text("name") ?: stringResource(R.string.note_missing_folder),
                                 Modifier.padding(start = 8.dp))
                         }
@@ -310,18 +350,15 @@ internal fun NoteEditor(
                         }
                     }
                     PlannerTextField(
-                        draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(original == null),
+                        draft.title, { draft.title = it }, Modifier.fillMaxWidth().focusOnEntry(original == null && !draft.opensForRecording),
                         placeholder = R.string.note_title, enabled = !draft.saving, readOnly = !editing,
                         textStyle = MaterialTheme.typography.headlineSmall,
                     )
                 }
                 if (!removed) Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (voice.clip == null) {
+                    if (voice.clip == null && !recording) {
                         ActionIcon(R.drawable.ic_waveform, R.string.voice_start, enabled = editing) {
-                            focus.clearFocus()
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                                PackageManager.PERMISSION_GRANTED) voice.start()
-                            else permission.launch(Manifest.permission.RECORD_AUDIO)
+                            beginRecording()
                         }
                     }
                     if (original != null) {

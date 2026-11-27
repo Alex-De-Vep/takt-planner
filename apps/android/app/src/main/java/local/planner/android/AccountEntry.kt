@@ -95,7 +95,7 @@ private fun Welcome(open: (AccountForm) -> Unit) {
         Triple(R.drawable.ic_list, R.string.welcome_tasks, R.string.welcome_tasks_hint),
         Triple(R.drawable.ic_note, R.string.notes, R.string.welcome_notes_hint),
         Triple(R.drawable.ic_calendar, R.string.events, R.string.welcome_events_hint),
-        Triple(R.drawable.ic_chat, R.string.chat, R.string.welcome_chat_hint),
+        Triple(R.drawable.ic_assistant, R.string.chat, R.string.welcome_chat_hint),
         Triple(R.drawable.ic_sync, R.string.welcome_account_title, R.string.welcome_account_hint),
     )
     val pager = rememberPagerState { pages.size }

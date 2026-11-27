@@ -1,11 +1,18 @@
 package local.planner.android
 
+import androidx.annotation.StringRes
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.google.gson.JsonParseException
 import com.google.gson.JsonPrimitive
 import com.google.gson.JsonParser
 import java.io.File
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Base64
+import javax.net.ssl.SSLHandshakeException
+import kotlinx.coroutines.CancellationException
 
 internal val transcriptionProviders = listOf(
     GatewayProvider.OpenRouter, GatewayProvider.LiteLLM, GatewayProvider.GigaChat,
@@ -35,6 +42,36 @@ internal val fixedTranscriptionModels = mapOf(
 internal data class TranscriptionSelection(val provider: GatewayProvider, val id: String, val label: String)
 internal data class VoiceTranscript(val text: String, val cleanupFailed: Boolean = false)
 internal class VoiceRemoteCleanupFailed(cause: Throwable) : IllegalStateException(cause)
+internal class VoiceTranscriptionFailure(@get:StringRes val messageId: Int, cause: Throwable? = null) : Exception(cause)
+
+internal data class VoiceTranscriptionIssue(@get:StringRes val messageId: Int, val part: Int? = null)
+
+@StringRes
+internal fun voiceTranscriptionError(failure: Exception): Int {
+    val cause = if (failure is VoiceRemoteCleanupFailed) failure.cause else failure
+    return when (cause) {
+        is VoiceTranscriptionFailure -> cause.messageId
+        is JsonParseException -> R.string.voice_transcript_invalid_response
+        is SSLHandshakeException -> R.string.chat_tls_error
+        is SocketTimeoutException -> R.string.voice_transcript_timeout
+        is UnknownHostException, is SocketException -> R.string.voice_transcript_network
+        is ServerFailure -> when (cause.status) {
+            401, 403 -> R.string.voice_transcript_access
+            402 -> R.string.voice_transcript_billing
+            404 -> R.string.voice_transcript_model_unavailable
+            413 -> R.string.voice_transcript_size
+            400, 415, 422 -> R.string.voice_transcript_audio_rejected
+            429 -> R.string.voice_transcript_rate_limit
+            in 500..599 -> R.string.voice_transcript_service
+            else -> R.string.voice_transcript_error
+        }
+        else -> R.string.voice_transcript_error
+    }
+}
+
+internal class VoiceTranscriptionAttempt(val clip: VoiceClip, val selection: TranscriptionSelection) {
+    val completed = mutableListOf<VoiceTranscript>()
+}
 
 internal fun validTranscriptionModel(model: String): Boolean =
     model.isNotBlank() && model.toByteArray().size <= 512 && model.none { it.isISOControl() }
@@ -47,15 +84,40 @@ internal class VoiceTranscriber(
             readTimeoutMillis = 120_000, method = "POST")
     },
 ) {
+    suspend fun transcribeRecording(
+        connection: GatewayConnection, model: String, clip: VoiceClip, cache: File,
+        completed: List<VoiceTranscript>, onPart: suspend (Int?, VoiceTranscript?) -> Unit,
+    ): VoiceTranscript {
+        val results = completed.toMutableList()
+        var lastPart = 0
+        forEachVoicePart(clip, cache, convertToWave = connection.kind == GatewayProvider.Mistral) { number, file, split ->
+            lastPart = number
+            if (number > results.size) {
+                val progress = number.takeIf { split }
+                onPart(progress, null)
+                val result = transcribe(connection, model, file)
+                results.add(result)
+                onPart(progress, result)
+            }
+        }
+        check(lastPart == results.size)
+        val text = results.map(VoiceTranscript::text).filter(String::isNotBlank).joinToString("\n\n")
+        val cleanupFailed = results.any(VoiceTranscript::cleanupFailed)
+        return VoiceTranscript(text, cleanupFailed)
+    }
+
     fun transcribe(connection: GatewayConnection, model: String, file: File): VoiceTranscript {
         val provider = connection.kind
-        require(provider in transcriptionProviders && provider.address(connection.address) == connection.address)
-        require(validTranscriptionModel(model) && file.length() in 1..VOICE_MAX_BYTES.toLong())
+        if (provider !in transcriptionProviders || !validTranscriptionModel(model)) {
+            throw VoiceTranscriptionFailure(R.string.voice_transcript_model_unavailable)
+        }
+        require(provider.address(connection.address) == connection.address)
+        prepareVoiceAudio { check(file.isFile && file.canRead() && file.length() in 1..VOICE_PART_MAX_BYTES) }
         val result = when (provider) {
             GatewayProvider.GigaChat -> gigaChat(connection, model, file)
             GatewayProvider.Gemini -> VoiceTranscript(gemini(connection, model, file))
             GatewayProvider.Mistral -> {
-                val wave = wav(file)
+                val wave = prepareVoiceAudio { wav(file) }
                 try {
                     VoiceTranscript(multipartTranscript(connection, model, wave))
                 } finally {
@@ -65,11 +127,8 @@ internal class VoiceTranscriber(
             else -> VoiceTranscript(multipartTranscript(connection, model, file))
         }
         val text = result.text.trim()
-        if (text.isEmpty() || text == "[NO_SPEECH]") {
-            if (result.cleanupFailed) throw VoiceRemoteCleanupFailed(IllegalArgumentException("Empty transcript"))
-            error("Empty transcript")
-        }
-        return result.copy(text = text)
+        val silence = text.trim('`').trim().equals("[NO_SPEECH]", ignoreCase = true)
+        return result.copy(text = if (silence) "" else text)
     }
 
     private fun multipartTranscript(connection: GatewayConnection, model: String, file: File): String {
@@ -81,31 +140,45 @@ internal class VoiceTranscriber(
                 put("chunking_strategy", "auto")
             }
         }
-        return requireNotNull(upload(connection.address + path, providers.headers(connection), file, fields).string("text"))
+        return upload(connection.address + path, providers.headers(connection), file, fields).string("text")
+            ?: invalidResponse()
     }
 
     private fun gemini(connection: GatewayConnection, model: String, file: File): String {
-        require(model in geminiSpeechModels)
+        if (model !in geminiSpeechModels) throw VoiceTranscriptionFailure(R.string.voice_transcript_model_unavailable)
         val parts = JsonArray().apply {
             if (model != "gemini-3.5-transcribe") add(payload("text" to value(prompt)))
             add(payload("inlineData" to payload(
-                "mimeType" to value("audio/m4a"), "data" to value(Base64.getEncoder().encodeToString(file.readBytes())),
+                "mimeType" to value("audio/m4a"), "data" to value(Base64.getEncoder().encodeToString(prepareVoiceAudio { file.readBytes() })),
             )))
         }
         val reply = postJson(connection.address.removeSuffix("/openai") + "/models/$model:generateContent",
             mapOf("x-goog-api-key" to connection.key), payload("contents" to arrayOfObjects(payload("parts" to parts))))
-        val candidate = requireNotNull(reply.firstObject("candidates"))
-        require(candidate.string("finishReason").let { it == null || it == "STOP" })
-        val content = candidate["content"] as? JsonObject
-        return (content?.get("parts") as? JsonArray)?.mapNotNull { raw ->
-            (raw as? JsonObject)?.takeUnless { it["thought"] == JsonPrimitive(true) }?.string("text")
-        }.orEmpty().joinToString("\n")
+        val block = (reply["promptFeedback"] as? JsonObject)?.string("blockReason")
+        if (!block.isNullOrBlank() && block != "BLOCK_REASON_UNSPECIFIED") {
+            throw VoiceTranscriptionFailure(R.string.voice_transcript_blocked)
+        }
+        val candidate = reply.firstObject("candidates") ?: invalidResponse()
+        when (candidate.string("finishReason")) {
+            null, "STOP" -> Unit
+            "MAX_TOKENS", "CONTINUATION" -> throw VoiceTranscriptionFailure(R.string.voice_transcript_truncated)
+            "SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "ESCALATION" ->
+                throw VoiceTranscriptionFailure(R.string.voice_transcript_blocked)
+            "LANGUAGE" -> throw VoiceTranscriptionFailure(R.string.voice_transcript_language)
+            else -> invalidResponse()
+        }
+        val content = candidate["content"] ?: return ""
+        val receivedParts = (content as? JsonObject ?: invalidResponse())["parts"] ?: return ""
+        return (receivedParts as? JsonArray ?: invalidResponse()).mapNotNull { raw ->
+            val part = raw as? JsonObject ?: invalidResponse()
+            part.takeUnless { it["thought"] == JsonPrimitive(true) }?.string("text")
+        }.joinToString("\n")
     }
 
     private fun gigaChat(connection: GatewayConnection, model: String, file: File): VoiceTranscript {
         val upload = upload(connection.address + "/files", providers.headers(connection), file,
             mapOf("purpose" to "general"), mime = "audio/x-m4a")
-        val id = requireNotNull(upload.string("id")).also { require(it.matches(Regex("[A-Za-z0-9_-]{1,160}"))) }
+        val id = upload.string("id")?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{1,160}")) } ?: invalidResponse()
         // Always remove the temporary upload once it has an ID, including after a failed transcription.
         val result = runCatching {
             val message = payload("role" to value("user"), "content" to value(prompt),
@@ -113,14 +186,22 @@ internal class VoiceTranscriber(
             val body = payload("model" to value(model), "stream" to JsonPrimitive(false),
                 "messages" to arrayOfObjects(message))
             val reply = postJson(connection.address + "/chat/completions", providers.headers(connection), body)
-            val choice = requireNotNull(reply.firstObject("choices"))
-            require(choice.string("finish_reason").let { it == null || it == "stop" })
-            requireNotNull((choice["message"] as? JsonObject)?.string("content"))
+            val choice = reply.firstObject("choices") ?: invalidResponse()
+            when (choice.string("finish_reason")) {
+                null, "stop" -> Unit
+                "length" -> throw VoiceTranscriptionFailure(R.string.voice_transcript_truncated)
+                "blacklist" -> throw VoiceTranscriptionFailure(R.string.voice_transcript_blocked)
+                else -> invalidResponse()
+            }
+            (choice["message"] as? JsonObject)?.string("content") ?: invalidResponse()
         }
         val cleanupFailed = runCatching {
             request(connection.address + "/files/$id/delete", providers.headers(connection), ByteArray(0), "application/json")
         }.isFailure
-        if (cleanupFailed) result.exceptionOrNull()?.let { throw VoiceRemoteCleanupFailed(it) }
+        if (cleanupFailed) result.exceptionOrNull()?.let {
+            if (it is CancellationException) throw it
+            throw VoiceRemoteCleanupFailed(it)
+        }
         return VoiceTranscript(result.getOrThrow(), cleanupFailed)
     }
 
@@ -141,22 +222,29 @@ internal class VoiceTranscriber(
         val size = file.length().also { require(it in 1..VOICE_WAVE_MAX_BYTES) }.toInt()
         val body = ByteArray(header.size + size + footer.size)
         header.copyInto(body)
-        file.inputStream().buffered().use { input ->
-            var position = header.size
-            val end = header.size + size
-            while (position < end) {
-                val read = input.read(body, position, end - position)
-                check(read > 0)
-                position += read
+        prepareVoiceAudio {
+            file.inputStream().buffered().use { input ->
+                var position = header.size
+                val end = header.size + size
+                while (position < end) {
+                    val read = input.read(body, position, end - position)
+                    check(read > 0)
+                    position += read
+                }
+                check(input.read() == -1)
             }
-            check(input.read() == -1)
         }
         footer.copyInto(body, header.size + size)
-        return JsonParser.parseString(request(address, headers, body, "multipart/form-data; boundary=$boundary")).asJsonObject
+        return parseResponse(request(address, headers, body, "multipart/form-data; boundary=$boundary"))
     }
 
     private fun postJson(address: String, headers: Map<String, String>, body: JsonObject): JsonObject =
-        JsonParser.parseString(request(address, headers, body.toString().toByteArray(), "application/json")).asJsonObject
+        parseResponse(request(address, headers, body.toString().toByteArray(), "application/json"))
+
+    private fun parseResponse(body: String): JsonObject =
+        JsonParser.parseString(body).let { it as? JsonObject } ?: invalidResponse()
+
+    private fun invalidResponse(): Nothing = throw VoiceTranscriptionFailure(R.string.voice_transcript_invalid_response)
 
     private fun JsonObject.firstObject(name: String) = (get(name) as? JsonArray)?.firstOrNull() as? JsonObject
     private fun arrayOfObjects(value: JsonObject) = JsonArray().apply { add(value) }

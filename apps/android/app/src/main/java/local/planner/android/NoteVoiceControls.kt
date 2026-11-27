@@ -5,7 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -31,6 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
@@ -47,6 +52,7 @@ internal fun NoteVoiceControls(draft: NoteDraft, model: PlannerModel, editable: 
     val scope = rememberCoroutineScope()
     var delete by rememberSaveable { mutableStateOf(false) }
     var choosing by rememberSaveable { mutableStateOf(false) }
+    var managingModels by rememberSaveable { mutableStateOf(false) }
     var confirm by rememberSaveable { mutableStateOf(false) }
     var exportName by rememberSaveable { mutableStateOf<String?>(null) }
     var exportError by rememberSaveable { mutableStateOf(false) }
@@ -67,62 +73,93 @@ internal fun NoteVoiceControls(draft: NoteDraft, model: PlannerModel, editable: 
         }
     }
     val clip = voice.clip
-    val startedAt = voice.startedAt
+    val recording = voice.recording
     val selection = chat.transcription
-    val error = voice.error ?: draft.transcriptionError
+    val issue = draft.transcriptionIssue
 
-    if (clip != null || startedAt != null || error != null || exportError) {
+    val colors = MaterialTheme.colorScheme
+    if (clip != null || recording != null || voice.error != null || issue != null || exportError) {
         Surface(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = colors.primaryContainer,
+            contentColor = colors.onPrimaryContainer,
         ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Glyph(R.drawable.ic_waveform, tint = MaterialTheme.colorScheme.primary)
-                    Text(stringResource(R.string.voice_recording), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                    if (clip != null) Text(voiceDuration(clip.durationMs), fontFamily = FontFamily.Monospace)
-                }
-                if (startedAt != null) {
-                    val elapsed by produceState(0L, startedAt) {
-                        while (true) {
-                            value = SystemClock.elapsedRealtime() - startedAt
-                            delay(250)
+            Column(
+                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                if (recording != null) {
+                    ActiveVoiceRecording(recording, voice::togglePause, voice::stop)
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Glyph(R.drawable.ic_waveform, tint = colors.primary, size = 20.dp)
+                        Text(stringResource(R.string.voice_recording), Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall)
+                        if (clip != null) {
+                            Text(voiceDuration(clip.durationMs), style = MaterialTheme.typography.labelLarge,
+                                fontFamily = FontFamily.Monospace)
                         }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(voiceDuration(elapsed), Modifier.weight(1f), color = MaterialTheme.colorScheme.error,
-                            fontFamily = FontFamily.Monospace)
-                        TextButton(onClick = voice::stop) { Text(stringResource(R.string.voice_stop)) }
-                    }
-                } else if (clip != null) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = voice::togglePlayback) {
-                            Text(stringResource(if (voice.playing) R.string.voice_stop else R.string.voice_listen))
-                        }
-                        TextButton(onClick = {
-                            if (selection == null) {
-                                model.chat.clearCandidate()
-                                choosing = true
-                            } else confirm = true
-                        }, enabled = !draft.saving && !draft.transcribing) {
-                            Text(stringResource(R.string.voice_transcribe))
-                        }
-                        val fileName = stringResource(R.string.voice_recording_filename)
-                        TextButton(onClick = {
-                            exportName = clip.file.name
-                            export.launch(fileName)
-                        }) { Text(stringResource(R.string.voice_save_copy)) }
-                        ActionIcon(R.drawable.ic_delete, R.string.voice_delete, enabled = !draft.transcribing && !draft.saving) {
-                            delete = true
+                    if (clip != null) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    if (selection == null) {
+                                        model.chat.clearMessage()
+                                        choosing = true
+                                    } else confirm = true
+                                },
+                                modifier = Modifier.weight(1f, fill = false),
+                                enabled = !draft.saving && !draft.transcribing,
+                                contentPadding = PaddingValues(end = 8.dp),
+                            ) {
+                                val label = if (draft.transcriptionAttempt?.completed?.isNotEmpty() == true &&
+                                    draft.transcriptionAttempt?.selection == selection) R.string.voice_transcribe_continue
+                                    else R.string.voice_transcribe
+                                Text(stringResource(label))
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ActionIcon(
+                                    if (voice.playing) R.drawable.ic_stop else R.drawable.ic_play,
+                                    if (voice.playing) R.string.voice_stop else R.string.voice_listen,
+                                    tint = colors.primary,
+                                    onClick = voice::togglePlayback,
+                                )
+                                val fileName = stringResource(R.string.voice_recording_filename)
+                                ActionIcon(R.drawable.ic_download, R.string.voice_save_copy, tint = colors.primary) {
+                                    exportName = clip.file.name
+                                    export.launch(fileName)
+                                }
+                                ActionIcon(R.drawable.ic_delete, R.string.voice_delete, tint = colors.primary,
+                                    enabled = !draft.transcribing && !draft.saving) { delete = true }
+                            }
                         }
                     }
                 }
                 if (draft.transcribing) {
-                    Text(stringResource(R.string.voice_transcribing), style = MaterialTheme.typography.bodySmall)
+                    val part = draft.transcriptionPart
+                    val status = if (part == null) stringResource(R.string.voice_transcribing)
+                        else stringResource(R.string.voice_transcribing_part, part)
+                    Text(status, style = MaterialTheme.typography.bodySmall)
                     LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
-                error?.let { Text(stringResource(it), color = MaterialTheme.colorScheme.error) }
+                voice.error?.let { Text(stringResource(it), color = colors.error) }
+                issue?.let {
+                    val message = stringResource(it.messageId)
+                    val status = it.part?.let { part -> stringResource(R.string.voice_transcript_part_failure, part, message) }
+                    Text(status ?: message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (it.messageId == R.string.voice_transcript_empty) colors.onPrimaryContainer else colors.error)
+                }
+                if (draft.transcriptionCleanupFailed) {
+                    Text(stringResource(R.string.voice_remote_cleanup_error), color = colors.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 if (exportError) Text(stringResource(R.string.voice_copy_error), color = MaterialTheme.colorScheme.error)
             }
         }
@@ -133,12 +170,23 @@ internal fun NoteVoiceControls(draft: NoteDraft, model: PlannerModel, editable: 
             delete = false
             if (voice.remove()) {
                 draft.transcript = null
-                draft.transcriptionError = null
+                draft.transcriptionIssue = null
+                draft.transcriptionCleanupFailed = false
+                draft.transcriptionAttempt = null
             }
         }
     }
     if (choosing) {
-        TranscriptionConnectionDialog(model.chat, chosen = { confirm = true }) { choosing = false }
+        TranscriptionModelDialog(model.chat, manage = {
+            choosing = false
+            managingModels = true
+        }, chosen = { confirm = true }) { choosing = false }
+    }
+    if (managingModels) {
+        ChatConnectionDialog(model.chat) {
+            managingModels = false
+            choosing = true
+        }
     }
     if (confirm && selection != null && clip != null) {
         AlertDialog(
@@ -178,6 +226,43 @@ internal fun NoteVoiceControls(draft: NoteDraft, model: PlannerModel, editable: 
                 TextButton(onClick = { draft.transcript = null }) { Text(stringResource(R.string.close)) }
             },
         )
+    }
+}
+
+@Composable
+private fun ActiveVoiceRecording(recording: VoiceRecording, togglePause: () -> Unit, stop: () -> Unit) {
+    val elapsed by produceState(recording.elapsedAt(SystemClock.elapsedRealtime()), recording) {
+        while (true) {
+            value = recording.elapsedAt(SystemClock.elapsedRealtime())
+            if (recording.paused) break
+            delay(250)
+        }
+    }
+    val colors = MaterialTheme.colorScheme
+    val buttonColors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = colors.surface)
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(R.drawable.ic_waveform, tint = colors.primary, size = 20.dp)
+        Column(Modifier.weight(1f).padding(start = 4.dp)) {
+            Text(voiceDuration(elapsed), style = MaterialTheme.typography.titleLarge, fontFamily = FontFamily.Monospace)
+            Text(
+                stringResource(if (recording.paused) R.string.voice_paused else R.string.voice_in_progress),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        FilledTonalIconButton(onClick = togglePause, colors = buttonColors) {
+            Glyph(
+                if (recording.paused) R.drawable.ic_play else R.drawable.ic_pause,
+                stringResource(if (recording.paused) R.string.voice_resume else R.string.voice_pause),
+                tint = colors.primary,
+            )
+        }
+        FilledTonalIconButton(onClick = stop, colors = buttonColors) {
+            Glyph(R.drawable.ic_stop, stringResource(R.string.voice_finish_recording), tint = colors.error)
+        }
     }
 }
 

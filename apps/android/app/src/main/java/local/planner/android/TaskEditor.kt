@@ -18,6 +18,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
@@ -26,6 +28,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -94,7 +97,7 @@ internal fun TaskEditor(
             when {
                 !draft.dirty -> finish()
                 task == null -> action = "discard"
-                else -> model.saveTask(draft, finish)
+                else -> model.saveTask(draft, { finish() })
             }
         }
     }
@@ -113,7 +116,7 @@ internal fun TaskEditor(
                 task.completed -> R.string.reopen_task
                 else -> R.string.task_mark_done
             }, enabled = !draft.saving && (task != null || draft.title.isNotBlank())) {
-                model.saveTask(draft, finish, completion = task?.let { !it.completed })
+                model.saveTask(draft, { finish() }, completion = task?.let { !it.completed })
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -127,7 +130,7 @@ internal fun TaskEditor(
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box {
                         TextButton(onClick = { folderMenu = true }, enabled = !draft.saving) {
-                            Glyph(R.drawable.ic_folder)
+                            Glyph(R.drawable.ic_folder, tint = LocalContentColor.current)
                             Text(sectionName(activeLocation, library), Modifier.padding(start = 8.dp))
                         }
                         DropdownMenu(expanded = folderMenu, onDismissRequest = { folderMenu = false }) {
@@ -155,7 +158,7 @@ internal fun TaskEditor(
                         Glyph(
                             if (draft.focused) R.drawable.ic_star else R.drawable.ic_star_outline,
                             stringResource(if (draft.focused) R.string.unstar else R.string.star),
-                            if (draft.focused) accent else inactive,
+                            if (draft.focused) taskFocusColor() else inactive,
                         )
                     }
                     ActionIcon(R.drawable.ic_calendar, R.string.choose_date, if (deadline != null) accent else inactive,
@@ -174,7 +177,7 @@ internal fun TaskEditor(
                                 finish()
                                 openChat(task.id)
                             }
-                            if (draft.dirty) model.saveTask(draft, go) else go()
+                            if (draft.dirty) model.saveTask(draft, { go() }) else go()
                         }
                         ActionIcon(R.drawable.ic_delete, R.string.delete_task, inactive, enabled = !draft.saving) {
                             action = "delete"
@@ -328,10 +331,13 @@ private fun DeadlineChip(
 }
 
 @Composable
-internal fun EditorBottomAction(label: Int, enabled: Boolean, onClick: () -> Unit) {
+internal fun EditorBottomAction(
+    label: Int, enabled: Boolean, colors: ButtonColors = ButtonDefaults.buttonColors(), onClick: () -> Unit,
+) {
     Box(Modifier.fillMaxWidth().navigationBarsPadding().imePadding(), contentAlignment = Alignment.Center) {
         Button(
             onClick = onClick, enabled = enabled,
+            colors = colors,
             modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
         ) { Text(stringResource(label)) }
     }

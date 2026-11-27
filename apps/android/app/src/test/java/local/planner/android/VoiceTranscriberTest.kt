@@ -1,6 +1,8 @@
 package local.planner.android
 
+import java.net.SocketTimeoutException
 import java.nio.file.Files
+import kotlinx.coroutines.runBlocking
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.junit.Assert.assertEquals
@@ -109,9 +111,10 @@ class VoiceTranscriberTest {
                     else -> error(path)
                 }
             }
-            assertThrows(IllegalArgumentException::class.java) {
+            val failure = assertThrows(VoiceTranscriptionFailure::class.java) {
                 transcriber.transcribe(connection(GatewayProvider.GigaChat), "GigaChat-2", file)
             }
+            assertEquals(R.string.voice_transcript_invalid_response, failure.messageId)
             assertEquals(listOf("/files", "/chat/completions", "/files/sample-file-id/delete"), paths)
         } finally {
             file.delete()
@@ -141,6 +144,109 @@ class VoiceTranscriberTest {
         } finally {
             original.delete()
             wave.delete()
+        }
+    }
+
+    @Test
+    fun acceptsAnExplicitEmptyTranscriptAndRejectsAMissingTextField() = runBlocking {
+        val file = Files.createTempFile("note-audio", ".m4a").toFile()
+        try {
+            file.writeBytes(byteArrayOf(1, 2, 3))
+            val connection = connection(GatewayProvider.OpenAI)
+            val model = "gpt-4o-transcribe"
+            for (body in listOf("""{"text":""}""", """{"text":"  "}""", """{"text":"`[no_speech]`"}""")) {
+                val transcriber = VoiceTranscriber { _, _, _, _ -> body }
+                val result = transcriber.transcribeRecording(connection, model, VoiceClip(file, 1000),
+                    requireNotNull(file.parentFile), emptyList()) { _, _ -> }
+                assertEquals("", result.text)
+            }
+            for (body in listOf("{}", """{"text":null}""", """{"text":123}""", "[]")) {
+                val transcriber = VoiceTranscriber { _, _, _, _ -> body }
+                val failure = assertThrows(VoiceTranscriptionFailure::class.java) {
+                    transcriber.transcribe(connection, model, file)
+                }
+                assertEquals(R.string.voice_transcript_invalid_response, failure.messageId)
+            }
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun geminiDistinguishesBlockedAndTruncatedResponsesFromSilence() {
+        val file = Files.createTempFile("note-audio", ".m4a").toFile()
+        try {
+            file.writeBytes(byteArrayOf(1, 2, 3))
+            val connection = connection(GatewayProvider.Gemini)
+            val model = "gemini-2.5-flash"
+            val cases = mapOf(
+                """{"promptFeedback":{"blockReason":"SAFETY"}}""" to R.string.voice_transcript_blocked,
+                """{"candidates":[{"finishReason":"SAFETY"}]}""" to R.string.voice_transcript_blocked,
+                """{"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[{"text":"Partial"}]}}]}""" to
+                    R.string.voice_transcript_truncated,
+                """{"candidates":[{"finishReason":"STOP","content":"invalid"}]}""" to R.string.voice_transcript_invalid_response,
+            )
+            for ((body, message) in cases) {
+                val transcriber = VoiceTranscriber { _, _, _, _ -> body }
+                val failure = assertThrows(VoiceTranscriptionFailure::class.java) {
+                    transcriber.transcribe(connection, model, file)
+                }
+                assertEquals(message, failure.messageId)
+            }
+            val empty = VoiceTranscriber { _, _, _, _ ->
+                """{"candidates":[{"finishReason":"STOP","content":{"parts":[{"text":"[NO_SPEECH]"}]}}]}"""
+            }
+            assertEquals("", empty.transcribe(connection, model, file).text)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun gigaChatReportsCleanupIndependentlyOfSilenceAndRecognitionErrors() {
+        val file = Files.createTempFile("note-audio", ".m4a").toFile()
+        try {
+            file.writeBytes(byteArrayOf(1, 2, 3))
+            val providers = ProviderGateway { _, _, _, _ -> """{"access_token":"abc","expires_at":4102444800000}""" }
+            val connection = connection(GatewayProvider.GigaChat)
+            var reply = """{"choices":[{"finish_reason":"stop","message":{"content":"[NO_SPEECH]"}}]}"""
+            val transcriber = VoiceTranscriber(providers) { url, _, _, _ ->
+                when (url.removePrefix(connection.address)) {
+                    "/files" -> """{"id":"sample-file-id"}"""
+                    "/chat/completions" -> reply
+                    "/files/sample-file-id/delete" -> throw ServerFailure(503, "unavailable")
+                    else -> error(url)
+                }
+            }
+            assertEquals(VoiceTranscript("", cleanupFailed = true), transcriber.transcribe(connection, "GigaChat-2", file))
+            reply = """{"choices":[{"finish_reason":"length","message":{"content":"Partial"}}]}"""
+            val failure = assertThrows(VoiceRemoteCleanupFailed::class.java) {
+                transcriber.transcribe(connection, "GigaChat-2", file)
+            }
+            assertEquals(R.string.voice_transcript_truncated, voiceTranscriptionError(failure))
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun retainsCompletedPartsAndClassifiesProviderFailures() = runBlocking {
+        val file = Files.createTempFile("note-audio", ".m4a").toFile()
+        try {
+            file.writeBytes(byteArrayOf(1, 2, 3))
+            val transcriber = VoiceTranscriber { _, _, _, _ -> error("Completed audio must not be sent twice") }
+            val result = transcriber.transcribeRecording(connection(GatewayProvider.OpenAI), "gpt-4o-transcribe",
+                VoiceClip(file, 1000), requireNotNull(file.parentFile), listOf(VoiceTranscript("Saved"))) { _, _ ->
+                error("Completed audio must not be processed again")
+            }
+            assertEquals("Saved", result.text)
+            assertEquals(R.string.voice_transcript_timeout, voiceTranscriptionError(SocketTimeoutException()))
+            assertEquals(R.string.voice_transcript_access, voiceTranscriptionError(ServerFailure(401, "unauthorized")))
+            assertEquals(R.string.voice_transcript_size, voiceTranscriptionError(ServerFailure(413, "too_large")))
+            assertEquals(R.string.voice_transcript_rate_limit, voiceTranscriptionError(ServerFailure(429, "limited")))
+            assertEquals(R.string.voice_transcript_service, voiceTranscriptionError(ServerFailure(503, "unavailable")))
+        } finally {
+            file.delete()
         }
     }
 

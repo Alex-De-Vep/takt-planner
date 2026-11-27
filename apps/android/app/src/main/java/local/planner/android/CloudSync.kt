@@ -36,6 +36,7 @@ internal data class Change(val revision: String, val entity: Entity)
 internal data class Changes(val libraryId: String, val changes: List<Change>, val nextCursor: String, val hasMore: Boolean)
 internal data class Problem(val code: String, val retryAfterSeconds: Long? = null, val attemptsRemaining: Int? = null)
 internal data class MutationResult(val operationId: String?, val status: String, val entity: Entity?, val error: Problem?)
+private data class SupportReceipt(val code: String?)
 private data class Results(val results: List<MutationResult>)
 private data class ErrorBody(val error: Problem?)
 private data class Tokens(val accessToken: String, val refreshToken: String, val expiresIn: Int)
@@ -133,7 +134,10 @@ internal class HttpsTransport : Transport {
             }
             val error = runCatching { json.fromJson(response, ErrorBody::class.java)?.error }.getOrNull()
             val retryAfter = connection.getHeaderField("Retry-After")?.toLongOrNull() ?: error?.retryAfterSeconds
-            throw ServerFailure(status, error?.code ?: "http_error", retryAfter, error?.attemptsRemaining)
+            val oauthError = if (error == null) runCatching {
+                json.fromJson(response, JsonObject::class.java)?.string("error")
+            }.getOrNull() else null
+            throw ServerFailure(status, error?.code ?: oauthError ?: "http_error", retryAfter, error?.attemptsRemaining)
         } finally {
             connection.disconnect()
         }
@@ -233,6 +237,10 @@ internal class CloudSync(
         store.activate(profile, snapshot)
         synchronizeNotes(profile, config)
     }
+
+    fun sendSupport(profile: Profile, submission: SupportSubmission): String =
+        authorized<SupportReceipt>(profile, "/v1/support/requests", submission.wire(), limit = 1024)
+            .code?.takeIf { it.matches(Regex("TAKT-[0-9]{6,19}")) } ?: throw IOException("Invalid support receipt")
 
     fun synchronize(profile: Profile) {
         val config = configure(profile.origin)

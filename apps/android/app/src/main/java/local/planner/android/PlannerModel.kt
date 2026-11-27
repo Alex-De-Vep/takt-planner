@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal enum class AccountAction { SignIn, RequestCode, ConfirmCode }
@@ -152,6 +153,16 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     fun logout(profile: Profile) = cloudAction(closing = true) { sync.logout(profile) }
 
+    suspend fun sendSupport(profile: Profile, submission: SupportSubmission): String = network.withLock {
+        try {
+            if (library.value.profile != profile) throw ServerFailure(401, "sign_in_required")
+            withContext(Dispatchers.IO) { sync.sendSupport(profile, submission) }
+        } catch (failure: ServerFailure) {
+            if (failure.status == 401) loadConnection()
+            throw failure
+        }
+    }
+
     fun clearCloudMessage() {
         _cloud.value = cloud.value.copy(message = null)
     }
@@ -236,7 +247,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         else -> R.string.cloud_error
     }
 
-    fun openNote(id: String?, folderId: String?) {
+    fun openNote(id: String?, folderId: String?, recordOnOpen: Boolean = false, activeOnly: Boolean = false) {
         val current = library.value
         if (current.profile == null || noteDraft != null || openingNote) return
         openingNote = true
@@ -244,10 +255,12 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             try {
                 val original = id?.let { withContext(Dispatchers.IO) { noteStore.read(current.workspace, it) } }
                 if (library.value.workspace != current.workspace) return@launch
-                if (id != null && original == null) {
+                if (id != null && (original == null || activeOnly && original.document.deletedAt != null)) {
                     _error.value = R.string.note_unavailable
                 } else {
-                    val draft = NoteDraft(current.workspace, original, folderId?.let(::noteFolder))
+                    val draft = NoteDraft(
+                        current.workspace, original, folderId?.let(::noteFolder), opensForRecording = id == null && recordOnOpen,
+                    )
                     noteVoice.bind(draft.workspace, draft.id)
                     noteDraft = draft
                 }
@@ -261,7 +274,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     }
 
     fun copyNoteAsText(source: NoteDraft) {
-        if (noteDraft !== source || source.saving || source.transcribing || noteVoice.startedAt != null) return
+        if (noteDraft !== source || source.saving || source.transcribing || noteVoice.recording != null) return
         val openCopy = {
             val current = library.value
             if (current.profile != null && current.workspace == source.workspace) {
@@ -289,32 +302,99 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     suspend fun noteChatContext(workspace: String, id: String): NoteChatContext? = withContext(Dispatchers.IO) {
         if (library.value.workspace != workspace) return@withContext null
-        runCatching { noteStore.read(workspace, id)?.document }.getOrNull()
-            ?.takeIf { it.deletedAt == null }
-            ?.let { NoteChatContext(it.title.take(500), it.text.take(12_000).replace("\uFFFC", "")) }
+        runCatching { noteStore.read(workspace, id) }.getOrNull()
+            ?.takeIf { it.document.deletedAt == null }
+            ?.chatContext(workspace)
+    }
+
+    fun applyNoteProposal(proposal: ChatNoteProposal, done: () -> Unit) {
+        viewModelScope.launch {
+            try {
+                if (library.value.profile == null || library.value.workspace != proposal.note.workspace) {
+                    throw StaleNoteProposal()
+                }
+                withContext(Dispatchers.IO) { noteStore.applyChatProposal(proposal) }
+                chat.removeProposal(proposal.id)
+                refresh()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _error.value = when (failure) {
+                    is StaleNoteProposal -> R.string.chat_note_proposal_stale
+                    is NoteTooLarge -> R.string.note_too_large
+                    else -> R.string.storage_error
+                }
+            } finally {
+                done()
+            }
+        }
+    }
+
+    fun createNoteFromChat(proposal: ChatNewNoteProposal) {
+        val current = library.value
+        val noteState = notes.value
+        if (current.profile == null || noteState.workspace != current.workspace || noteState.limit == null) {
+            _error.value = R.string.notes_unsupported
+            return
+        }
+        if (!chat.beginCreation(current.workspace, proposal.id)) return
+        val now = noteTime()
+        val note = NoteDocument(
+            proposal.id, NOTE_WITHOUT_FOLDER, title = proposal.title, text = proposal.body, createdAt = now, updatedAt = now,
+            richText = SharedNoteText().takeIf { noteState.formatVersion >= NOTE_FORMAT_VERSION },
+        )
+        viewModelScope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) {
+                    noteStore.read(current.workspace, note.id) ?: noteStore.save(current.workspace, null, note)
+                }
+                chat.finishCreation(current.workspace, proposal.id,
+                    ChatCreatedItem(ChatCreatedKind.Note, saved.document.id, saved.document.title))
+                if (library.value.workspace == current.workspace) refresh()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                _error.value = if (failure is NoteTooLarge) R.string.note_too_large else R.string.storage_error
+            } finally {
+                chat.finishCreation(current.workspace, proposal.id, null)
+            }
+        }
     }
 
     fun transcribeNote(draft: NoteDraft, selection: TranscriptionSelection) {
         val clip = noteVoice.clip ?: return
         if (noteDraft !== draft || draft.transcribing || draft.workspace != library.value.workspace) return
+        val attempt = draft.transcriptionAttempt?.takeIf { it.clip == clip && it.selection == selection }
+            ?: VoiceTranscriptionAttempt(clip, selection).also { draft.transcriptionAttempt = it }
         draft.transcribing = true
         draft.transcript = null
-        draft.transcriptionError = null
+        draft.transcriptionIssue = null
         viewModelScope.launch {
+            var processingPart: Int? = null
             try {
-                val result = chat.transcribeVoice(draft.workspace, selection, clip)
+                val result = chat.transcribeVoice(draft.workspace, attempt) { part, received ->
+                    if (noteDraft !== draft) throw CancellationException()
+                    draft.transcriptionPart = part
+                    processingPart = part.takeIf { received == null }
+                    if (received != null) attempt.completed.add(received)
+                }
                 if (noteDraft === draft) {
-                    draft.transcript = result.text
-                    if (result.cleanupFailed) draft.transcriptionError = R.string.voice_remote_cleanup_error
+                    draft.transcriptionAttempt = null
+                    draft.transcript = result.text.takeIf(String::isNotBlank)
+                    if (draft.transcript == null) {
+                        draft.transcriptionIssue = VoiceTranscriptionIssue(R.string.voice_transcript_empty)
+                    }
+                    if (result.cleanupFailed) draft.transcriptionCleanupFailed = true
                 }
             } catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 if (noteDraft === draft) {
-                    draft.transcriptionError = if (failure is VoiceRemoteCleanupFailed) R.string.voice_remote_cleanup_error
-                        else R.string.voice_transcript_error
+                    draft.transcriptionIssue = VoiceTranscriptionIssue(voiceTranscriptionError(failure), processingPart)
+                    if (failure is VoiceRemoteCleanupFailed || attempt.completed.any(VoiceTranscript::cleanupFailed)) {
+                        draft.transcriptionCleanupFailed = true
+                    }
                 }
             } finally {
                 draft.transcribing = false
+                draft.transcriptionPart = null
             }
         }
     }
@@ -333,7 +413,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
 
     fun saveNote(draft: NoteDraft, closeAfterSave: Boolean = true, done: (String) -> Unit = {}) {
         val current = library.value
-        if (noteDraft !== draft || draft.saving || noteVoice.startedAt != null ||
+        if (noteDraft !== draft || draft.saving || noteVoice.recording != null ||
             current.workspace != draft.workspace || current.profile == null) return
         if (draft.persisting) {
             if (closeAfterSave || draft.afterPersist == null) {
@@ -396,7 +476,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
     }
 
     fun saveTask(
-        draft: TaskDraft, done: () -> Unit, proposal: ChatProposal? = null, failed: () -> Unit = {},
+        draft: TaskDraft, done: (String) -> Unit, proposal: ChatProposal? = null, failed: () -> Unit = {},
         completion: Boolean? = null,
     ) {
         if (draft.saving || !finishChecklistEdit(draft) || !validText(draft.title, 16_384) || !validText(draft.description, 1_048_576) ||
@@ -406,7 +486,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         }
         val current = library.value
         val original = draft.original
-        val id = original?.id ?: newId()
+        val id = original?.id ?: proposal?.id ?: newId()
         val fields = mutableMapOf<String, JsonElement>()
         if (original == null) fields["createdAt"] = value(wireTime())
         if (original == null || draft.title != original.text("title").orEmpty()) fields["title"] = value(draft.title.trim())
@@ -434,7 +514,7 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
             }
         }
         draft.saving = true
-        apply(edits, done, failed = { draft.saving = false; failed() }, proposal = proposal)
+        apply(edits, { done(id) }, failed = { draft.saving = false; failed() }, proposal = proposal)
     }
 
     fun applyChatProposal(proposal: ChatProposal, done: () -> Unit, failed: () -> Unit) {
@@ -449,11 +529,32 @@ internal class PlannerModel(application: Application) : AndroidViewModel(applica
         proposal.title?.let { draft.title = it }
         proposal.description?.let { draft.description = it }
         draft.newItems = proposal.checklist
-        if (original == null) {
-            draft.deadline = proposal.deadline
-            draft.focused = proposal.focused
+        if (original == null || proposal.clearDeadline || proposal.deadline != null) draft.deadline = proposal.deadline
+        if (original == null) draft.focused = proposal.focused
+        proposal.focusChange?.let { draft.focused = it }
+        if (original == null && !chat.beginCreation(current.workspace, proposal.id)) {
+            failed()
+            return
         }
-        saveTask(draft, done, proposal, failed)
+        if (original == null) {
+            current.tasks.firstOrNull { it.id == proposal.id }?.let { saved ->
+                chat.finishCreation(current.workspace, proposal.id,
+                    ChatCreatedItem(ChatCreatedKind.Task, saved.id, saved.text("title").orEmpty()))
+                done()
+                return
+            }
+        }
+        saveTask(draft, done = { id ->
+            if (original == null) {
+                chat.finishCreation(current.workspace, proposal.id, ChatCreatedItem(ChatCreatedKind.Task, id, draft.title.trim()))
+            } else {
+                chat.removeProposal(proposal.id)
+            }
+            done()
+        }, proposal = proposal, failed = {
+            chat.finishCreation(current.workspace, proposal.id, null)
+            failed()
+        }, completion = proposal.completion)
     }
 
     fun toggleFocus(task: Entity) = apply(listOf(Edit(task.id, "task", "update", mapOf(

@@ -2,6 +2,7 @@ package local.planner.android
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -149,6 +150,85 @@ class GatewayProvidersTest {
         }
         assertEquals(OAuthCallback("a+b", "app"),
             parseGatewayCallback("GET /auth/callback?state=expected&code=a%2Bb&client_id=app HTTP/1.1", "/auth/callback", "expected"))
+    }
+
+    @Test
+    fun chatGptReauthorizationKeepsItsRegisteredClient() {
+        val previous = "oaiapp_existing"
+        assertEquals("oaiapp_existing", chatGptClientId(null, previous))
+        assertEquals("oaiapp_existing", chatGptClientId("oaiapp_existing", previous))
+        assertThrows(IllegalArgumentException::class.java) { chatGptClientId("oaiapp_different", previous) }
+        assertThrows(IllegalArgumentException::class.java) { chatGptClientId(null, null) }
+    }
+
+    @Test
+    fun chatGptKeepsTheIssuedRegistrationWhenTheSignInCodeIsRejected() {
+        val oauth = GatewayOAuth { address, _, body, _ ->
+            assertEquals("https://auth.openai.com/api/accounts/oauth/token", address)
+            assertTrue(requireNotNull(body).contains("client_id=oaiapp_new"))
+            throw ServerFailure(400, "invalid_grant")
+        }
+        val failure = assertThrows(ChatGptOAuthFailure::class.java) {
+            runBlocking { oauth.exchangeChatGptCode("oaiapp_new", "expired", "verifier", "http://127.0.0.1:1455/auth/callback") }
+        }
+        assertEquals(ChatGptOAuthStage.Token, failure.stage)
+        assertEquals("oaiapp_new", failure.retryClientId)
+        assertEquals("oaiapp_new", chatGptClientId(null, failure.retryClientId))
+        assertEquals(R.string.chat_oauth_code_expired, chatGptOAuthMessage(failure))
+    }
+
+    @Test
+    fun chatGptReportsBrowserAndTokenTimeoutsSeparately() {
+        val timeout = java.net.SocketTimeoutException()
+        assertEquals(R.string.chat_oauth_timeout, chatGptOAuthMessage(ChatGptOAuthFailure(ChatGptOAuthStage.Browser, timeout)))
+        assertEquals(R.string.chat_oauth_server_timeout, chatGptOAuthMessage(ChatGptOAuthFailure(ChatGptOAuthStage.Token, timeout)))
+    }
+
+    @Test
+    fun chatGptRefreshKeepsTheRegistrationWhenPermissionExpires() {
+        val connection = connection(GatewayProvider.ChatGPT).copy(
+            chatGpt = ChatGptGrant("oaiapp_existing", "subject", "old-refresh", 0),
+        )
+        val revoked = GatewayOAuth { _, _, _, _ -> throw ServerFailure(400, "invalid_grant") }
+            .refreshChatGpt(connection)
+        assertEquals("", revoked.key)
+        assertEquals("", revoked.chatGpt?.refreshToken)
+        assertEquals("oaiapp_existing", revoked.chatGpt?.clientId)
+
+        val temporary = GatewayOAuth { _, _, _, _ -> throw ServerFailure(503, "http_error") }
+        assertThrows(ServerFailure::class.java) { temporary.refreshChatGpt(connection) }
+    }
+
+    @Test
+    fun savedConnectionKeepsVisibilityAndModelCapabilitiesAfterCatalogRefresh() {
+        val legacy = read("""{"address":"https://gateway.example/v1","key":"test","model":"first","tools":true}""")
+        val saved = json.fromJson(legacy, GatewayConnection::class.java)
+        assertTrue(saved.ready)
+        assertEquals(listOf("first"), saved.visibleModels.map(GatewayModel::id))
+        val first = GatewayModel("first", true)
+        val second = GatewayModel("second", false)
+        val third = GatewayModel("third", true)
+        val hidden = saved.withCatalog(listOf(first, second)).copy(hiddenModelIds = setOf("first")).withVisibleModels()
+        assertEquals("second", hidden.model)
+        assertFalse(hidden.tools)
+        val reloaded = json.fromJson(json.toJson(hidden), GatewayConnection::class.java)
+            .withCatalog(listOf(first, second, third))
+        assertEquals(listOf("second", "third"), reloaded.visibleModels.map(GatewayModel::id))
+        assertEquals("second", reloaded.model)
+        assertTrue(reloaded.copy(hiddenModelIds = emptySet()).withModel(first).tools)
+    }
+
+    @Test
+    fun proposalsDefaultToOnForPreviouslyConnectedModelsUnlessUnsupported() {
+        val stored = json.fromJson(read("""{
+            "address":"https://gateway.example/v1","key":"test","model":"old","tools":false,
+            "modelTools":{"old":false},
+            "models":[{"id":"old"},{"id":"text-only","tools":false}]
+        }"""), GatewayConnection::class.java)
+        val connected = stored.withVisibleModels()
+        assertTrue(connected.tools)
+        assertFalse(connected.withModel(connected.catalog.last()).tools)
+        assertFalse(connected.withCatalog(emptyList()).ready)
     }
 
     @Test

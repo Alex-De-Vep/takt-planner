@@ -73,10 +73,10 @@ internal enum class GigaScope(val wire: String, val label: Int) {
 }
 
 internal data class GatewayCandidate(
-    val connection: GatewayConnection, val models: List<GatewayModel>, val transcription: Boolean = false,
+    val connection: GatewayConnection, val models: List<GatewayModel>,
 )
 internal data class GatewayAnswer(val text: String, val name: String? = null, val arguments: String? = null)
-internal data class GatewayOptions(val modelIds: String = "", val project: String = "", val scope: GigaScope = GigaScope.Personal)
+internal data class GatewayOptions(val modelIds: String = "")
 
 internal typealias GatewayRequest = (String, Map<String, String>, String?, String) -> String
 
@@ -199,7 +199,7 @@ internal class ProviderGateway(private val request: GatewayRequest = providerReq
                         converted.addProperty("strict", true)
                         strictSchema(converted.getAsJsonObject("parameters"))
                         body.add("tools", array(payload("type" to value("namespace"), "name" to value("planner"),
-                            "description" to value("Task proposal cards."), "tools" to array(converted))))
+                            "description" to value("Proposals for tasks, notes, and calendar events."), "tools" to array(converted))))
                     } else {
                         converted.addProperty("strict", false)
                         body.add("tools", array(converted))

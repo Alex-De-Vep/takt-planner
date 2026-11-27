@@ -105,13 +105,13 @@ class CalendarAndChatTest {
     }
 
     @Test
-    fun calendarActionsAreOutsideTheExistingChatContract() {
+    fun chatProposesCalendarEventsAndTasksWithoutConfusingThem() {
         val gateway = GatewayChat(object : Transport {
             override fun request(
                 origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int,
             ): String {
                 val result = JsonParser.parseString("""{"message":"Review this","actions":[
-                    {"key":"event","kind":"event","title":"Calendar event"},
+                    {"key":"event","kind":"event","title":"Calendar event","start":"2026-11-10T15:00","location":"Office"},
                     {"key":"task","kind":"task","title":"New task","date":"2026-11-10"}
                 ]}""").asJsonObject
                 return completion(result)
@@ -121,6 +121,73 @@ class CalendarAndChatTest {
             "Help me plan", emptyList(), null, emptyList())
         assertEquals("New task", reply.proposals.single().title)
         assertNotNull(reply.proposals.single().deadline)
+        val event = reply.eventProposals.single()
+        assertNull(event.original)
+        assertEquals("2026-11-10T15:00", event.start)
+        assertEquals("2026-11-10T16:00", event.end)
+        assertEquals("Office", event.location)
+    }
+
+    @Test
+    fun eventCreationAcceptsSharedDateAndTimeFieldsFromProviders() {
+        val zone = ZoneId.of("Europe/Moscow")
+        val allDay = proposedEvent(JsonParser.parseString(
+            """{"title":"Workshop","kind":"event","date":"2026-11-21","allDay":true}""",
+        ).asJsonObject, null, zone)
+        assertEquals("2026-11-21T00:00", requireNotNull(allDay).start)
+        assertEquals(allDay.start, allDay.end)
+        assertTrue(allDay.allDay)
+        val timed = proposedEvent(JsonParser.parseString(
+            """{"title":"Workshop","kind":"event","date":"2026-11-21","time":"13:30"}""",
+        ).asJsonObject, null, zone)
+        assertEquals("2026-11-21T13:30", requireNotNull(timed).start)
+        assertEquals("2026-11-21T14:30", timed.end)
+        assertNull(proposedEvent(JsonParser.parseString(
+            """{"title":"Workshop","kind":"event","date":"2026-11-21"}""",
+        ).asJsonObject, null, zone))
+    }
+
+    @Test
+    fun eventEditIsScopedToTheAttachmentAndKeepsItsDuration() {
+        val event = PhoneEvent(100700900L, 922500L, "Planning", "", "Old room",
+            Instant.parse("2026-11-10T12:00:00Z").toEpochMilli(), Instant.parse("2026-11-10T13:30:00Z").toEpochMilli(),
+            "Europe/Moscow", allDay = false, recurring = false, editable = true)
+        val gateway = GatewayChat(object : Transport {
+            override fun request(origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int): String {
+                assertFalse(body.toString().contains(event.id.toString()))
+                assertFalse(body.toString().contains(event.calendarId.toString()))
+                return completion(JsonParser.parseString("""{"message":"Review this","eventEdit":{
+                    "start":"2026-11-11T10:00","location":"New room"
+                }}""").asJsonObject)
+            }
+        })
+        val connection = GatewayConnection("https://gateway.example/v1", "key", "model", true)
+        val reply = gateway.send(connection, "Move it", emptyList(), null, emptyList(), event = event)
+        val proposal = reply.eventProposals.single()
+        assertEquals(event, proposal.original)
+        assertEquals("Planning", proposal.title)
+        assertEquals("2026-11-11T11:30", proposal.end)
+        assertEquals("New room", proposal.location)
+        assertTrue(gateway.send(connection, "Move it", emptyList(), null, emptyList()).eventProposals.isEmpty())
+        assertTrue(gateway.send(connection, "Move it", emptyList(), null, emptyList(),
+            event = event.copy(recurring = true, editable = false)).eventProposals.isEmpty())
+    }
+
+    @Test
+    fun taskEditRejectsStaleStatusAndCanRemoveTheDeadline() {
+        val gateway = GatewayChat(object : Transport {
+            override fun request(origin: String, path: String, body: JsonObject?, token: String?, method: String, limit: Int): String =
+                completion(JsonParser.parseString("""{"textEdit":{"clearDate":true,"today":false,"completed":true}}""").asJsonObject)
+        })
+        val task = Entity("test-task", "task", mapOf("title" to value("Planning")))
+        val connection = GatewayConnection("https://gateway.example/v1", "key", "model", true)
+        val edit = gateway.send(connection, "Complete the task", emptyList(), task, emptyList()).proposals.single()
+        assertTrue(edit.clearDeadline)
+        assertEquals(false, edit.focusChange)
+        assertEquals(true, edit.completion)
+        assertTrue(edit.matches(Library(entities = listOf(task))))
+        val completed = task.copy(fields = task.fields + ("completedAt" to value("2026-11-10T12:00:00Z")))
+        assertFalse(edit.matches(Library(entities = listOf(completed))))
     }
 
     @Test

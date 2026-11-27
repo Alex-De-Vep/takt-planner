@@ -118,6 +118,23 @@ internal class NoteStore(private val context: Context) : SQLiteOpenHelper(contex
     }
 
     @Synchronized
+    fun applyChatProposal(proposal: ChatNoteProposal) {
+        val workspace = proposal.note.workspace
+        val config = _state.value.takeIf { it.workspace == workspace } ?: throw StaleNoteProposal()
+        val limit = config.limit ?: throw StaleNoteProposal()
+        writableDatabase.transaction {
+            val current = version(workspace, proposal.note.noteId) ?: throw StaleNoteProposal()
+            val original = StoredNote(decodeNote(body(workspace, proposal.note.noteId), proposal.note.noteId), current.digest)
+            val next = original.withChatText(proposal)
+            check(next.richText == null || config.formatVersion >= NOTE_FORMAT_VERSION)
+            val bytes = next.wireBytes()
+            if (bytes.size > limit) throw NoteTooLarge()
+            write(workspace, next, bytes, current.revision, noteDigest(bytes))
+        }
+        publish()
+    }
+
+    @Synchronized
     fun revisions(workspace: String): Map<String, String?> = readableDatabase.rawQuery(
         "SELECT id, revision FROM notes WHERE workspace = ?", arrayOf(workspace),
     ).use { cursor -> buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getString(1)) } }

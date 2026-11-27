@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,11 +26,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Icon
@@ -37,7 +40,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -51,6 +53,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
@@ -59,28 +65,39 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 
-private enum class Tab(val label: Int, val icon: Int) {
-    Tasks(R.string.tasks, R.drawable.ic_list),
-    Notes(R.string.notes, R.drawable.ic_note),
-    Events(R.string.events, R.drawable.ic_calendar),
-    Chat(R.string.chat, R.drawable.ic_chat),
-    Settings(R.string.settings, R.drawable.ic_settings),
+private enum class Tab(val label: Int, val icon: Int, val accent: WorkspaceAccent) {
+    Tasks(R.string.tasks, R.drawable.ic_list, WorkspaceAccent.Tasks),
+    Notes(R.string.notes, R.drawable.ic_note, WorkspaceAccent.Notes),
+    Events(R.string.events, R.drawable.ic_calendar, WorkspaceAccent.Events),
+    Chat(R.string.chat, R.drawable.ic_assistant, WorkspaceAccent.Chat),
+    Settings(R.string.settings, R.drawable.ic_settings, WorkspaceAccent.Settings),
 }
 
 private const val NEW_TASK = "new"
@@ -88,17 +105,22 @@ private const val NEW_TASK = "new"
 @Composable
 internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel, snackbar: SnackbarHostState) {
     var tab by rememberSaveable { mutableStateOf(Tab.Tasks) }
+    val sectionColors = tab.accent.colors()
     var selectedSection by rememberSaveable { mutableStateOf("inbox") }
     var selectedNoteFolder by rememberSaveable { mutableStateOf<String?>(null) }
     var noteTrash by rememberSaveable { mutableStateOf(false) }
     val notes by model.notes.collectAsState()
     val noteState = notes.takeIf { it.workspace == library.workspace } ?: NotesState()
-    val syncStatus: @Composable () -> Unit = { SyncWarning(library, noteState, cloud, model::retrySync) }
+    val syncStatus: @Composable () -> Unit = { SyncStatus(library, noteState, cloud, model::retrySync) }
     val noteFolder = selectedNoteFolder?.takeIf { id -> library.folders.any { it.id == id } }
     var route by rememberSaveable { mutableStateOf<String?>(null) }
+    var newTaskSection by rememberSaveable { mutableStateOf("inbox") }
+    var creationMenuOpen by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var managing by rememberSaveable { mutableStateOf(false) }
     val tabStates = rememberSaveableStateHolder()
     val context = LocalContext.current
+    val taskMissing = stringResource(R.string.task_missing)
     val calendar = remember(library.workspace) { DeviceCalendar(context.applicationContext, library.workspace) }
     var calendarRefresh by remember { mutableIntStateOf(0) }
     var calendarDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
@@ -106,119 +128,179 @@ internal fun Workspace(library: Library, cloud: CloudState, model: PlannerModel,
     var eventJson by rememberSaveable { mutableStateOf<String?>(null) }
     var calendarSettings by rememberSaveable { mutableStateOf(false) }
     var chatSettings by rememberSaveable { mutableStateOf(false) }
-    var chatTaskId by rememberSaveable { mutableStateOf<String?>(null) }
-    var chatNoteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var chooseChatModel by rememberSaveable { mutableStateOf(false) }
     val openEvent: (EventRequest) -> Unit = { eventJson = json.toJson(it) }
     val section = selectedSection.takeIf { it in Sections || library.folders.any { folder -> folder.id == it } } ?: "inbox"
     val task = library.tasks.firstOrNull { it.id == route }
+
+    val showCreation = tab == Tab.Tasks || tab == Tab.Events || tab == Tab.Notes && !noteTrash
+    val activeFolder = when (tab) {
+        Tab.Tasks -> section.takeUnless { it in Sections }
+        Tab.Notes -> noteFolder
+        else -> null
+    }
+    val create = { action: CreationAction ->
+        creationMenuOpen = false
+        when (action) {
+            CreationAction.Task -> {
+                newTaskSection = if (tab == Tab.Tasks) section else activeFolder ?: "inbox"
+                route = NEW_TASK
+            }
+            CreationAction.Note -> model.openNote(null, activeFolder)
+            CreationAction.Event -> {
+                val start = calendarDate.takeIf { tab == Tab.Events && it != LocalDate.now() }
+                    ?.atTime(9, 0)?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+                openEvent(EventRequest(suggestedStart = start))
+            }
+            CreationAction.Recording -> model.openNote(null, activeFolder, recordOnOpen = true)
+        }
+    }
 
     val noteDraft = model.noteDraft?.takeIf { it.workspace == library.workspace }
     val eventRoute = eventJson
     if (noteDraft != null) {
         key(noteDraft.id) {
-            NoteEditor(
-                noteDraft, library, noteState.limit != null, noteState.formatVersion >= NOTE_FORMAT_VERSION, model, snackbar,
-            ) { id ->
-                chatTaskId = null
-                chatNoteId = id
-                tab = Tab.Chat
+            MaterialTheme(colorScheme = WorkspaceAccent.Notes.colors()) {
+                NoteEditor(
+                    noteDraft, library, noteState.limit != null, noteState.formatVersion >= NOTE_FORMAT_VERSION, model, snackbar,
+                ) { id ->
+                    model.chat.setAttachment(ChatAttachment(noteId = id))
+                    tab = Tab.Chat
+                }
             }
         }
     } else if (eventRoute != null) {
         val request = remember(eventRoute) { json.fromJson(eventRoute, EventRequest::class.java) }
-        EventEditor(request, calendar, { eventJson = null }) { eventJson = null; calendarRefresh++ }
+        MaterialTheme(colorScheme = WorkspaceAccent.Events.colors()) {
+            EventEditor(request, calendar, { eventJson = null }, attachToChat = { event ->
+                eventJson = null
+                model.chat.setAttachment(ChatAttachment(eventId = event.id))
+                tab = Tab.Chat
+            }) {
+                request.proposal?.let { model.chat.removeProposal(it.id) }
+                eventJson = null
+                calendarRefresh++
+            }
+        }
     } else if (route != null) {
         if (route == NEW_TASK || task != null) {
-            TaskEditor(library, task, section, model, snackbar, openChat = { id ->
-                chatNoteId = null
-                chatTaskId = id
+            TaskEditor(library, task, if (route == NEW_TASK) newTaskSection else section, model, snackbar, openChat = { id ->
+                model.chat.setAttachment(ChatAttachment(taskId = id))
                 tab = Tab.Chat
             }) { route = null }
         } else {
             MissingTask(snackbar) { model.closeDraft(); route = null }
         }
     } else {
-        Scaffold(
-            snackbarHost = { SnackbarHost(snackbar) },
-            bottomBar = {
-                NavigationBar {
-                    Tab.entries.forEach { entry ->
-                        NavigationBarItem(
-                            selected = tab == entry,
-                            onClick = {
-                                if (tab == Tab.Tasks && entry == Tab.Notes && section !in Sections) {
-                                    selectedNoteFolder = section
-                                    noteTrash = false
-                                }
-                                if (tab == Tab.Notes && entry == Tab.Tasks && !noteTrash && noteFolder != null) {
-                                    selectedSection = noteFolder
-                                }
-                                tab = entry
-                            },
-                            icon = { Glyph(entry.icon) }, label = { Text(stringResource(entry.label)) },
-                        )
+        var navigationHeight by remember { mutableIntStateOf(0) }
+        Box(Modifier.fillMaxSize()) {
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbar) },
+                bottomBar = {
+                    NavigationBar(
+                        modifier = Modifier.onSizeChanged { navigationHeight = it.height }
+                            .semantics { if (creationMenuOpen) hideFromAccessibility() },
+                    ) {
+                        val colors = MaterialTheme.colorScheme
+                        Tab.entries.forEach { entry ->
+                            val selected = tab == entry
+                            Box(
+                                modifier = Modifier.weight(1f)
+                                    .padding(horizontal = 2.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .selectable(selected, role = Role.Tab, onClick = {
+                                        if (tab == Tab.Tasks && entry == Tab.Notes && section !in Sections) {
+                                            selectedNoteFolder = section
+                                            noteTrash = false
+                                        }
+                                        if (tab == Tab.Notes && entry == Tab.Tasks && !noteTrash && noteFolder != null) {
+                                            selectedSection = noteFolder
+                                        }
+                                        tab = entry
+                                    })
+                                    .height(56.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Glyph(
+                                    entry.icon,
+                                    description = stringResource(entry.label),
+                                    tint = if (selected) sectionColors.primary else colors.onSurfaceVariant,
+                                    size = if (selected) 32.dp else 28.dp,
+                                    gradient = AssistantActionGradient.takeIf { selected && entry == Tab.Chat },
+                                )
+                            }
+                        }
                     }
-                }
-            },
-            floatingActionButton = {
-                when (tab) {
-                    Tab.Tasks -> ExtendedFloatingActionButton(
-                        onClick = { route = NEW_TASK }, icon = { Glyph(R.drawable.ic_add) },
-                        text = { Text(stringResource(R.string.new_task)) },
-                    )
-                    Tab.Notes -> if (!noteTrash && noteState.limit != null) {
-                        ExtendedFloatingActionButton(
-                            onClick = { model.openNote(null, noteFolder) },
-                            icon = { Glyph(R.drawable.ic_add) },
-                            text = { Text(stringResource(R.string.new_note)) },
-                        )
-                    }
-                    Tab.Events -> ExtendedFloatingActionButton(
-                        onClick = {
-                            val start = calendarDate.takeUnless { it == LocalDate.now() }
-                                ?.atTime(9, 0)?.atZone(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
-                            openEvent(EventRequest(suggestedStart = start))
-                        }, icon = { Glyph(R.drawable.ic_add) },
-                        text = { Text(stringResource(R.string.new_event)) },
-                    )
-                    else -> Unit
-                }
-            },
-        ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding), contentAlignment = Alignment.TopCenter) {
-                Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()) {
-                    tabStates.SaveableStateProvider(tab.name) {
-                        when (tab) {
-                            Tab.Tasks -> TaskList(
-                                library, section, { selectedSection = it }, { managing = true }, { route = it }, model,
-                                syncStatus = syncStatus,
-                            )
-                            Tab.Notes -> NotesScreen(
-                                library, noteState, cloud, noteFolder, noteTrash,
-                                select = { selectedNoteFolder = it }, toggleTrash = {
-                                    if (noteTrash) selectedNoteFolder = null
-                                    noteTrash = !noteTrash
-                                },
-                                manage = { managing = true }, model = model, syncStatus = syncStatus,
-                            )
-                            Tab.Events -> CalendarScreen(calendar, calendarDate, { calendarDateText = it.toString() },
-                                openEvent, { calendarSettings = true }, calendarRefresh)
-                            Tab.Chat -> ChatScreen(
-                                library, model, chatTaskId, chatNoteId,
-                                selectTaskId = { chatTaskId = it; chatNoteId = null },
-                                clearNote = { chatNoteId = null },
-                            ) { chatSettings = true }
-                            Tab.Settings -> Settings(library, cloud, model, calendar, calendarRefresh,
-                                { calendarSettings = true }, { chatSettings = true })
+                },
+            ) { padding ->
+                Box(
+                    Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
+                        .semantics { if (creationMenuOpen) hideFromAccessibility() },
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight()) {
+                        tabStates.SaveableStateProvider(tab.name) {
+                            MaterialTheme(colorScheme = sectionColors) {
+                                when (tab) {
+                                    Tab.Tasks -> TaskList(
+                                        library, section, { selectedSection = it }, { managing = true }, { route = it }, model,
+                                        syncStatus = syncStatus,
+                                    )
+                                    Tab.Notes -> NotesScreen(
+                                        library, noteState, cloud, noteFolder, noteTrash,
+                                        select = { selectedNoteFolder = it }, toggleTrash = {
+                                            if (noteTrash) selectedNoteFolder = null
+                                            noteTrash = !noteTrash
+                                        },
+                                        manage = { managing = true }, model = model, syncStatus = syncStatus,
+                                    )
+                                    Tab.Events -> CalendarScreen(calendar, calendarDate, { calendarDateText = it.toString() },
+                                        openEvent, { calendarSettings = true }, calendarRefresh)
+                                    Tab.Chat -> ChatScreen(
+                                        library, model, calendar,
+                                        openCreated = { item ->
+                                            when (item.kind) {
+                                                ChatCreatedKind.Task -> {
+                                                    if (library.tasks.any { it.id == item.id }) route = item.id
+                                                    else scope.launch { snackbar.showSnackbar(taskMissing) }
+                                                }
+                                                ChatCreatedKind.Note -> model.openNote(item.id, null, activeOnly = true)
+                                            }
+                                        },
+                                        reviewEvent = { proposal -> openEvent(EventRequest(proposal = proposal)) },
+                                        chooseModel = { chooseChatModel = true },
+                                        settings = { chatSettings = true },
+                                    )
+                                    Tab.Settings -> Settings(library, noteState, cloud, model, calendar, calendarRefresh,
+                                        calendarSettings = { calendarSettings = true },
+                                        chatSettings = { chatSettings = true },
+                                        chooseChatModel = { chooseChatModel = true })
+                                }
+                            }
                         }
                     }
                 }
             }
+            if (showCreation) {
+                CreationMenu(
+                    expanded = creationMenuOpen, onExpanded = { creationMenuOpen = it },
+                    notesReady = noteState.limit != null, accent = tab.accent,
+                    bottomInset = with(LocalDensity.current) { navigationHeight.toDp() },
+                    modifier = Modifier.matchParentSize(), create = create,
+                )
+            }
         }
-        if (managing) Folders(library, model) { managing = false }
+        if (managing) MaterialTheme(colorScheme = sectionColors) {
+            Folders(library, model) { managing = false }
+        }
     }
-    if (calendarSettings) CalendarChooser(calendar) { calendarSettings = false; calendarRefresh++ }
-    if (chatSettings) ChatConnectionDialog(model.chat) { chatSettings = false }
+    if (calendarSettings) MaterialTheme(colorScheme = WorkspaceAccent.Events.colors()) {
+        CalendarChooser(calendar) { calendarSettings = false; calendarRefresh++ }
+    }
+    if (chooseChatModel || chatSettings) MaterialTheme(colorScheme = WorkspaceAccent.Chat.colors()) {
+        if (chooseChatModel) ChatModelDialog(model.chat) { chooseChatModel = false }
+        if (chatSettings) ChatConnectionDialog(model.chat) { chatSettings = false }
+    }
 }
 
 private val Sections = linkedMapOf(
@@ -239,15 +321,7 @@ private fun TaskList(
 ) {
     var searching by rememberSaveable { mutableStateOf(false) }
     var search by rememberSaveable(section) { mutableStateOf("") }
-    var showCompleted by rememberSaveable(section) { mutableStateOf(false) }
-    val tasks = library.tasks.filter { task ->
-        task.inSection(section, library) && (
-            search.isBlank() || task.text("title").orEmpty().contains(search.trim(), ignoreCase = true) ||
-                task.text("description").orEmpty().contains(search.trim(), ignoreCase = true)
-        )
-    }
-    val (done, active) = tasks.partition(Entity::completed)
-    Heading(sectionName(section, library), status = syncStatus) {
+    Heading(stringResource(R.string.tasks), status = syncStatus) {
         ActionIcon(if (searching) R.drawable.ic_close else R.drawable.ic_search,
             if (searching) R.string.close_search else R.string.search) {
             searching = !searching
@@ -256,15 +330,35 @@ private fun TaskList(
         ActionIcon(R.drawable.ic_folder, R.string.manage_folders, onClick = manage)
     }
     val sections = Sections.keys.toList() + library.folders.map(Entity::id)
-    FolderTabs(sections, section, select, dividerBefore = Sections.size) { sectionName(it, library) }
-    if (searching) {
-        PlannerTextField(
-            value = search, onValueChange = { search = it }, singleLine = true,
-            placeholder = R.string.search,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+    FolderPages(
+        sections, section, select, dividerBefore = Sections.size,
+        label = { sectionName(it, library) },
+        afterTabs = {
+            if (searching) {
+                PlannerTextField(
+                    value = search, onValueChange = { search = it }, singleLine = true,
+                    placeholder = R.string.search,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                )
+            }
+        },
+    ) { page ->
+        TaskFolderPage(library, page, search.takeIf { page == section }.orEmpty(), open, model)
+    }
+}
+
+@Composable
+private fun TaskFolderPage(library: Library, section: String, search: String, open: (String) -> Unit, model: PlannerModel) {
+    var showCompleted by rememberSaveable { mutableStateOf(false) }
+    val tasks = library.tasks.filter { task ->
+        task.inSection(section, library) && (
+            search.isBlank() || task.text("title").orEmpty().contains(search.trim(), ignoreCase = true) ||
+                task.text("description").orEmpty().contains(search.trim(), ignoreCase = true)
         )
     }
+    val (done, active) = tasks.partition(Entity::completed)
     LazyColumn(
+        Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 92.dp),
     ) {
         if (tasks.isEmpty()) {
@@ -376,7 +470,7 @@ private fun TaskRow(
                 ActionIcon(
                     if (task.focused) R.drawable.ic_star else R.drawable.ic_star_outline,
                     if (task.focused) R.string.unstar else R.string.star,
-                    tint = if (task.focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (task.focused) taskFocusColor() else MaterialTheme.colorScheme.onSurfaceVariant,
                 ) { model.toggleFocus(task) }
             }
             if (!last) HorizontalDivider(Modifier.padding(start = 48.dp, end = 12.dp),
@@ -401,13 +495,26 @@ internal fun Heading(title: String, status: @Composable () -> Unit = {}, actions
 }
 
 @Composable
-private fun SyncWarning(library: Library, notes: NotesState, cloud: CloudState, retry: () -> Unit) {
+internal fun SyncStatus(
+    library: Library, notes: NotesState, cloud: CloudState, retry: () -> Unit,
+    showActivity: Boolean = false,
+) {
     val messages = listOfNotNull(cloud.message, notes.error?.takeUnless { it == R.string.storage_error }).distinct()
-    if (messages.isEmpty() && library.rejected == 0) return
+    val hasProblem = messages.isNotEmpty() || library.rejected > 0
+    val pending = library.pending + notes.pending
+    val showPending = showActivity && pending > 0
+    if (!hasProblem && !showPending) {
+        if (showActivity && cloud.busy) SyncProgress()
+        return
+    }
 
-    var showDetails by remember { mutableStateOf(false) }
-    ActionIcon(R.drawable.ic_sync_warning, R.string.sync_issue, tint = MaterialTheme.colorScheme.error) {
-        showDetails = true
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+    when {
+        hasProblem -> ActionIcon(R.drawable.ic_sync_warning, R.string.sync_issue, tint = MaterialTheme.colorScheme.error) {
+            showDetails = true
+        }
+        cloud.busy -> SyncProgress()
+        else -> ActionIcon(R.drawable.ic_sync, R.string.notes_pending) { showDetails = true }
     }
     if (showDetails) {
         val waiting by produceState(cloud.syncRetryAt > SystemClock.elapsedRealtime(), cloud.syncRetryAt) {
@@ -415,10 +522,9 @@ private fun SyncWarning(library: Library, notes: NotesState, cloud: CloudState, 
             delay((cloud.syncRetryAt - SystemClock.elapsedRealtime()).coerceAtLeast(0))
             value = false
         }
-        val pending = library.pending + notes.pending
         AlertDialog(
             onDismissRequest = { showDetails = false },
-            title = { Text(stringResource(R.string.sync_issue)) },
+            title = { Text(stringResource(if (hasProblem) R.string.sync_issue else R.string.sync_status)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     messages.forEach { Text(stringResource(it)) }
@@ -440,6 +546,15 @@ private fun SyncWarning(library: Library, notes: NotesState, cloud: CloudState, 
 }
 
 @Composable
+private fun SyncProgress() {
+    val label = stringResource(R.string.sync_status)
+    CircularProgressIndicator(
+        Modifier.size(20.dp).semantics { contentDescription = label },
+        strokeWidth = 2.dp,
+    )
+}
+
+@Composable
 internal fun SectionLabel(text: String) {
     Text(text, Modifier.padding(start = 4.dp, top = 6.dp, bottom = 3.dp),
         style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -449,6 +564,7 @@ internal fun SectionLabel(text: String) {
 internal fun EmptyPanel(
     @DrawableRes icon: Int, title: Int, hint: Int,
     header: @Composable () -> Unit = {},
+    iconGradient: Brush? = null,
     footer: @Composable () -> Unit = {},
 ) {
     Column(
@@ -459,7 +575,7 @@ internal fun EmptyPanel(
         header()
         Box(Modifier.size(48.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center) {
-            Glyph(icon, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Glyph(icon, tint = MaterialTheme.colorScheme.onPrimaryContainer, gradient = iconGradient)
         }
         Text(stringResource(title), style = MaterialTheme.typography.titleLarge)
         Text(stringResource(hint), style = MaterialTheme.typography.bodyMedium,
@@ -469,8 +585,26 @@ internal fun EmptyPanel(
 }
 
 @Composable
-internal fun Glyph(@DrawableRes id: Int, description: String? = null, tint: Color = MaterialTheme.colorScheme.onSurface) {
-    Icon(painterResource(id), description, Modifier.size(24.dp), tint = tint)
+internal fun taskFocusColor(): Color =
+    if (isSystemInDarkTheme()) Color(0xFFFFD600) else Color(0xFFFFCC00)
+
+@Composable
+internal fun Glyph(
+    @DrawableRes id: Int,
+    description: String? = null,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+    size: Dp = 24.dp,
+    gradient: Brush? = null,
+) {
+    val mask = if (gradient == null) Modifier else Modifier
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+        .drawWithCache {
+            onDrawWithContent {
+                drawContent()
+                drawRect(brush = gradient, blendMode = BlendMode.SrcIn)
+            }
+        }
+    Icon(painterResource(id), description, Modifier.size(size).then(mask), tint = tint)
 }
 
 @Composable
@@ -489,6 +623,40 @@ internal fun deadlineLabel(deadline: Deadline): String {
     return if (time == null) date else "$date · $time"
 }
 
+
+@Composable
+internal fun FolderPages(
+    folders: List<String>, selected: String, select: (String) -> Unit, dividerBefore: Int,
+    label: @Composable (String) -> String, afterTabs: @Composable () -> Unit,
+    content: @Composable (String) -> Unit,
+) {
+    val pages = rememberSaveableStateHolder()
+    val selectFolder by rememberUpdatedState(select)
+    val index = folders.indexOf(selected).coerceAtLeast(0)
+    key(folders) {
+        val scope = rememberCoroutineScope()
+        val pager = rememberPagerState(initialPage = index) { folders.size }
+        LaunchedEffect(index, pager) {
+            if (pager.settledPage != index) pager.scrollToPage(index)
+        }
+        LaunchedEffect(pager) {
+            snapshotFlow { pager.settledPage }.drop(1).collect { page ->
+                folders.getOrNull(page)?.let(selectFolder)
+            }
+        }
+        FolderTabs(folders, selected, select = { folder ->
+            scope.launch { pager.animateScrollToPage(folders.indexOf(folder)) }
+        }, dividerBefore = dividerBefore, label = label)
+        afterTabs()
+        HorizontalPager(
+            state = pager, modifier = Modifier.fillMaxSize(),
+            key = { folders[it] }, userScrollEnabled = folders.size > 1,
+        ) { page ->
+            val folder = folders[page]
+            pages.SaveableStateProvider(folder) { content(folder) }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

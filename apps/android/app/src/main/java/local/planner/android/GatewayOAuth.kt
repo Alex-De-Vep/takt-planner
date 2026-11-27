@@ -10,6 +10,8 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.SocketTimeoutException
 import java.net.URI
+import java.net.UnknownHostException
+import javax.net.ssl.SSLHandshakeException
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.security.KeyFactory
@@ -18,12 +20,49 @@ import java.security.SecureRandom
 import java.security.Signature
 import java.security.spec.RSAPublicKeySpec
 import java.util.Base64
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-internal data class ChatGptGrant(val clientId: String, val subject: String, val refreshToken: String, val expiresAt: Long)
+internal data class ChatGptGrant(
+    val clientId: String, val subject: String, val refreshToken: String, val expiresAt: Long,
+    val idToken: String? = null, val needsConsent: Boolean = false,
+)
 internal data class OAuthCallback(val code: String, val clientId: String?)
+internal enum class ChatGptOAuthStage { Browser, Callback, Token, Identity }
+
+internal class ChatGptOAuthFailure(
+    val stage: ChatGptOAuthStage, cause: Exception, val retryClientId: String? = null,
+) : IOException(cause)
+
+private class OAuthAccessDenied : IOException()
+private class OAuthCallbackInvalid : IOException()
+private class ChatGptAccountMismatch : IOException()
+
+internal fun chatGptOAuthMessage(failure: ChatGptOAuthFailure): Int = when (val cause = failure.cause) {
+    is OAuthAccessDenied -> R.string.chat_oauth_declined
+    is OAuthCallbackInvalid -> R.string.chat_oauth_callback_error
+    is ChatGptAccountMismatch -> R.string.chat_oauth_account_mismatch
+    is UnknownHostException -> R.string.chat_oauth_dns_error
+    is SocketTimeoutException -> if (failure.stage == ChatGptOAuthStage.Browser) R.string.chat_oauth_timeout
+        else R.string.chat_oauth_server_timeout
+    is SSLHandshakeException -> R.string.chat_tls_error
+    is ServerFailure -> when {
+        cause.code == "subscription_sharing_user_not_eligible" -> R.string.chat_oauth_plan_unavailable
+        cause.code == "invalid_grant" && failure.stage == ChatGptOAuthStage.Token -> R.string.chat_oauth_code_expired
+        cause.status == 429 -> R.string.chat_rate_limited
+        cause.status in 500..599 -> R.string.chat_oauth_server_unavailable
+        else -> R.string.chat_oauth_exchange_error
+    }
+    else -> when (failure.stage) {
+        ChatGptOAuthStage.Browser -> R.string.chat_oauth_error
+        ChatGptOAuthStage.Callback -> R.string.chat_oauth_callback_error
+        ChatGptOAuthStage.Token -> R.string.chat_oauth_exchange_error
+        ChatGptOAuthStage.Identity -> R.string.chat_oauth_identity_error
+    }
+}
 
 internal class GatewayOAuth(private val request: GatewayRequest = providerRequest()) {
     suspend fun openRouter(open: (String) -> Unit): GatewayConnection {
@@ -44,43 +83,82 @@ internal class GatewayOAuth(private val request: GatewayRequest = providerReques
         }
     }
 
-    suspend fun chatGpt(hostId: String, open: (String) -> Unit): GatewayConnection {
+    suspend fun chatGpt(
+        hostId: String, previous: ChatGptGrant?, retryClientId: String?, open: (String) -> Unit,
+    ): GatewayConnection {
         val state = random()
         val nonce = random()
         val verifier = random()
+        val expectedClientId = previous?.clientId ?: retryClientId
         var redirect = ""
-        val grant = browserGrant("/auth/callback", state, open) { callback ->
-            redirect = callback
-            url("$Issuer/api/accounts/authorize", mapOf(
-                "client_id" to "dynamic_agent_client", "ext_agent_host_id" to hostId, "response_type" to "code",
-                "redirect_uri" to callback, "scope" to "openid profile email offline_access resource.invoke $PlanScope",
-                "resource" to Resource, "state" to state, "nonce" to nonce, "code_challenge_method" to "S256",
-                "code_challenge" to challenge(verifier), "agent_name_hint" to "Takt",
-            ))
+        val grant = oauthStep(ChatGptOAuthStage.Browser) {
+            browserGrant("/auth/callback", state, open) { callback ->
+                redirect = callback
+                val params = mutableMapOf(
+                    "client_id" to (expectedClientId ?: "dynamic_agent_client"),
+                    "ext_agent_host_id" to hostId, "response_type" to "code",
+                    "redirect_uri" to callback, "scope" to "openid profile email offline_access resource.invoke $PlanScope",
+                    "resource" to Resource, "state" to state, "nonce" to nonce, "code_challenge_method" to "S256",
+                    "code_challenge" to challenge(verifier),
+                )
+                if (expectedClientId == null) params["agent_name_hint"] = "Takt"
+                if (previous?.needsConsent == true) params["prompt"] = "consent"
+                previous?.idToken?.let { params["id_token_hint"] = it }
+                url("$Issuer/api/accounts/authorize", params)
+            }
         }
-        val id = grant.clientId?.takeIf { it.isNotBlank() && it.length <= 256 && it != "dynamic_agent_client" }
-            ?: error("Missing OAuth client")
+        val id = oauthStep(ChatGptOAuthStage.Callback) { chatGptClientId(grant.clientId, expectedClientId) }
         return withContext(Dispatchers.IO) {
-            val tokens = tokens(mapOf("grant_type" to "authorization_code", "client_id" to id, "code" to grant.code,
+            val tokens = exchangeChatGptCode(id, grant.code, verifier, redirect)
+            val (idToken, subject) = oauthStep(ChatGptOAuthStage.Identity) {
+                val idToken = requireNotNull(tokens.string("id_token"))
+                val keys = retryChatGptDnsLookup {
+                    read(request("$Issuer/.well-known/jwks.json", emptyMap(), null, JSON_TYPE))
+                }
+                val subject = verifyChatGptIdentity(idToken, keys, id, nonce)
+                if (previous != null && previous.subject != subject) throw ChatGptAccountMismatch()
+                idToken to subject
+            }
+            oauthStep(ChatGptOAuthStage.Token) {
+                val refreshToken = tokens.string("refresh_token").orEmpty()
+                val enabled = allowsChatGptPlan(tokens) == true && refreshToken.isNotBlank()
+                val credentials = ChatGptGrant(id, subject, refreshToken.takeIf { enabled }.orEmpty(),
+                    if (enabled) expires(tokens) else 0, idToken, needsConsent = !enabled)
+                GatewayConnection(Resource, if (enabled) access(tokens) else "", "", false,
+                    GatewayProvider.ChatGPT, chatGpt = credentials)
+            }
+        }
+    }
+
+    internal suspend fun exchangeChatGptCode(
+        clientId: String, code: String, verifier: String, redirect: String,
+    ): JsonObject = oauthStep(ChatGptOAuthStage.Token, clientId) {
+        retryChatGptDnsLookup {
+            tokens(mapOf("grant_type" to "authorization_code", "client_id" to clientId, "code" to code,
                 "code_verifier" to verifier, "redirect_uri" to redirect, "resource" to Resource))
-            val keys = read(request("$Issuer/.well-known/jwks.json", emptyMap(), null, JSON_TYPE))
-            val subject = verifyChatGptIdentity(requireNotNull(tokens.string("id_token")), keys, id, nonce)
-            check(tokens.string("scope")?.split(' ')?.contains(PlanScope) == true)
-            val credentials = ChatGptGrant(id, subject, refresh(tokens), expires(tokens))
-            GatewayConnection(Resource, access(tokens), "", false, GatewayProvider.ChatGPT, chatGpt = credentials)
         }
     }
 
     fun refreshChatGpt(connection: GatewayConnection): GatewayConnection {
         val grant = requireNotNull(connection.chatGpt)
-        val updated = tokens(mapOf("grant_type" to "refresh_token", "client_id" to grant.clientId,
-            "refresh_token" to grant.refreshToken, "resource" to Resource))
-        check(updated.string("scope")?.split(' ')?.contains(PlanScope) != false)
+        val updated = try {
+            tokens(mapOf("grant_type" to "refresh_token", "client_id" to grant.clientId,
+                "refresh_token" to grant.refreshToken, "resource" to Resource))
+        } catch (failure: ServerFailure) {
+            if (failure.code !in terminalRefreshErrors) throw failure
+            return connection.copy(key = "", chatGpt = grant.copy(refreshToken = "", expiresAt = 0))
+        }
+        if (allowsChatGptPlan(updated) == false) {
+            return connection.copy(key = "", chatGpt = grant.copy(refreshToken = "", expiresAt = 0, needsConsent = true))
+        }
         return connection.copy(key = access(updated), chatGpt = grant.copy(refreshToken = refresh(updated), expiresAt = expires(updated)))
     }
 
     private fun tokens(fields: Map<String, String>) =
         read(request("$Issuer/api/accounts/oauth/token", emptyMap(), form(fields), FORM_TYPE))
+
+    private fun allowsChatGptPlan(tokens: JsonObject): Boolean? =
+        tokens.string("scope")?.split(Regex("\\s+"))?.contains(PlanScope)
 
     private fun access(tokens: JsonObject): String {
         check(tokens.string("token_type").equals("bearer", ignoreCase = true))
@@ -100,7 +178,36 @@ internal class GatewayOAuth(private val request: GatewayRequest = providerReques
         const val Issuer = "https://auth.openai.com"
         const val Resource = "https://api.openai.com/v1"
         const val PlanScope = "chatgpt.tokens.use.direct"
+        val terminalRefreshErrors = setOf(
+            "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired",
+            "refresh_token_invalidated", "refresh_token_reused",
+        )
     }
+}
+
+private suspend fun <T> retryChatGptDnsLookup(request: () -> T): T = try {
+    request()
+} catch (_: UnknownHostException) {
+    // No request was sent. Wait briefly before resolving the host again.
+    delay(2_500)
+    request()
+}
+
+private inline fun <T> oauthStep(
+    stage: ChatGptOAuthStage, clientId: String? = null, work: () -> T,
+): T = try {
+    work()
+} catch (failure: Exception) {
+    if (failure is CancellationException) throw failure
+    val shouldKeepClient = (failure as? ServerFailure)?.code == "invalid_grant" || failure is UnknownHostException
+    throw ChatGptOAuthFailure(stage, failure, clientId.takeIf { shouldKeepClient })
+}
+
+internal fun chatGptClientId(returned: String?, expected: String?): String {
+    val id = requireNotNull(returned ?: expected)
+    require(id.isNotBlank() && id.length <= 256 && id != "dynamic_agent_client")
+    require(expected == null || expected == id)
+    return id
 }
 
 internal fun verifyChatGptIdentity(
@@ -150,11 +257,14 @@ internal fun parseGatewayCallback(line: String, path: String, state: String): OA
             URLDecoder.decode(pair.substring(0, delimiter), "UTF-8") to URLDecoder.decode(pair.substring(delimiter + 1), "UTF-8")
     }.groupBy({ it.first }, { it.second })
     if (query["state"]?.singleOrNull() != state) return null
-    if ("error" in query) throw IOException("Authorization was cancelled")
+    if ("error" in query) {
+        if (query["error"]?.singleOrNull() == "access_denied") throw OAuthAccessDenied()
+        throw OAuthCallbackInvalid()
+    }
     val code = query["code"]?.singleOrNull()?.takeIf { it.isNotBlank() && it.length <= 4096 }
-        ?: throw IOException("Invalid authorization response")
+        ?: throw OAuthCallbackInvalid()
     val ids = query["client_id"].orEmpty()
-    require(ids.size <= 1)
+    if (ids.size > 1) throw OAuthCallbackInvalid()
     return OAuthCallback(code, ids.singleOrNull())
 }
 
@@ -189,12 +299,19 @@ private suspend fun browserGrant(
 
 private fun readRequestLine(input: java.io.InputStream): String {
     val line = ByteArrayOutputStream()
+    var firstLine: String? = null
+    var lineBytes = 0
     val deadline = System.nanoTime() + 1_000_000_000L
     while (line.size() < 8192 && System.nanoTime() < deadline) {
         val byte = input.read()
-        if (byte == 10) return line.toString("UTF-8")
         if (byte < 0) break
+        lineBytes++
         line.write(byte)
+        if (byte == 10) {
+            if (firstLine == null) firstLine = line.toString("UTF-8").trimEnd('\r', '\n')
+            else if (lineBytes <= 2) return firstLine
+            lineBytes = 0
+        }
     }
     throw IOException("Invalid callback request")
 }
@@ -203,7 +320,7 @@ private fun replyToBrowser(output: java.io.OutputStream, text: String) {
     val bytes = text.toByteArray(Charsets.UTF_8)
     runCatching {
         output.write(("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" +
-            "Cache-Control: no-store\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n").toByteArray())
+            "Cache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n").toByteArray())
         output.write(bytes)
         output.flush()
     }
