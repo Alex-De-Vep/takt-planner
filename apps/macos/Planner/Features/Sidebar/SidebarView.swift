@@ -78,7 +78,7 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
-            .tint(showsNotes ? PlannerStyle.noteSidebarSelection : PlannerStyle.accent)
+            .tint(showsNotes ? PlannerStyle.noteSelectionAccent : PlannerStyle.accent)
             // Стекло рисует полноразмерный NSSplitViewItem, а не отдельная область внутри списка.
             .scrollContentBackground(.hidden)
             .animation(PlannerMotion.animation(reduceMotion: reduceMotion), value: folders.map(\.id))
@@ -239,7 +239,7 @@ private struct SidebarFolderRow: View {
 
     private var background: Color {
         if feedback == .destination { return PlannerStyle.accent }
-        if selected { return usesNoteAccent ? PlannerStyle.noteSidebarSelection : Self.selectionBackground }
+        if selected { return usesNoteAccent ? PlannerStyle.noteSelectionAccent : Self.selectionBackground }
         if feedback == .sameFolder { return Color(nsColor: .unemphasizedSelectedContentBackgroundColor) }
         return .clear
     }

@@ -27,7 +27,7 @@ enum PlannerStyle {
     }, startPoint: .topLeading, endPoint: .bottomTrailing)
     static let assistantReplyBackground = AnyShapeStyle(assistantGradient.opacity(0.13))
     private static let noteLightAccent: UInt32 = 0x7BC8AB
-    static let noteSidebarSelection = color(light: noteLightAccent, dark: 0x397E68)
+    static let noteSelectionAccent = color(light: noteLightAccent, dark: 0x397E68)
     static let noteControlAccent = color(light: noteLightAccent, dark: 0x70BFA2)
     static let noteActionTint = color(light: 0x286D57, dark: 0x70BFA2)
     // Подложка панели папок и список используют одну поверхность в обеих темах.
