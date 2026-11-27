@@ -17,6 +17,8 @@ struct TaskListView: View {
     let deleteImmediately: (PlannerTask) -> Void
     let dragScopeID: UUID
     let folderDrag: FolderDragState
+    var labels: FolderLabelStore? = nil
+    var labelID: UUID? = nil
 
     @State private var displayedScope: WorkspaceListScope?
     @State private var selectionRevision = 0
@@ -31,7 +33,7 @@ struct TaskListView: View {
         let active: [UUID]
         let completed: [UUID]
     }
-    private var scope: WorkspaceListScope { .tasks(filter, search: search) }
+    private var scope: WorkspaceListScope { .tasks(filter, search: search, labelID: labelID) }
     private var rowIDs: Rows {
         Rows(active: snapshot.activeTasks.map(\.id), completed: snapshot.completedTasks.map(\.id))
     }
@@ -90,12 +92,15 @@ struct TaskListView: View {
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(search.isEmpty ? strings["Пока нет задач"] : strings["Ничего не найдено"], systemImage: search.isEmpty ? filter.symbol : "magnifyingglass")
+        let filtered = !search.isEmpty || labelID != nil
+        let description = !search.isEmpty ? "Попробуйте другое название." : labelID != nil ? "Сбросьте фильтр по ярлыку."
+            : filter == .today ? "Добавляйте задачи на сегодня с помощью звёздочки." : "Создайте первую задачу в этом разделе."
+        return ContentUnavailableView {
+            Label(strings[filtered ? "Ничего не найдено" : "Пока нет задач"], systemImage: filtered ? "magnifyingglass" : filter.symbol)
         } description: {
-            Text(!search.isEmpty ? strings["Попробуйте другое название."] : filter == .today ? strings["Добавляйте задачи на сегодня с помощью звёздочки."] : strings["Создайте первую задачу в этом разделе."])
+            Text(strings[description])
         } actions: {
-            if search.isEmpty { Button(strings["Создать задачу"], action: create).accessibilityIdentifier("empty-create-task-button") }
+            if !filtered { Button(strings["Создать задачу"], action: create).accessibilityIdentifier("empty-create-task-button") }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -217,7 +222,8 @@ struct TaskListView: View {
     @ViewBuilder
     private func rows(_ tasks: [PlannerTask], area: ListArea) -> some View {
         ForEach(tasks) { task in
-            TaskRow(task: TaskRowContent(task, now: now, strings: strings), now: now, toggleToday: { toggleToday(task) },
+            TaskRow(task: TaskRowContent(task, now: now, strings: strings), now: now,
+                    labels: labels?.labels(for: .task(task.id)) ?? [], toggleToday: { toggleToday(task) },
                     toggleCompleted: { toggleCompleted(task) }, select: { selectRow(task.id, area: area) })
                 .tag(task.id)
                 .id(task.id)
@@ -290,7 +296,10 @@ struct TaskListView: View {
         // Короткий список прилегает к низу; длинный прокручивается, оставляя место активным задачам.
         let available = max(0, availableHeight - 39)
         let limit = snapshot.activeTasks.isEmpty ? available : available * 0.45
-        let rowsHeight = snapshot.completedTasks.reduce(CGFloat(0)) { $0 + ($1.deadline == nil ? 76 : 100) }
+        let rowsHeight = snapshot.completedTasks.reduce(CGFloat(0)) { height, task in
+            let labelHeight: CGFloat = labels?.labels(for: .task(task.id)).isEmpty == false ? 22 : 0
+            return height + (task.deadline == nil ? 76 : 100) + labelHeight
+        }
         return min(rowsHeight + 12, limit)
     }
 }
@@ -332,6 +341,7 @@ private struct TaskRow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let task: TaskRowContent
     let now: Date
+    let labels: [FolderLabel]
     let toggleToday: () -> Void
     let toggleCompleted: () -> Void
     let select: () -> Void
@@ -359,6 +369,7 @@ private struct TaskRow: View {
                     TaskDeadlineTag(deadline: deadline, now: now, isCompleted: task.isCompleted)
                         .transition(.opacity)
                 }
+                FolderLabelChips(labels: labels)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             // Текст и прозрачное пространство до кнопок имеют одну сплошную область открытия.

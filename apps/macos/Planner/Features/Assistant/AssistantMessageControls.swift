@@ -53,9 +53,10 @@ struct AssistantSelectableText: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSTextView {
-        let view = NSTextView(usingTextLayoutManager: false)
+        let view = AssistantMessageTextView(usingTextLayoutManager: false)
         view.isEditable = false
         view.isSelectable = true
+        view.delegate = view
         view.isRichText = false
         view.drawsBackground = false
         view.isHorizontallyResizable = false
@@ -107,5 +108,41 @@ struct AssistantSelectableText: NSViewRepresentable {
         if cache.heights.count >= 4 { cache.heights.removeAll(keepingCapacity: true) }
         cache.heights[width] = height
         return CGSize(width: width, height: height)
+    }
+}
+
+private final class AssistantMessageTextView: NSTextView, NSTextViewDelegate {
+    private var selectionMonitor: Any?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateSelectionMonitor()
+    }
+
+    func textViewDidChangeSelection(_ notification: Notification) {
+        updateSelectionMonitor()
+    }
+
+    private func updateSelectionMonitor() {
+        guard window != nil, selectedRanges.contains(where: { $0.rangeValue.length > 0 }) else {
+            if let selectionMonitor { NSEvent.removeMonitor(selectionMonitor) }
+            selectionMonitor = nil
+            return
+        }
+        guard selectionMonitor == nil else { return }
+        // A SwiftUI background or button can receive a click without taking first responder.
+        selectionMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            MainActor.assumeIsolated { self?.clearSelectionForOutsideClick(event) }
+            return event
+        }
+    }
+
+    private func clearSelectionForOutsideClick(_ event: NSEvent) {
+        guard let window, event.window === window, !event.modifierFlags.contains(.control) else { return }
+        if let content = window.contentView {
+            let point = content.superview?.convert(event.locationInWindow, from: nil) ?? event.locationInWindow
+            if content.hitTest(point)?.isDescendant(of: self) == true { return }
+        }
+        setSelectedRange(NSRange(location: selectedRange().location, length: 0))
     }
 }

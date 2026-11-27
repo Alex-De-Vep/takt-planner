@@ -31,6 +31,7 @@
 - Click the new-folder button in the toolbar or press `⇧⌘N` to create a folder. Right-click a folder to rename or delete it. Deleting a folder moves its tasks to Inbox.
 - To move a task, drag its row onto a sidebar folder or click the folder name above the open task’s title and choose another folder.
 - **All Tasks** shows the library ordered by creation date. Toolbar search looks in task titles and descriptions within the current view. Clear the search field to see the entire view again.
+- In a folder you created, click **Labels** next to the button for creating a task or note. Enter a name and choose a color. Open a card and click the same button to assign a label. New labels appear in the filter above the list. Assigned labels appear on cards and stay attached when you move them. Labels are stored on this Mac.
 
 ## Notes
 
@@ -251,7 +252,7 @@
 ## Backup and support
 
 - In **Settings → Backup**, save a local copy of the library to a file. Restoring opens a separate library on this Mac. The backup file is unencrypted.
-- Click **Settings → Contact us** next to Help and sign in if prompted. Your report includes your Takt and macOS versions, your device time with its time zone, and your reply email.
+- Open **Settings → Contact us** next to Help and sign in if prompted. Enter a subject and description, then check your reply email address. Takt automatically adds its version and build, your macOS version, and your device time with its time zone.
 - After sending, use **Copy code** to keep the receipt code. If sending is interrupted, Takt keeps your text so you can retry.
 
 ## Settings and shortcuts

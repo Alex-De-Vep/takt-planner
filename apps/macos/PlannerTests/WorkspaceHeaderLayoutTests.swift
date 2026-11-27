@@ -196,7 +196,8 @@ struct WorkspaceHeaderLayoutTests {
         #expect(!CalendarPanelLayout.isColumn(width: 1000, sidebarVisible: false, fullScreen: true))
         #expect(!CalendarPanelLayout.isColumn(width: 1100, sidebarVisible: true))
         // На границе помещаемости резервируем внешний зазор, не увеличивая окно принудительно.
-        let threshold = CalendarPanelLayout.minimumMainWidth(sidebarVisible: true, fullScreen: true) + CalendarPanelLayout.assistantMinimumWidth + CalendarPanelLayout.outerInset
+        let threshold = CalendarPanelLayout.minimumMainWidth(sidebarVisible: true, fullScreen: true)
+            + CalendarPanelLayout.minimumColumnWidth + CalendarPanelLayout.outerInset + 2 * CalendarPanelLayout.columnGlassInset
         #expect(!CalendarPanelLayout.isColumn(width: threshold - 1, sidebarVisible: true, fullScreen: true))
         #expect(CalendarPanelLayout.isColumn(width: threshold, sidebarVisible: true, fullScreen: true))
     }

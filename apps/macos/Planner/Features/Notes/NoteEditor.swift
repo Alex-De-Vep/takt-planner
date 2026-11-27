@@ -402,6 +402,7 @@ struct NoteDetailView: View {
     let assistant: AssistantService
     let preferences: AppPreferences
     var focusTitle = false
+    var labels: FolderLabelStore? = nil
     @State private var control = NoteEditorControl()
 
     private var currentFolder: TaskFilter? {
@@ -418,6 +419,9 @@ struct NoteDetailView: View {
                     store.move(note.id, to: $0)
                 }
                 .disabled(note.deletedAt != nil || store.unreadable)
+                if let labels {
+                    AssignedFolderLabels(labels: labels.labels(for: .note(note.id)))
+                }
                 NoteTitleEditor(text: Binding(get: { note.title }, set: { title in store.update(note.id) { $0.title = title } }),
                                 placeholder: strings["Название"], editable: note.deletedAt == nil && !store.unreadable,
                                 focusOnCreation: focusTitle)

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum SidebarSelection: Hashable {
@@ -16,11 +17,13 @@ struct SidebarView: View {
     let now: Date
     let renameFolder: (TaskFolder) -> Void
     let deleteFolder: (TaskFolder) -> Void
+    let manageLabels: (TaskFolder) -> Void
     let receiveItem: (FolderDragPayload, TaskFilter) -> Void
     let dragScopeID: UUID
     let folderDrag: FolderDragState
     var notes: [PlannerNote] = []
     var syncEngine: SyncEngine? = nil
+    var showsNotes = false
     private struct Hover {
         let folder: TaskFilter
         let token: UUID?
@@ -67,6 +70,7 @@ struct SidebarView: View {
                         row(.folder(folder.id)).tag(SidebarSelection.taskFilter(.folder(folder.id)))
                             .accessibilityIdentifier("folder-row-\(folder.name)")
                             .contextMenu {
+                                Button(strings["Ярлыки…"]) { manageLabels(folder) }
                                 Button(strings["Переименовать"]) { renameFolder(folder) }
                                 Button(strings["Удалить папку…"], role: .destructive) { deleteFolder(folder) }
                             }
@@ -74,6 +78,7 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            .tint(showsNotes ? PlannerStyle.noteSidebarSelection : PlannerStyle.accent)
             // Стекло рисует полноразмерный NSSplitViewItem, а не отдельная область внутри списка.
             .scrollContentBackground(.hidden)
             .animation(PlannerMotion.animation(reduceMotion: reduceMotion), value: folders.map(\.id))
@@ -95,7 +100,7 @@ struct SidebarView: View {
         let count = filter == .allNotes ? notes.count(where: { $0.deletedAt == nil && !$0.isPurged }) : nil
         return SidebarFolderRow(title: title, symbol: symbol, countText: count?.formatted(),
                                 countDescription: count.map { strings.format("Заметок: %d", $0) } ?? "",
-                                selected: selection == filter)
+                                selected: selection == filter, usesNoteAccent: true)
             .tag(filter)
             .accessibilityIdentifier(identifier)
     }
@@ -109,7 +114,8 @@ struct SidebarView: View {
         return SidebarFolderRow(title: filter.title(in: folders, using: strings), symbol: filter.symbol,
                                 countText: countText, countDescription: countDescription, selected: selection == .taskFilter(filter),
                                 feedback: hover?.folder == filter && hover?.token == folderDrag.context?.token
-                                    ? hover?.feedback ?? .none : .none)
+                                    ? hover?.feedback ?? .none : .none,
+                                usesNoteAccent: showsNotes && filter.acceptsNotes)
         .onDrop(of: FolderDragPayload.Kind.allCases.map(\.type), delegate: FolderDropDelegate(destination: filter,
             scopeID: dragScopeID, drag: folderDrag, setTargeted: { active in
                 if active {
@@ -218,6 +224,7 @@ private struct SidebarFolderRow: View {
     var countDescription = ""
     let selected: Bool
     var feedback: FolderDragState.Feedback = .none
+    var usesNoteAccent = false
 
     private static let selectionBackground = PlannerStyle.color(light: 0x7650B5, dark: 0x7759A6)
 
@@ -232,7 +239,7 @@ private struct SidebarFolderRow: View {
 
     private var background: Color {
         if feedback == .destination { return PlannerStyle.accent }
-        if selected { return Self.selectionBackground }
+        if selected { return usesNoteAccent ? PlannerStyle.noteSidebarSelection : Self.selectionBackground }
         if feedback == .sameFolder { return Color(nsColor: .unemphasizedSelectedContentBackgroundColor) }
         return .clear
     }
@@ -256,6 +263,7 @@ private struct SidebarFolderRow: View {
         .padding(.vertical, 3)
         .contentShape(Rectangle())
         // List сохраняет выбор и клавиатурную навигацию; видимый фон меняется вместе с цветом текста.
+        .background(SidebarSelectionAppearance())
         .listItemTint(.fixed(.clear))
         .listRowBackground(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -267,6 +275,35 @@ private struct SidebarFolderRow: View {
                 }
         )
         .transaction { $0.animation = nil }
+    }
+}
+
+/// Фон рисует SidebarFolderRow, чтобы нативная подсветка не вспыхивала при смене папки.
+private struct SidebarSelectionAppearance: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+
+    func updateNSView(_ view: Probe, context: Context) { view.hideNativeHighlight() }
+
+    final class Probe: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            hideNativeHighlight()
+        }
+
+        func hideNativeHighlight() {
+            var ancestor = superview
+            while let view = ancestor {
+                if let table = view as? NSTableView {
+                    if table.selectionHighlightStyle != .none {
+                        table.selectionHighlightStyle = .none
+                    }
+                    return
+                }
+                ancestor = view.superview
+            }
+        }
     }
 }
 

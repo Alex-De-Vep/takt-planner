@@ -26,7 +26,9 @@ enum PlannerStyle {
         Gradient.Stop(color: Color(nsColor: rgb(hex)), location: location)
     }, startPoint: .topLeading, endPoint: .bottomTrailing)
     static let assistantReplyBackground = AnyShapeStyle(assistantGradient.opacity(0.13))
-    static let noteControlAccent = color(light: 0x7BC8AB, dark: 0x70BFA2)
+    private static let noteLightAccent: UInt32 = 0x7BC8AB
+    static let noteSidebarSelection = color(light: noteLightAccent, dark: 0x397E68)
+    static let noteControlAccent = color(light: noteLightAccent, dark: 0x70BFA2)
     static let noteActionTint = color(light: 0x286D57, dark: 0x70BFA2)
     // Подложка панели папок и список используют одну поверхность в обеих темах.
     static let workspaceBackground = nativeColor(light: 0xFAFAFA, dark: 0x242426)

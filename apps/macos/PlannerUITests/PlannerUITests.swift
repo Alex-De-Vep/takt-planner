@@ -54,6 +54,50 @@ final class PlannerUITests: XCTestCase {
         add(screenshot)
     }
 
+    func testFolderLabelsAreAvailableBeforeSelectingACard() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchEnvironment["PLANNER_UI_TEST_LIBRARY"] = UUID().uuidString
+        app.launchEnvironment["PLANNER_UI_TEST_CALENDAR"] = "1"
+        app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU", "-appLanguage", "ru"]
+        app.launch()
+
+        let newFolder = app.buttons["new-folder-button"]
+        XCTAssertTrue(newFolder.waitForExistence(timeout: 10))
+        newFolder.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        let folderName = app.textFields["folder-name-field"]
+        XCTAssertTrue(folderName.waitForExistence(timeout: 5))
+        folderName.typeText("Проверка ярлыков")
+        app.buttons["save-folder-button"].click()
+
+        let labels = app.buttons["folder-label-toolbar-button"]
+        XCTAssertTrue(labels.waitForExistence(timeout: 5))
+        let create = app.buttons["new-task-button"]
+        XCTAssertGreaterThan(labels.frame.midX, create.frame.midX)
+        XCTAssertLessThan(labels.frame.midX - create.frame.midX, 65)
+        labels.click()
+        let name = app.textFields["folder-label-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.typeText("На проверке")
+        app.buttons["save-folder-label"].click()
+        XCTAssertTrue(app.staticTexts["На проверке"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+
+        let filter = app.buttons["folder-label-filter"]
+        XCTAssertTrue(filter.waitForExistence(timeout: 5))
+        filter.click()
+        XCTAssertTrue(app.buttons["На проверке · Проверка ярлыков"].waitForExistence(timeout: 5))
+        app.typeKey(.escape, modifierFlags: [])
+
+        app.buttons["notes-mode"].click()
+        XCTAssertTrue(labels.isHittable)
+        XCTAssertTrue(filter.isHittable)
+        create.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+        XCTAssertTrue(app.textFields["note-title"].waitForExistence(timeout: 5))
+        labels.click()
+        XCTAssertTrue(app.buttons["На проверке"].waitForExistence(timeout: 5))
+    }
+
     func testLanguageChangesImmediatelyAndPersists() throws {
         continueAfterFailure = false
         let app = XCUIApplication()

@@ -14,6 +14,8 @@ struct NoteListView: View {
     var scope: WorkspaceListScope = .notes(.all, folder: nil, search: "")
     var dragScopeID: UUID? = nil
     var folderDrag: FolderDragState? = nil
+    var labels: FolderLabelStore? = nil
+    var filteredByLabel = false
     let create: () -> Void
 
     @State private var dragSourceID = UUID()
@@ -58,9 +60,12 @@ struct NoteListView: View {
                 list
                 if notes.isEmpty {
                     ContentUnavailableView {
-                        Label(strings[trash ? "Корзина пуста" : "Заметок пока нет"], systemImage: trash ? "trash" : "note.text")
+                        let title = filteredByLabel ? "Ничего не найдено" : trash ? "Корзина пуста" : "Заметок пока нет"
+                        Label(strings[title], systemImage: filteredByLabel ? "magnifyingglass" : trash ? "trash" : "note.text")
+                    } description: {
+                        if filteredByLabel { Text(strings["Сбросьте фильтр по ярлыку."]) }
                     } actions: {
-                        if !trash { Button(strings["Новая заметка"], action: create).disabled(store.unreadable) }
+                        if !trash && !filteredByLabel { Button(strings["Новая заметка"], action: create).disabled(store.unreadable) }
                     }
                     .transition(.opacity)
                 }
@@ -128,8 +133,9 @@ struct NoteListView: View {
     }
 
     @ViewBuilder private func draggableRow(_ note: PlannerNote) -> some View {
+        let row = NoteListRow(note: note, labels: labels?.labels(for: .note(note.id)) ?? [])
         if let dragScopeID, let folderDrag, !trash, !store.unreadable {
-            NoteListRow(note: note).onDrag {
+            row.onDrag {
                 guard let current = store.notes.first(where: { $0.id == note.id && $0.deletedAt == nil && !$0.isPurged }) else {
                     return NSItemProvider()
                 }
@@ -140,7 +146,7 @@ struct NoteListView: View {
                 FolderDragPreview(kind: .note)
             }
         } else {
-            NoteListRow(note: note)
+            row
         }
     }
 
@@ -157,6 +163,7 @@ private struct NoteListRow: View {
     @Environment(\.translations) private var strings
     @Environment(\.backgroundProminence) private var backgroundProminence
     let note: PlannerNote
+    let labels: [FolderLabel]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -173,6 +180,7 @@ private struct NoteListRow: View {
                 .foregroundStyle(.secondary)
             Text(note.updatedAt, format: .dateTime.day().month(.twoDigits))
                 .foregroundStyle(.secondary)
+            FolderLabelChips(labels: labels)
         }
         .font(.system(size: 11))
         .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)

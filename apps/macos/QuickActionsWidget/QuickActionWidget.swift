@@ -60,7 +60,7 @@ private struct QuickActionWidgetView: View {
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .foregroundStyle(renderingMode == .fullColor ? action.ink : Color.primary)
+        .foregroundStyle(renderingMode == .fullColor ? Color.white : Color.primary)
         .containerBackground(for: .widget) {
             if renderingMode == .fullColor {
                 LinearGradient(colors: action.background, startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -91,13 +91,6 @@ private extension WidgetQuickAction {
         switch self {
         case .newNote: "square.and.pencil"
         case .newEvent: "calendar.badge.plus"
-        }
-    }
-
-    var ink: Color {
-        switch self {
-        case .newNote: Color(red: 0.090, green: 0.204, blue: 0.169)
-        case .newEvent: .white
         }
     }
 

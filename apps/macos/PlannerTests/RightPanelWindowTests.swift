@@ -146,7 +146,7 @@ struct RightPanelWindowTests {
         }
     }
 
-    @Test(arguments: [1100.0, 1140.0, 1170.0, 1180.0, 1400.0])
+    @Test(arguments: [1100.0, 1140.0, 1180.0, 1187.0, 1200.0, 1400.0])
     func restoredChatSwitchesToCalendarWithoutResizingTheWindow(width: Double) async throws {
         let container = WorkspaceContainerController()
         container.view.frame = NSRect(x: 0, y: 0, width: width, height: 700)
@@ -201,6 +201,8 @@ struct RightPanelWindowTests {
         let isColumn = CalendarPanelLayout.isColumn(width: original.width, sidebarVisible: true)
         let originalDocumentWidth = workspace.documentColumnFrame(in: container.view).width
         #expect(originalColumnCount == (isColumn ? 5 : 3))
+        let panelView = try #require((container.children + workspace.children)
+            .first { $0 is CalendarSidebarController }?.view)
 
         let outer = try toolbarButton("RightPanelSwitch"), trailing = try toolbarButton("RightPanelToggle")
         let closeImage = try #require(trailing.image)
@@ -213,6 +215,7 @@ struct RightPanelWindowTests {
             let outgoingIcon = outer.image
             let initialOuterX = centerX(outer), initialTrailingX = centerX(trailing)
             var outerPositions = [initialOuterX]
+            var incomingWidths: [CGFloat] = []
             apply(panel)
             #expect(try toolbarButton("RightPanelSwitch") === outer)
             #expect(try toolbarButton("RightPanelToggle") === trailing)
@@ -230,9 +233,11 @@ struct RightPanelWindowTests {
                 try await Task.sleep(for: .milliseconds(25))
                 #expect(abs(centerX(trailing) - initialTrailingX) <= 2)
                 outerPositions.append(centerX(outer))
+                if presentations.count > index { incomingWidths.append(panelView.frame.width) }
             }
             let finalOuterX = centerX(outer)
-            let acceptable = (min(initialOuterX, finalOuterX) - 8)...(max(initialOuterX, finalOuterX) + 8)
+            let tolerance: CGFloat = isColumn ? 3 : 8
+            let acceptable = (min(initialOuterX, finalOuterX) - tolerance)...(max(initialOuterX, finalOuterX) + tolerance)
             #expect(outerPositions.allSatisfy { acceptable.contains($0) })
             if animated, abs(finalOuterX - initialOuterX) > 20 {
                 // Изменение ширины панели может сдвинуть внешнюю кнопку только к её конечному месту.
@@ -248,8 +253,21 @@ struct RightPanelWindowTests {
             checkFrame(original)
             #expect(workspace.splitViewItems.count == originalColumnCount)
             let documentWidth = workspace.documentColumnFrame(in: container.view).width
-            if isColumn { #expect(documentWidth >= 319) }
-            else { #expect(abs(documentWidth - originalDocumentWidth) < 1) }
+            if isColumn {
+                #expect(documentWidth >= 319)
+                #expect(!incomingWidths.isEmpty)
+                #expect(incomingWidths.allSatisfy { abs($0 - panelView.frame.width) < 1 })
+            } else {
+                #expect(abs(documentWidth - originalDocumentWidth) < 1)
+            }
+        }
+
+        if width == 1400 {
+            let split = workspace.splitView
+            let divider = workspace.dividerPosition(at: 2, in: split)
+            let panelWidth = panelView.frame.width
+            split.setPosition(divider - 30, ofDividerAt: 2)
+            #expect(abs(panelView.frame.width - (panelWidth + 30)) < 1)
         }
 
         if animated, width == 1140 {

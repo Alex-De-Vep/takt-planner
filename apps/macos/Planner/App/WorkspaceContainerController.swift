@@ -9,17 +9,22 @@ enum CalendarPanelLayout {
     static let defaultWidth: CGFloat = 340
     // Внешний зазор справа одинаков у отдельной колонки и накладной панели.
     static let outerInset: CGFloat = 8
+    // AppKit отводит это место под стекло слева от содержимого каждой боковой колонки.
+    static let columnGlassInset: CGFloat = 8
+    // При одной ширине окна обе панели используют один режим.
+    static let minimumColumnWidth = max(minimumWidth, assistantMinimumWidth)
 
     static func minimumMainWidth(sidebarVisible: Bool, fullScreen: Bool, preferredHeadingWidth: CGFloat = 80) -> CGFloat {
         WorkspaceHeaderLayout(sidebarVisible: sidebarVisible, fullScreen: fullScreen,
                               calendarPlacement: .closed, preferredHeadingWidth: preferredHeadingWidth).minimumMainWidth
     }
     static func isColumn(width: CGFloat, sidebarVisible: Bool, fullScreen: Bool = false) -> Bool {
-        isColumn(width: width, minimumMainWidth: minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: fullScreen))
+        availableColumnWidth(windowWidth: width,
+            minimumMainWidth: minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: fullScreen),
+            sidebarVisible: sidebarVisible) >= minimumColumnWidth
     }
-    static func isColumn(width: CGFloat, minimumMainWidth: CGFloat) -> Bool {
-        // Обе панели остаются в одном режиме при той же ширине окна.
-        width >= minimumMainWidth + max(minimumWidth, assistantMinimumWidth) + outerInset
+    static func availableColumnWidth(windowWidth: CGFloat, minimumMainWidth: CGFloat, sidebarVisible: Bool) -> CGFloat {
+        windowWidth - minimumMainWidth - outerInset - columnGlassInset * (sidebarVisible ? 2 : 1)
     }
     static func panelWidth(_ preferred: CGFloat) -> CGFloat { min(maximumWidth, max(minimumWidth, preferred)) }
     static func overlayWidth(_ preferred: CGFloat, windowWidth: CGFloat) -> CGFloat {
@@ -176,8 +181,10 @@ final class WorkspaceContainerController: NSViewController {
         let minimumMain = max(header.minimumMainWidth,
             CalendarPanelLayout.minimumMainWidth(sidebarVisible: sidebarVisible, fullScreen: header.fullScreen,
                                                 preferredHeadingWidth: header.preferredHeadingWidth))
-        let column = visible && CalendarPanelLayout.isColumn(width: bounds.width, minimumMainWidth: minimumMain)
-        let width = column ? min(preferredWidth, bounds.width - CalendarPanelLayout.outerInset - minimumMain)
+        let availableColumnWidth = CalendarPanelLayout.availableColumnWidth(windowWidth: bounds.width,
+            minimumMainWidth: minimumMain, sidebarVisible: header.sidebarVisible || sidebarVisible)
+        let column = visible && availableColumnWidth >= CalendarPanelLayout.minimumColumnWidth
+        let width = column ? min(preferredWidth, availableColumnWidth)
             : min(preferredWidth, max(0, bounds.width - 2 * CalendarPanelLayout.outerInset))
 
         // Перед уменьшением основной split view отсоединяем боковую панель, если её минимальная ширина уже не помещается.
