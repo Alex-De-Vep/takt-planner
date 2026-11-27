@@ -4,7 +4,7 @@ Implementation host: macOS / Apple Silicon. The owner requested **no Windows bui
 
 ## Latest completed source checks
 
-- Parsed all 80 C# files with tree-sitter C#: no syntax errors.
+- Parsed all 86 C# files with tree-sitter C#: no syntax errors.
 - Parsed 6 XAML files, project files, Directory.Build.props, solution and application manifest as XML.
 - Checked project references, the bundled Help content path and **106** unique XAML event-handler declarations across partial classes.
 - Checked the task layout preview's JavaScript syntax, unique element IDs, static element references and offline-only behavior.
@@ -25,7 +25,7 @@ The script does not invoke .NET, NuGet, MSBuild or a native application.
 
 ## Regression sources — not executed
 
-There are **135 test methods / 186 cases** in source (124 Facts, 11 Theories, 62 InlineData rows):
+There are **140 test methods / 191 cases** in source (129 Facts, 11 Theories, 62 InlineData rows):
 
 | Area | Source cases | Main coverage |
 | --- | ---: | --- |
@@ -36,6 +36,7 @@ There are **135 test methods / 186 cases** in source (124 Facts, 11 Theories, 62
 | Chat client/history | 38 | Bounded SSE/JSON, cancellation, context privacy, proposal validation, immutable history and persistent dismissal |
 | OpenRouter OAuth | 41 | PKCE/state/nonce/Host, malformed callbacks, cancellation/drain, exchange bounds and redaction |
 | Calendar and AI transport | 4 | iCal ETag and redirects, ChatGPT Responses completion, Yandex model and folder binding |
+| Google Calendar and Outlook | 5 | Exclusive all-day ends, conditional mutation, Outlook field preservation, safe paging, token renewal |
 
 These counts describe authored test cases. No test result is implied.
 
@@ -49,7 +50,7 @@ That prototype uses fictional data. It does not execute XAML, render WinUI, conn
 
 - NuGet restore, C# semantic/type checking, MSBuild, XAML compilation or package compatibility validation.
 - .NET/Core test execution, SQLite execution for this client, native WinUI launch, real clipboard/audio/DPAPI/focus/accessibility testing, or actual notification registration/delivery/activation.
-- External iCal network requests, recovery of an archive on Windows, PowerShell or Copilot CLI execution, browser authorization, a real AI request, Takt account login, live-server sync or cross-device acceptance.
+- External iCal network requests, Google Calendar or Outlook account authorization or API requests, recovery of an archive on Windows, PowerShell or Copilot CLI execution, AI authorization or requests, Takt account login, live-server sync or cross-device acceptance.
 - Windows package generation, signing, publication, GitHub Actions, a release, commits or pushes for this implementation pass.
 
-Source parsing cannot prove native API compatibility or correct runtime behavior. The pending scenarios are in TASKS-ACCEPTANCE.md, NOTES-ACCEPTANCE.md, CALENDAR-ACCEPTANCE.md, AI-ACCEPTANCE.md and OPENROUTER-OAUTH.md. Direct calendar account adapters, remote calendar editing, remaining AI features outside chat provider connections, localization and distribution remain product and release gaps.
+Source parsing cannot prove native API compatibility or correct runtime behavior. The pending scenarios are in TASKS-ACCEPTANCE.md, NOTES-ACCEPTANCE.md, CALENDAR-ACCEPTANCE.md, AI-ACCEPTANCE.md and OPENROUTER-OAUTH.md. Provider app registration and real-calendar acceptance, delegated Outlook mailboxes and series editing, remaining AI features outside chat provider connections, localization and distribution remain product and release gaps.

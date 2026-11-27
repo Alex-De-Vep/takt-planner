@@ -32,6 +32,7 @@ public sealed partial class CalendarWorkspace
         previous?.Cancel();
         previous?.Dispose();
         lastAutomaticCheck = default;
+        ResetConnectedAgenda();
     }
 
     private static string FeedScope(string workspace, string id) => $"calendar-feed:{workspace}:{id}";

@@ -1,9 +1,6 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace Takt.Core.Calendar;
@@ -17,7 +14,7 @@ public sealed partial class CalendarAccountClient(HttpClient? http = null)
     private const string Google = "https://www.googleapis.com/calendar/v3/";
     private const string Graph = "https://graph.microsoft.com/v1.0/";
     private const int MaxPages = 8;
-    private const string GraphFields = "id,changeKey,subject,start,end,originalStartTimeZone,originalEndTimeZone,isAllDay,isCancelled,isOrganizer,type,bodyPreview,location,locations";
+    private const string GraphFields = "id,subject,start,end,originalStartTimeZone,isAllDay,isCancelled,isOrganizer,type,bodyPreview,location,locations";
     private static readonly HttpClient Transport = CreateTransport();
 
     internal static HttpClient CreateTransport() => new(new HttpClientHandler
@@ -93,7 +90,7 @@ public sealed partial class CalendarAccountClient(HttpClient? http = null)
             original is not null && (draft.Id != original.Id || draft.CalendarId != original.CalendarId || draft.Connected != original.Connected) ||
             original is null && draft.Connected is not null)
             throw new InvalidOperationException("Choose a writable connected calendar for this event.");
-        draft.Validate();
+        draft.Validate(allowZeroDuration: original is not null && CalendarDates.SameDates(draft, original));
         var uri = new Uri(google ? Collection(calendar) : Collection(calendar) + "/events");
         if (original is null)
         {
@@ -150,9 +147,11 @@ public sealed partial class CalendarAccountClient(HttpClient? http = null)
                     throw new InvalidDataException("Too many results from this calendar for the selected period.");
                 using var response = await SendAsync(auth, HttpMethod.Get, address, null, null, timeout.Token).ConfigureAwait(false);
                 var root = response.RootElement;
-                if (!root.TryGetProperty(collection, out var rows) || rows.ValueKind != JsonValueKind.Array || rows.GetArrayLength() > 250)
+                var rows = Property(root, collection);
+                if (rows.ValueKind == JsonValueKind.Array && rows.GetArrayLength() <= 250)
+                    result.AddRange(rows.EnumerateArray().Select(row => row.Clone()));
+                else if (!google || root.ValueKind != JsonValueKind.Object || rows.ValueKind != JsonValueKind.Undefined)
                     throw new InvalidDataException("The provider returned an invalid calendar list.");
-                result.AddRange(rows.EnumerateArray().Select(row => row.Clone()));
                 if (google)
                 {
                     string? next = Text(root, "nextPageToken");
@@ -200,7 +199,8 @@ public sealed partial class CalendarAccountClient(HttpClient? http = null)
                 throw new InvalidOperationException("The provider did not grant access to this calendar or event. Check its permissions.");
             if (!response.IsSuccessStatusCode)
                 throw new InvalidOperationException($"The connected calendar could not complete the request (HTTP {(int)response.StatusCode}).");
-            return response.StatusCode == HttpStatusCode.NoContent ? JsonDocument.Parse("{}") :
+            // A successful write is committed even if the provider's optional reply body cannot be read.
+            return method != HttpMethod.Get ? JsonDocument.Parse("{}") :
                 await ReadJsonAsync(response.Content, 8 * 1024 * 1024, timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)

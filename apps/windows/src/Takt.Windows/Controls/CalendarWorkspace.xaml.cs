@@ -40,6 +40,7 @@ public sealed partial class CalendarWorkspace : UserControl
     {
         InitializeComponent();
         InitializeSubscriptions();
+        InitializeConnectedCalendars();
         Month.FirstDayOfWeek = (global::Windows.Globalization.DayOfWeek)CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
         densityRefresh.Tick += async (_, _) => { densityRefresh.Stop(); if (!unloaded) await Run(RefreshAsync); };
         Loaded += (_, _) => unloaded = false;
@@ -87,6 +88,7 @@ public sealed partial class CalendarWorkspace : UserControl
             var first = monthStart.AddDays(-7); var end = monthStart.AddMonths(1).AddDays(14);
             var events = await provider.QueryAsync(scope, first, end, zone);
             var all = events.ToList(); var warnings = events.Warnings.ToList();
+            var ranges = new List<(DateOnly First, DateOnly End)> { (first, end) };
             var covered = new HashSet<DateOnly>();
             for (var d = first; d < end; d = d.AddDays(1)) covered.Add(d);
             // Native month arrows do not change SelectedDates. Query newly realized
@@ -96,12 +98,17 @@ public sealed partial class CalendarWorkspace : UserControl
             {
                 var extra = await provider.QueryAsync(scope, month, month.AddMonths(1), zone);
                 all.AddRange(extra); warnings.AddRange(extra.Warnings);
+                ranges.Add((month, month.AddMonths(1)));
                 for (var d = month; d < month.AddMonths(1); d = d.AddDays(1)) covered.Add(d);
             }
             if (scope != workspace || unloaded) return;
-            snapshot = data; instances = all.DistinctBy(e => e.Id).ToList(); densityDates.Clear(); densityDates.UnionWith(covered); RenderAgenda();
+            var connected = ConnectedDefinitions(scope);
+            snapshot = data with { Calendars = data.Calendars.Concat(connected).ToArray() };
+            localInstances = all.ToArray();
+            densityDates.Clear(); densityDates.UnionWith(covered);
+            UpdateConnectedAgenda(scope, connected, ranges);
+            RenderAvailableEvents();
             if (warnings.Count > 0) Notice("Snapshot unavailable", string.Join("\n", warnings.Distinct()) + " Manage imported files in Calendar settings.", InfoBarSeverity.Warning);
-            foreach (var item in dayItems.ToList()) Density(item);
         }
         finally { refreshGate.Release(); }
     }
@@ -159,14 +166,24 @@ public sealed partial class CalendarWorkspace : UserControl
         var calendar = snapshot.Calendars.FirstOrDefault(c => c.Id == entry.CalendarId)?.Name ?? "Calendar";
         contents.Children.Add(new TextBlock { Text = time + " · " + calendar, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
         if (entry.Recurring) contents.Children.Add(new TextBlock { Text = "Recurring · View only", FontSize = 12 });
-        else if (entry.ReadOnly) contents.Children.Add(new TextBlock { Text = snapshot.Calendars.Any(item => item.Id == entry.CalendarId && item.Feed is not null)
-            ? "Subscription · View only" : "Imported snapshot · View only", FontSize = 12 });
-        var button = new Button { Content = contents, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, CanDrag = entry.CanEdit && mode != CalendarAgendaMode.Day };
+        else if (entry.ReadOnly) contents.Children.Add(new TextBlock { Text = entry.Connected is not null ? "View only" :
+            snapshot.Calendars.Any(item => item.Id == entry.CalendarId && item.Feed is not null)
+                ? "Subscription · View only" : "Imported snapshot · View only", FontSize = 12 });
+        var button = new Button { Content = contents, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, CanDrag = entry.CanEdit && entry.Connected is null && mode != CalendarAgendaMode.Day };
         AutomationProperties.SetName(button, entry.Title + ", " + time);
-        button.Click += async (_, _) => await Run(async () => { if (cardScope != workspace) return; string scope = workspace; var latest = await provider.GetEventAsync(scope, entry.Id); if (scope != workspace) return; if (latest is null) throw new CalendarConflictException("This event was deleted."); await EditAsync(latest, latest); });
+        button.Click += async (_, _) => await Run(async () =>
+        {
+            if (cardScope != workspace || editing) return;
+            var cancellation = CalendarScopeToken();
+            var latest = entry.Connected is null ? await provider.GetEventAsync(cardScope, entry.Id, cancellation) :
+                await connectedCalendars.GetAsync(cardScope, entry, cancellation);
+            if (cardScope != workspace || cancellation.IsCancellationRequested) return;
+            if (latest is null) throw new CalendarConflictException("This event was deleted.");
+            await EditAsync(latest, latest);
+        });
         button.DragStarting += (_, args) =>
         {
-            if (cardScope != workspace || !entry.CanEdit || mode == CalendarAgendaMode.Day) { args.Cancel = true; return; }
+            if (cardScope != workspace || !entry.CanEdit || entry.Connected is not null || mode == CalendarAgendaMode.Day) { args.Cancel = true; return; }
             var token = Guid.NewGuid().ToString("N"); dragging = (workspace, token, entry, day); args.Data.SetData(DragFormat, token); args.Data.RequestedOperation = DataPackageOperation.Move;
         };
         button.DropCompleted += (_, _) => dragging = null;
@@ -225,6 +242,7 @@ public sealed partial class CalendarWorkspace : UserControl
     private async Task Run(Func<Task> action)
     {
         try { await action(); }
+        catch (OperationCanceledException) { }
         catch (Exception e) { if (!unloaded) Notice("Calendar", e.Message); }
     }
 }

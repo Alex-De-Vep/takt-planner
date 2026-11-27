@@ -25,7 +25,7 @@ public sealed record CalendarEntry(
         var start = CalendarDates.Resolve(date.ToDateTime(new TimeOnly(9, 0)), zone);
         return new(Guid.NewGuid().ToString("D"), calendarId, title, start, start.AddHours(1), zone, TaskId: taskId);
     }
-    public void Validate()
+    public void Validate(bool allowZeroDuration = false)
     {
         if (!Guid.TryParseExact(Id, "D", out _) || string.IsNullOrWhiteSpace(CalendarId) || string.IsNullOrWhiteSpace(Title)) throw new InvalidDataException("An event needs a title and calendar.");
         if (Title.Length > 4096 || Notes.Length > 262144 || Location.Length > 4096 || Alarms.Length > 32) throw new InvalidDataException("The event exceeds the local calendar limits.");
@@ -35,7 +35,7 @@ public sealed record CalendarEntry(
             if (StartDate is null || EndDateExclusive is null || EndDateExclusive <= StartDate) throw new InvalidDataException("Choose an inclusive last day on or after the first day.");
             if (Start != CalendarDates.Resolve(StartDate.Value.ToDateTime(TimeOnly.MinValue), Zone) || End != CalendarDates.Resolve(EndDateExclusive.Value.ToDateTime(TimeOnly.MinValue), Zone)) throw new InvalidDataException("All-day boundaries do not match their calendar dates.");
         }
-        else if (End <= Start) throw new InvalidDataException("The end must be after the start.");
+        else if (End < Start || End == Start && !allowZeroDuration) throw new InvalidDataException("The end must be after the start.");
         foreach (var alarm in Alarms)
         {
             try { _ = alarm.Due(this); }

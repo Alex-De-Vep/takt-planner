@@ -88,9 +88,19 @@ Open Calendar from the top bar. Select a day in the month view, then choose Day,
 - One task can have several time blocks. Its editor lists them even when the calendar panel is hidden.
 - Deleting a task keeps its events; their task links are removed after the deletion is confirmed.
 
-Windows events and links are local to the current library on this device. They do not synchronize with macOS or Android calendars. Read-only external subscriptions appear beside local events. Provider account sign-in and remote editing are separate integrations.
+Takt events and task links stay in the open library on this Windows device. Connected Google Calendar and Outlook events are saved in the provider’s calendar and appear beside local events and iCal subscriptions.
 
 Creating, moving or removing an event does not change a task's deadline, Today star, This Week plan or Month plan.
+
+## Google Calendar and Outlook accounts
+
+Open Calendar settings → Calendar accounts… → Connect Google Calendar… or Connect Outlook…. Enter the desktop OAuth client ID, then choose Continue in browser and grant calendar access. Use a Google Cloud Desktop app client with the Calendar API enabled and enter the desktop secret if one was supplied. For Outlook, use a Microsoft Entra public desktop client registered with http://localhost and delegated Microsoft Graph Calendars.ReadWrite. A project registration is required for each provider.
+
+After sign-in, open Calendar settings again to choose which calendars to show. Visible calendars refresh while the panel is open. To pick up calendars added or removed at the provider immediately, open Calendar accounts and choose Refresh connected calendars. Takt keeps one connection per provider in each library. Sign in again to renew or replace it. Disconnect removes access from Takt while leaving events at the provider.
+
+Click a one-off event you organize in a writable calendar to change its title, dates or location. To create an event, choose + Event and select a writable connected calendar. Confirm delete removes the event at the provider. The provider manages alerts and may notify guests when you make changes.
+
+Google events also support editing their descriptions. Existing Outlook notes appear as a preview, and events with several Outlook locations keep those locations. Use Outlook to edit those fields. Recurring events and invitations organized by someone else are view-only. Reschedule connected events in the editor. Use For task for a local block linked to a task.
 
 ## Calendar files and alerts
 
@@ -100,7 +110,7 @@ Choose Import ICS snapshot for a one-time copy. To disconnect a subscription or 
 
 Takt can show supported recurring events from a snapshot within bounded date ranges. Unsupported or problematic content produces a warning while your local events remain available. Exporting a snapshot preserves its original file.
 
-Local event alerts use Windows notifications and a limited upcoming schedule. The external provider manages alerts for imported and subscribed events. Keep Windows notifications enabled and review the event's alert settings if a reminder is missing.
+Local event alerts use Windows notifications and a limited upcoming schedule. The external provider manages alerts for imported, subscribed and connected events. Keep Windows notifications enabled and review the event's alert settings if a reminder is missing.
 
 ## AI connections and models
 
@@ -155,7 +165,7 @@ Calendar events and links, recording files, transcription progress, connection s
 
 Open Settings → Library backup to save the open library as one .taktbackup file. It includes tasks and subtasks, current-format notes with inline images, recordings and saved transcript previews, local events and their task links, imported ICS files, and AI conversation history. Keep the unencrypted file private. Takt for Windows reads this archive format.
 
-Restore into a separate library, then restart Takt. To switch back or open a different restored library, use Choose library for next launch in the same menu. The restored library opens locally. Reconnect any cloud account, AI provider or external calendar subscription separately.
+Restore into a separate library, then restart Takt. To switch back or open a different restored library, use Choose library for next launch in the same menu. The restored library opens locally. Reconnect cloud accounts, AI providers, calendar accounts and subscriptions separately. The archive contains local events and imported snapshots.
 
 Task-only and note-only JSON export/import remain available. Those commands import copies into the local library. Recording uploads that are still in progress and credentials are excluded from library backups.
 

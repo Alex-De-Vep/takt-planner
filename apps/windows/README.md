@@ -54,7 +54,7 @@ See [NOTES-ACCEPTANCE.md](NOTES-ACCEPTANCE.md) for the Help audit and outstandin
 - A writable SQLite calendar on this device and read-only ICS snapshots, including bounded recurrence expansion and original-file export. A problematic snapshot shows a warning while local events remain available.
 - Nearest 32 local event alerts use a separate native notification schedule from the 32 task reminders.
 
-Events and links are local to the current Windows workspace. External iCal links can be subscribed to for live read-only updates. Direct provider account sign-in and remote edits remain open. Alerts from imported or subscribed events stay with their calendar provider. None of these events changes a task deadline, Today star or planning folder. See [CALENDAR-ACCEPTANCE.md](CALENDAR-ACCEPTANCE.md).
+Google Calendar and Outlook accounts connect from Calendar settings → Calendar accounts. Once authorized, visible calendars appear in the agenda and editable one-off events save through the provider API. A desktop OAuth registration is required for each provider. Takt also supports read-only iCal subscriptions. Task-linked blocks stay local to the open Windows library, and events never change task deadlines, the Today star or planning folders. See [setup and Windows acceptance](CALENDAR-ACCEPTANCE.md#direct-google-calendar-and-outlook-accounts).
 
 ## AI chat source implementation
 
@@ -83,7 +83,7 @@ History is local to this Windows device and library. Reasoning controls, usage r
 - Compatible servers send live task and note change signals. The client groups nearby signals, catches up after reconnecting and continues periodic sync during outages.
 - Sign-out switches back to the local library, retaining the account cache and queue. Signing in to the same server/library restores them.
 - Contact support with a signed-in account. An interrupted submission keeps a Windows-user-protected draft so retrying the same request can recover its receipt.
-- Settings → Library backup exports one Windows archive with tasks, notes, recordings, saved transcripts, local events and links, ICS imports and chat history. Restore prepares a separate local library for the next launch. The archive is unencrypted and excludes sessions, provider keys and live subscription links. Task-only and note-only JSON remain available for copying individual sets of content.
+- Settings → Library backup exports one Windows archive with tasks, notes, recordings, saved transcripts, local events and links, ICS imports and chat history. Restore prepares a separate local library for the next launch. The archive is unencrypted and excludes sessions, provider keys, connected calendar events and live subscription links. Task-only and note-only JSON remain available for copying individual sets of content.
 
 Source of truth: [OpenAPI](../../server/docs/openapi.json), [protocol guide](../../server/docs/API.md). The server does not need a separate Windows-specific task API.
 

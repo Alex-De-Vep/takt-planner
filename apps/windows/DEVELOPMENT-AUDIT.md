@@ -52,6 +52,7 @@ The latest source-only pass and test-source inventory are recorded in VERIFICATI
 ## External calendars, archive and provider pass
 
 - Added read-only iCal subscriptions alongside the writable local calendar. Verified conditional refresh, stable calendar identity, bounded downloads and protected URLs.
+- Added direct Google Calendar and Outlook account connections with desktop PKCE, DPAPI-scoped credentials, calendar visibility and one-off event writes. Compared Help commands, OAuth scopes, provider routes, version checks and the Outlook field-preservation rules. Native acceptance is pending.
 - Added a Windows library archive with recordings and saved transcript previews. Restore stages separate databases and keeps IDs needed for note folders, task calendar blocks and chat context.
 - Added named AI provider forms with region, folder and edition controls. Added ChatGPT browser authorization and Responses, plus an explicit PowerShell launch path for the existing Copilot bridge.
 - Compared the UI paths with Help after each step. The source review followed provider contracts without real sign-in or service calls.

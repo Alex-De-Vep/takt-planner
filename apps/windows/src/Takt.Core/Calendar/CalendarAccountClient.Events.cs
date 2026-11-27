@@ -30,7 +30,7 @@ public sealed partial class CalendarAccountClient
             }
             else
             {
-                if (!ReadTime(startField, false, out var begin) || !ReadTime(endField, false, out var finish)) return null;
+                if (!ReadTime(startField, "UTC", out var begin) || !ReadTime(endField, "UTC", out var finish)) return null;
                 // Graph can return all-day boundaries as UTC midnight even for an event made in another zone.
                 first = begin.TimeOfDay == TimeSpan.Zero ? DateOnly.FromDateTime(begin.DateTime) : CalendarDates.LocalDate(begin, zone);
                 last = finish.TimeOfDay == TimeSpan.Zero ? DateOnly.FromDateTime(finish.DateTime) : CalendarDates.LocalDate(finish, zone);
@@ -39,7 +39,7 @@ public sealed partial class CalendarAccountClient
             start = CalendarDates.Resolve(first.Value.ToDateTime(TimeOnly.MinValue), zone);
             end = CalendarDates.Resolve(last.Value.ToDateTime(TimeOnly.MinValue), zone);
         }
-        else if (!ReadTime(startField, google, out start) || !ReadTime(endField, google, out end) || end < start) return null;
+        else if (!ReadTime(startField, google ? zone : "UTC", out start) || !ReadTime(endField, google ? zone : "UTC", out end) || end < start) return null;
         string? tag = Text(row, google ? "etag" : "@odata.etag");
         if (tag is not { Length: <= 256 } || !EntityTagHeaderValue.TryParse(tag, out var parsed) || parsed.Tag == "*") tag = null;
         var organizer = Property(row, "organizer");
@@ -58,14 +58,13 @@ public sealed partial class CalendarAccountClient
             Connected: new(id!, tag, locationEditable));
     }
 
-    private static bool ReadTime(JsonElement field, bool google, out DateTimeOffset value)
+    private static bool ReadTime(JsonElement field, string fallbackZone, out DateTimeOffset value)
     {
         string? raw = Text(field, "dateTime");
-        if (!google && raw is not null && DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var wall))
+        if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var wall) &&
+            wall.Kind == DateTimeKind.Unspecified)
         {
-            value = wall.Kind == DateTimeKind.Unspecified
-                ? CalendarDates.Resolve(wall, SupportedZone(Text(field, "timeZone")))
-                : new DateTimeOffset(wall);
+            value = CalendarDates.Resolve(wall, SupportedZone(Text(field, "timeZone") ?? fallbackZone));
             return true;
         }
         return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out value);
@@ -111,12 +110,14 @@ public sealed partial class CalendarAccountClient
                 return iana is null ? new { dateTime = value.ToString("O") } :
                     (object)new { dateTime = value.ToString("O"), timeZone = iana };
             }
+            var zone = CalendarDates.TimeZone(draft.Zone);
+            string graphZone = TimeZoneInfo.TryConvertIanaIdToWindowsId(zone.Id, out var windows) ? windows : zone.Id;
             if (date is { } whole)
-            {
-                string zone = TimeZoneInfo.TryConvertIanaIdToWindowsId(draft.Zone, out var windows) ? windows : draft.Zone;
-                return new { dateTime = whole.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T00:00:00", timeZone = zone };
-            }
-            return new { dateTime = value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff", CultureInfo.InvariantCulture), timeZone = "UTC" };
+                return new { dateTime = whole.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "T00:00:00", timeZone = graphZone };
+            var wall = TimeZoneInfo.ConvertTime(value, zone).DateTime;
+            // UTC preserves the chosen instant when a local wall time occurs twice.
+            if (zone.IsAmbiguousTime(wall)) { wall = value.UtcDateTime; graphZone = "UTC"; }
+            return new { dateTime = wall.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff", CultureInfo.InvariantCulture), timeZone = graphZone };
         }
     }
 }

@@ -6,7 +6,7 @@
 
 Windows does not supply macOS EventKit to this application. The initial real provider is `LocalCalendarProvider`: an independent SQLite database with a writable **Takt on this device** calendar, plus explicitly imported read-only ICS snapshots. The local calendar works offline. Explicitly added subscriptions use a separate HTTPS fetcher.
 
-Events, calendar visibility/defaults, alerts and local task links are scoped to the active local/server-library workspace. They are not task entities, deadlines, Today/This Week/Month membership, or part of Takt's task/notes synchronization protocol. Other devices do not receive these events. Signing out retains the previous workspace's calendar locally, independently of the guest workspace. A calendar OAuth/CalDAV/Graph adapter and cross-device link synchronization are future work, not implied by this milestone.
+Events, calendar visibility/defaults, alerts and local task links are scoped to the active local/server-library workspace. They are not task entities, deadlines, Today/This Week/Month membership, or part of Takt's task/notes synchronization protocol. Other devices do not receive these events. Signing out retains the previous workspace's calendar locally, independently of the guest workspace. Google Calendar and Outlook use a separate account and API path for provider-owned events. Cross-device task links and CalDAV are separate work.
 
 The database is `%LOCALAPPDATA%\Takt\Windows\calendar.sqlite`. Event mutations re-read the latest document in an immediate SQLite transaction. Editing merges only changed fields, rejects conflicting edits to the same fields, preserves concurrent unrelated metadata and cannot recreate a deleted event. Deleting requires the opened event revision to remain current. Drag and Undo compare event dates and preserve fresh unrelated metadata.
 
@@ -24,7 +24,7 @@ The extra calendar panel follows macOS placement with native WinUI/Fluent contro
 - Title, location, notes, start/end, time zone, all-day, and multiple relative or absolute alerts.
 - The all-day editor's last day is inclusive; persisted/exported end is the following exclusive day. All-day date occupancy is independent of the viewer's time zone.
 - Timed events keep instants and their selected zone. Explicitly entered spring-gap times are rejected; repeated autumn times select the earlier instant. Drag preserves local wall-clock minutes and elapsed duration, advancing through a spring gap by its offset change. Absolute alerts retain their instant.
-- Drag a writable one-off event onto another day in 3-day/Week views, including a continuation day of a multi-day event. Undo restores dates only if it was not rescheduled again.
+- Drag a writable local one-off event onto another day in 3-day/Week views, including a continuation day of a multi-day event. Undo restores dates only if it was not rescheduled again.
 - For task creates multiple independent local blocks. The linked-task action returns to the task. Deleting a task removes links after reconciliation, retaining events and alerts; deleting an event retains its task.
 - Visible calendars and the default writable calendar are native settings. Hidden events remain addressable by event ID. Removing a snapshot never changes the original file or external calendar.
 
@@ -72,11 +72,27 @@ await calendarReminders.UpdateAsync(calendar, library.Workspace);
 
 Takt checks a saved iCal link every 15 minutes while the calendar panel is open. Refresh subscriptions checks immediately. Conditional requests use the provider ETag when supplied. Removal disconnects the feed, and malformed/failed responses keep the last valid calendar. The feed sends no Takt credentials. The transport accepts HTTPS and same-origin redirects.
 
-Google or Outlook may offer private or published iCal links. Direct calendar account sign-in, CalDAV write access and remote event edits are future provider integrations.
+Google or Outlook may offer private or published iCal links. Use the separate account connection when you want to edit events.
+
+## Direct Google Calendar and Outlook accounts
+
+Open Calendar settings → Calendar accounts… and choose the provider. Use an OAuth registration issued for Takt or a dedicated test registration.
+
+- **Google Cloud.** Enable the Calendar API, configure the consent screen in Google Auth Platform, and create a Desktop app OAuth client. Enter its client ID and desktop secret if supplied. Initial authorization uses a random port on `http://127.0.0.1/`; consent asks for `calendar.calendarlist.readonly` and `calendar.events`. If the app is in testing mode, allow the test account. Review the provider verification requirements before public distribution. [Desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app) · [Calendar scopes](https://developers.google.com/workspace/calendar/api/auth)
+- **Microsoft Entra.** Use an app registration that supports the intended account types. Select personal Microsoft accounts plus organizational accounts if both are needed. Add the Mobile and desktop applications platform with redirect URI `http://localhost`. Grant delegated Microsoft Graph `Calendars.ReadWrite`. Takt requests `offline_access` and uses `/common`; no client secret is used. An organization can require consent before use. Delegated access to someone else’s mailbox is outside this adapter. [Desktop registration](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-app-registration) · [Microsoft OAuth](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow)
+
+Both flows use the system browser, PKCE S256, and state checked on a loopback-only callback. Takt verifies calendar access before replacing an existing connection. The access and refresh credentials are protected with Windows DPAPI and bound to the open library. Disconnect removes local credentials. The user can separately revoke access in their account. Credentials and provider events are excluded from local archives.
+
+The agenda uses bounded, paginated event ranges with expanded recurring occurrences. Read-only access, recurring events, and invitations organized by someone else show as view-only. Edits to eligible events re-read the current version, then patch only changed fields and send If-Match. Google documents conditional writes; confirm the behavior of Graph on simultaneous writes in Windows acceptance. The Outlook notes preview and multi-location events keep their original provider data. Connected events use the editor for rescheduling and alerts remain with the provider. [Google versions](https://developers.google.com/workspace/calendar/api/guides/version-resources) · [Graph calendar view](https://learn.microsoft.com/en-us/graph/api/calendar-list-calendarview?view=graph-rest-1.0) · [Graph event updates](https://learn.microsoft.com/en-us/graph/api/event-update?view=graph-rest-1.0)
+
+See CalendarAccountsTests.cs for five unexecuted transport fixtures covering Google exclusive-end dates and versions, stale-write prevention, safe Graph field patches, pagination origin confinement, and token renewal.
 
 ## Windows acceptance — all pending
 
 - [ ] Subscribe with an authorized iCal link, test conditional refresh, invalid response, cancellation and removal, and verify stable event identity and scope across refreshes.
+- [ ] Authorize Google Calendar, Outlook.com and an approved Microsoft 365 test account. Verify browser cancellation, restart/refresh, permission denial, disconnect and library switching.
+- [ ] Create, edit, and confirm deletion of one-off provider events. Verify results in the provider UI, including exclusive all-day ends, daylight-saving transitions and invite notifications. Verify a provider edit between opening and saving is rejected and check Graph’s If-Match behavior during a concurrent write.
+- [ ] Verify display of hidden and read-only calendars, recurring instances, replaced accounts, Outlook meeting links and multiple locations, and local task links and backup boundaries.
 
 - [ ] Restore/compile pinned Core and WinUI on Windows 11; execute all Core tests in isolated temporary databases.
 - [ ] Create/edit all-day and timed events around midnight, spring/fall transitions, unusual offsets and locale week starts.
@@ -88,6 +104,6 @@ Google or Outlook may offer private or published iCal links. Direct calendar acc
 - [ ] Verify density marks when browsing months without choosing a date, selection retention after refresh and empty/hidden calendar behavior.
 - [ ] Verify keyboard/Narrator/high contrast, themes, 100–200% scaling, narrow panel and long titles/notes; test native drag with touch/mouse.
 - [ ] Verify multiple relative/absolute alerts, edit/delete cancellation, combined 64-slot budget, clock/time-zone changes, restart, disabled Windows notifications and cold/warm toast activation.
-- [ ] Decide calendar account integration and distribution/update identity separately before claiming cross-device calendar sync or releasing.
+- [ ] Register/verify provider OAuth clients and decide Windows distribution/update identity before releasing.
 
 Primary API references: [Ical.Net v5.2.4 source](https://github.com/ical-org/ical.net/tree/v5.2.4), [Ical.Net v5 migration](https://github.com/ical-org/ical.net/wiki/API-Changes-v4-to-v5), [WinUI CalendarView](https://learn.microsoft.com/en-us/windows/apps/develop/ui/controls/calendar-view), [native density marks](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.controls.calendarviewdayitem.setdensitycolors), [WinUI desktop file picker interop](https://learn.microsoft.com/en-us/windows/apps/develop/interop/), [Google Calendar iCal links](https://support.google.com/calendar/answer/37648), [Outlook iCal subscriptions](https://support.microsoft.com/en-us/outlook/add-a-calendar-in-outlook-com-or-outlook-on-the-web).

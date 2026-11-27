@@ -103,6 +103,7 @@ public sealed partial class MainWindow : Window
         Closed += async (_, _) =>
         {
             closing = true; lifetime.Cancel(); timer.Stop(); taskAutosave.Stop(); StopChangeFeed();
+            CalendarView.ResetSubscriptionScope();
             try { await ChatView.StopAsync(); }
             catch (Exception) { System.Diagnostics.Debug.WriteLine("Takt: chat shutdown cleanup could not complete."); }
             finally
