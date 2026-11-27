@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Takt
+Comment=Local task planner
+Comment[ru]=Локальный планировщик задач
+Exec=takt
+Icon=io.github.alex_de_vep.Takt
+Categories=Office;ProjectManagement;
+Terminal=false
+StartupNotify=true
